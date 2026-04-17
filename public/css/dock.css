@@ -1,0 +1,150 @@
+/* ── macOS Dock ─────────────────────────────────────────── */
+#dock-bar {
+  position: fixed;
+  bottom: 0; left: 0; right: 0;
+  height: var(--dock-h);
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding-bottom: 14px;
+  z-index: 200;
+  pointer-events: none;
+}
+
+#dock {
+  display: flex;
+  align-items: flex-end;
+  gap: 16px;
+  padding: 12px 24px;
+  background: linear-gradient(
+    160deg,
+    rgba(30, 10, 10, 0.85) 0%,
+    rgba(60, 10, 12, 0.80) 50%,
+    rgba(20, 8, 8, 0.90) 100%
+  );
+  backdrop-filter: blur(40px) saturate(220%);
+  -webkit-backdrop-filter: blur(40px) saturate(220%);
+  border: 1px solid rgba(232, 33, 39, 0.25);
+  border-bottom: 1px solid rgba(232, 33, 39, 0.1);
+  border-radius: 24px;
+  box-shadow:
+    0 28px 72px rgba(0,0,0,0.75),
+    0 0 40px rgba(232, 33, 39, 0.12),
+    0 2px 0 rgba(255,255,255,0.06) inset,
+    0 -1px 0 rgba(0,0,0,0.5) inset;
+  pointer-events: all;
+}
+
+.dock-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+  position: relative;
+  transform-origin: bottom center;
+  will-change: transform;
+  /* transition dock.js tarafından yönetiliyor */
+}
+
+.dock-icon {
+  width: 52px;
+  height: 52px;
+  border-radius: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  overflow: hidden;
+  transition: box-shadow 0.2s;
+}
+
+/* Icon arka plan renkleri — her biri farklı */
+.dock-item[data-id="home"]     .dock-icon { background: linear-gradient(145deg, #2a2a2a, #1a1a1a); }
+.dock-item[data-id="youtube"]  .dock-icon { background: linear-gradient(145deg, #ff0000, #cc0000); }
+.dock-item[data-id="tv"]       .dock-icon { background: linear-gradient(145deg, #1a3a5c, #0d2440); }
+.dock-item[data-id="iptv"]     .dock-icon { background: linear-gradient(145deg, #1a3320, #0d2214); }
+.dock-item[data-id="settings"] .dock-icon { background: linear-gradient(145deg, #2a2a2a, #1a1a1a); }
+
+.dock-item.active .dock-icon {
+  box-shadow: 0 0 0 2px rgba(255,255,255,0.2);
+}
+
+.dock-icon svg {
+  width: 26px;
+  height: 26px;
+  fill: none;
+  stroke: rgba(255,255,255,0.9);
+  stroke-width: 1.75;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  filter: drop-shadow(0 1px 2px rgba(0,0,0,0.4));
+}
+
+/* YouTube ikonu fill kullanıyor */
+.dock-item[data-id="youtube"] .dock-icon svg .yt-play {
+  fill: white;
+  stroke: none;
+}
+
+.dock-label {
+  font-size: 10px;
+  font-weight: 500;
+  color: rgba(255,255,255,0.4);
+  letter-spacing: 0.2px;
+  transition: color 0.2s;
+  white-space: nowrap;
+}
+
+.dock-item:hover .dock-label,
+.dock-item.active .dock-label {
+  color: rgba(255,255,255,0.9);
+}
+
+/* Aktif nokta */
+.dock-dot {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.6);
+  margin-top: -2px;
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+.dock-item.active .dock-dot { opacity: 1; }
+
+/* Hover tooltip */
+.dock-tooltip {
+  position: absolute;
+  bottom: calc(100% + 10px);
+  left: 50%;
+  transform: translateX(-50%) scale(0.85);
+  transform-origin: bottom center;
+  background: rgba(30,30,30,0.95);
+  border: 1px solid rgba(255,255,255,0.1);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 5px 11px;
+  border-radius: 9px;
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.1s, transform 0.15s cubic-bezier(0.34,1.3,0.64,1);
+  box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+}
+
+.dock-item:hover .dock-tooltip {
+  opacity: 1;
+  transform: translateX(-50%) scale(1);
+}
+
+/* Separator */
+.dock-sep {
+  width: 1px;
+  height: 36px;
+  background: rgba(255,255,255,0.1);
+  margin: 0 4px;
+  align-self: center;
+  margin-bottom: 14px;
+}

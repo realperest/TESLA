@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Tesla TV</title>
+  <script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.7/dist/hls.min.js"></script>
+  <link rel="stylesheet" href="/css/base.css">
+  <link rel="stylesheet" href="/css/dock.css">
+  <link rel="stylesheet" href="/css/home.css">
+  <link rel="stylesheet" href="/css/tv.css">
+  <link rel="stylesheet" href="/css/youtube.css?v=2">
+</head>
+<body>
+
+  <!-- ── Header ──────────────────────────────────────── -->
+  <header id="header">
+    <div class="logo">Tesla<span>TV</span></div>
+    <div class="user-pill" id="user-pill">
+      <img src="" alt="" id="user-avatar" referrerpolicy="no-referrer" style="display:none">
+      <span id="user-name">...</span>
+    </div>
+  </header>
+
+  <!-- ── İçerik Alanı ────────────────────────────────── -->
+  <div id="main-content">
+
+    <!-- HOME -->
+    <section class="section active" id="section-home">
+      <div class="home-logo">Tesla<span>TV</span></div>
+      <div class="home-welcome">
+        <h1>Hoş Geldiniz</h1>
+        <p>Aşağıdan bir bölüm seçin</p>
+      </div>
+    </section>
+
+    <!-- YOUTUBE -->
+    <section class="section" id="section-youtube">
+
+      <!-- ── Ortak üst bar (her iki view'de de görünür) ────── -->
+      <div id="yt-topbar">
+        <div id="yt-search-row">
+          <input type="search" id="yt-search-input" class="yt-search-input"
+            placeholder="YouTube'da ara..."
+            onkeydown="if(event.key==='Enter') ytSearch(this.value)">
+          <button class="yt-btn" onclick="ytSearch(document.getElementById('yt-search-input').value)">Ara</button>
+          <button class="yt-url-toggle" onclick="toggleYtUrlBar()" title="URL yapıştır">🔗</button>
+        </div>
+        <div id="yt-url-bar" style="display:none">
+          <input type="url" id="yt-url-input" class="yt-search-input"
+            placeholder="https://www.youtube.com/watch?v=..."
+            onkeydown="if(event.key==='Enter') resolveUrl()">
+          <button class="yt-btn" onclick="resolveUrl()">Oynat</button>
+        </div>
+        <div class="yt-loading" id="yt-loading">Yükleniyor...</div>
+        <div class="yt-error" id="yt-error"></div>
+      </div>
+
+      <!-- ── VIEW 1: Ana sayfa — arama/trending grid ────────── -->
+      <div id="yt-view-main">
+        <div id="yt-main-grid"></div>
+      </div>
+
+      <!-- ── VIEW 2: Oynatıcı ekranı ────────────────────────── -->
+      <div id="yt-view-player" style="display:none">
+
+        <!-- Sol: Canvas oynatıcı -->
+        <div id="yt-player-area">
+          <div id="yt-player-container">
+            <canvas id="yt-canvas"></canvas>
+            <div class="spinner" id="yt-spinner"><div class="spinner-ring"></div></div>
+            <div id="yt-overlay">
+              <div id="yt-overlay-title">
+                <span id="yt-now-playing-title">—</span>
+              </div>
+              <div id="yt-controls">
+                <div id="yt-progress-wrap" onclick="ytSeek(event)">
+                  <div id="yt-progress-bg"></div>
+                  <div id="yt-progress-buf"></div>
+                  <div id="yt-progress-fill"></div>
+                  <div id="yt-progress-thumb"></div>
+                </div>
+                <div id="yt-controls-row">
+                  <div id="yt-controls-left">
+                    <button class="yc-btn" id="yt-btn-play" onclick="toggleYtPlay()">
+                      <svg viewBox="0 0 24 24"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
+                    </button>
+                    <button class="yc-btn" id="yt-btn-mute" onclick="toggleYtMute()">
+                      <svg viewBox="0 0 24 24"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02z"/></svg>
+                    </button>
+                    <div id="yt-volume-wrap">
+                      <input type="range" id="yt-volume" min="0" max="100" value="100" oninput="ytSetVolume(this.value)">
+                    </div>
+                    <span id="yt-time">0:00 / 0:00</span>
+                  </div>
+                  <div id="yt-controls-right">
+                    <button class="yc-btn" onclick="ytBackToMain()" title="Geri">
+                      <svg viewBox="0 0 24 24"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z" fill="#fff"/></svg>
+                    </button>
+                    <button class="yc-btn" onclick="toggleYtFullscreen()" title="Tam ekran">
+                      <svg viewBox="0 0 24 24"><path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/></svg>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Sağ: İlgili videolar sidebar -->
+        <div id="yt-sidebar-grid"></div>
+
+      </div>
+
+    </section>
+
+    <!-- TV (Canlı) -->
+    <section class="section" id="section-tv">
+      <aside id="sidebar">
+        <div id="channel-list" class="channel-list">
+          <div style="padding:20px;color:#555;font-size:13px;text-align:center">Yükleniyor...</div>
+        </div>
+        <div class="sidebar-add">
+          <button class="btn-add" onclick="openAddModal()">+ M3U8 Kanal Ekle</button>
+        </div>
+      </aside>
+      <main id="player-area">
+        <canvas id="video-canvas"></canvas>
+        <div id="empty-state">
+          <div class="big-icon">📺</div>
+          <h2>Canlı TV</h2>
+          <p>Sol listeden kanal seçin</p>
+        </div>
+        <div class="spinner" id="spinner"><div class="spinner-ring"></div></div>
+        <div id="player-overlay">
+          <div class="now-playing">
+            <span id="now-playing-title">—</span>
+            <small id="now-playing-sub"></small>
+          </div>
+          <div class="player-controls">
+            <button class="ctrl-btn primary" id="btn-play" onclick="togglePlay()">⏸</button>
+            <button class="ctrl-btn" id="btn-mute" onclick="toggleMute()">🔊</button>
+            <button class="ctrl-btn" onclick="toggleFullscreen()">⛶</button>
+          </div>
+        </div>
+      </main>
+    </section>
+
+    <!-- IPTV -->
+    <section class="section" id="section-iptv">
+      <aside id="sidebar-iptv" style="width:280px;flex-shrink:0;background:var(--surface);border-right:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden;">
+        <div style="padding:20px;color:#555;font-size:13px;text-align:center;margin-top:20px">
+          IPTV listesi yakında
+        </div>
+      </aside>
+      <main style="flex:1;display:flex;align-items:center;justify-content:center;background:#000;color:var(--text-muted);flex-direction:column;gap:12px;">
+        <div style="font-size:48px;opacity:0.3">🌐</div>
+        <p style="font-size:14px;color:#555">IPTV özelliği yakında eklenecek</p>
+      </main>
+    </section>
+
+    <!-- AYARLAR -->
+    <section class="section" id="section-settings">
+      <iframe src="/manage" style="width:100%;height:100%;border:none;"></iframe>
+    </section>
+
+  </div>
+
+  <!-- ── macOS Dock ────────────────────────────────────── -->
+  <div id="dock-bar">
+    <nav id="dock">
+
+      <div class="dock-item active" data-id="home" onclick="dockNav('home')">
+        <div class="dock-icon">
+          <svg viewBox="0 0 24 24">
+            <path d="M3 9.5L12 3l9 6.5V20a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V9.5z"/>
+            <path d="M9 21V12h6v9"/>
+          </svg>
+        </div>
+        <div class="dock-label">Ana Sayfa</div>
+        <div class="dock-dot"></div>
+        <div class="dock-tooltip">Ana Sayfa</div>
+      </div>
+
+      <div class="dock-item" data-id="youtube" onclick="dockNav('youtube')">
+        <div class="dock-icon">
+          <svg viewBox="0 0 24 24">
+            <rect x="2" y="5" width="20" height="14" rx="4"/>
+            <polygon class="yt-play" points="10,9 16,12 10,15"/>
+          </svg>
+        </div>
+        <div class="dock-label">YouTube</div>
+        <div class="dock-dot"></div>
+        <div class="dock-tooltip">YouTube</div>
+      </div>
+
+      <div class="dock-item" data-id="tv" onclick="dockNav('tv')">
+        <div class="dock-icon">
+          <svg viewBox="0 0 24 24">
+            <rect x="2" y="7" width="20" height="13" rx="3"/>
+            <path d="M8 7L12 3l4 4"/>
+            <line x1="8" y1="21" x2="16" y2="21"/>
+            <line x1="12" y1="20" x2="12" y2="21"/>
+          </svg>
+        </div>
+        <div class="dock-label">Canlı TV</div>
+        <div class="dock-dot"></div>
+        <div class="dock-tooltip">Canlı TV</div>
+      </div>
+
+      <div class="dock-item" data-id="iptv" onclick="dockNav('iptv')">
+        <div class="dock-icon">
+          <svg viewBox="0 0 24 24">
+            <circle cx="12" cy="12" r="9"/>
+            <line x1="3" y1="12" x2="21" y2="12"/>
+            <path d="M12 3c-3 4-3 14 0 18"/>
+            <path d="M12 3c3 4 3 14 0 18"/>
+          </svg>
+        </div>
+        <div class="dock-label">IPTV</div>
+        <div class="dock-dot"></div>
+        <div class="dock-tooltip">IPTV</div>
+      </div>
+
+      <div class="dock-sep"></div>
+
+      <div class="dock-item" data-id="settings" onclick="dockNav('settings')">
+        <div class="dock-icon">
+          <svg viewBox="0 0 24 24">
+            <circle cx="12" cy="12" r="3"/>
+            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+          </svg>
+        </div>
+        <div class="dock-label">Ayarlar</div>
+        <div class="dock-dot"></div>
+        <div class="dock-tooltip">Ayarlar</div>
+      </div>
+
+    </nav>
+  </div>
+
+  <!-- ── Kanal Ekleme Modalı ───────────────────────────── -->
+  <div class="modal-backdrop" id="add-modal" onclick="if(event.target===this)closeAddModal()">
+    <div class="modal">
+      <h2>📡 M3U8 Kanal Ekle</h2>
+      <form id="add-form" onsubmit="submitChannel(event)">
+        <div class="form-field">
+          <label>Kanal Adı</label>
+          <input name="chName" id="ch-name" placeholder="Kanal adı" required>
+        </div>
+        <div class="form-field">
+          <label>M3U8 Stream URL</label>
+          <input name="chUrl" placeholder="https://...master.m3u8" required type="url">
+        </div>
+        <div class="form-field">
+          <label>Kategori</label>
+          <select name="chCat">
+            <option value="genel">Genel</option>
+            <option value="haber">Haber</option>
+            <option value="spor">Spor</option>
+            <option value="müzik">Müzik</option>
+            <option value="belgesel">Belgesel</option>
+            <option value="eğlence">Eğlence</option>
+          </select>
+        </div>
+        <div class="form-field">
+          <label>Logo URL <small style="color:#555;text-transform:none">(isteğe bağlı)</small></label>
+          <input name="chLogo" type="url" placeholder="https://...logo.png">
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="btn-secondary" onclick="closeAddModal()">İptal</button>
+          <button type="submit" class="btn-primary">Ekle</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script src="/js/player.js"></script>
+  <script src="/js/app.js?v=2"></script>
+  <script src="/js/dock.js"></script>
+</body>
+</html>

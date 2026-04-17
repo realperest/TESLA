@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tesla TV — Yönetim</title>
+  <style>
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+    :root {
+      --bg: #0a0a0a; --surface: #111; --surface2: #1a1a1a;
+      --border: #222; --accent: #e82127; --text: #fff;
+      --text-dim: #888; --text-muted: #444; --radius: 14px;
+    }
+    html, body { background: var(--bg); color: var(--text); font-family: -apple-system,'Segoe UI',sans-serif; min-height: 100vh; }
+
+    header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 0 24px; height: 60px;
+      background: var(--surface); border-bottom: 1px solid var(--border);
+    }
+    .logo { font-size: 20px; font-weight: 700; }
+    .logo span { color: var(--accent); }
+    .nav-links { display: flex; gap: 8px; }
+    .nav-link {
+      padding: 8px 16px; border-radius: 8px; text-decoration: none;
+      color: var(--text-dim); font-size: 14px; transition: background 0.15s;
+    }
+    .nav-link:hover { background: var(--surface2); color: var(--text); }
+    .nav-link.active { background: var(--surface2); color: var(--text); }
+
+    main { max-width: 900px; margin: 0 auto; padding: 32px 24px; }
+
+    h1 { font-size: 22px; margin-bottom: 6px; }
+    .subtitle { color: var(--text-dim); font-size: 14px; margin-bottom: 32px; }
+
+    .card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 24px; margin-bottom: 24px;
+    }
+    .card-title {
+      font-size: 14px; font-weight: 700; letter-spacing: 0.5px;
+      text-transform: uppercase; color: var(--text-dim); margin-bottom: 20px;
+    }
+
+    /* Membership bilgisi */
+    .plan-row { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+    .plan-badge {
+      background: var(--accent); color: #fff; padding: 4px 14px;
+      border-radius: 100px; font-size: 12px; font-weight: 700; letter-spacing: 0.5px;
+    }
+    .plan-name { font-size: 20px; font-weight: 700; }
+    .plan-stat { color: var(--text-dim); font-size: 14px; margin-top: 10px; }
+
+    /* Kullanıcı tablosu */
+    .user-table { width: 100%; border-collapse: collapse; }
+    .user-table th {
+      text-align: left; padding: 10px 12px; font-size: 11px;
+      font-weight: 600; letter-spacing: 0.5px; text-transform: uppercase;
+      color: var(--text-muted); border-bottom: 1px solid var(--border);
+    }
+    .user-table td { padding: 14px 12px; border-bottom: 1px solid #1a1a1a; font-size: 14px; vertical-align: middle; }
+    .user-table tr:last-child td { border-bottom: none; }
+    .user-table tr:hover td { background: var(--surface2); }
+
+    .avatar { width: 32px; height: 32px; border-radius: 50%; object-fit: cover; background: #333; }
+    .avatar-placeholder { width: 32px; height: 32px; border-radius: 50%; background: #333; display:flex; align-items:center; justify-content:center; font-size:14px; }
+    .role-badge {
+      display: inline-block; padding: 2px 10px; border-radius: 100px;
+      font-size: 11px; font-weight: 600; letter-spacing: 0.3px;
+    }
+    .role-owner { background: #2a0a0a; color: var(--accent); border: 1px solid #4a0a0a; }
+    .role-member { background: var(--surface2); color: var(--text-dim); border: 1px solid var(--border); }
+
+    .ip-cell { font-family: monospace; font-size: 12px; color: var(--text-dim); }
+    .ip-locked { color: #f59e0b; }
+
+    .action-btn {
+      padding: 6px 14px; border-radius: 8px; font-size: 12px; font-weight: 600;
+      cursor: pointer; border: 1px solid var(--border); background: none; color: var(--text-dim);
+      transition: all 0.15s;
+    }
+    .action-btn:hover { background: var(--surface2); color: var(--text); }
+    .action-btn.danger:hover { border-color: var(--accent); color: var(--accent); }
+
+    /* Davet formu */
+    .invite-row { display: flex; gap: 12px; }
+    .invite-input {
+      flex: 1; padding: 12px 16px; background: var(--surface2);
+      border: 1px solid var(--border); border-radius: 10px;
+      color: var(--text); font-size: 14px; outline: none;
+    }
+    .invite-input:focus { border-color: var(--accent); }
+    .btn-primary {
+      padding: 12px 24px; background: var(--accent); color: #fff;
+      border: none; border-radius: 10px; font-size: 14px; font-weight: 600; cursor: pointer;
+    }
+    .btn-primary:hover { background: #c01920; }
+
+    .toast {
+      position: fixed; bottom: 24px; right: 24px;
+      background: #1a2a1a; border: 1px solid #2a4a2a; color: #6fbe6f;
+      padding: 12px 20px; border-radius: 10px; font-size: 14px;
+      opacity: 0; transform: translateY(8px); transition: all 0.25s;
+      pointer-events: none; z-index: 999;
+    }
+    .toast.error { background: #2a1a1a; border-color: #4a2a2a; color: #e87474; }
+    .toast.show { opacity: 1; transform: translateY(0); }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="logo">Tesla<span>TV</span></div>
+    <nav class="nav-links">
+      <a href="/" class="nav-link">Oynatıcı</a>
+      <a href="/manage.html" class="nav-link active">Yönetim</a>
+      <a href="#" class="nav-link" onclick="logout()">Çıkış</a>
+    </nav>
+  </header>
+
+  <main>
+    <h1 id="membership-name">Üyelik Paketi</h1>
+    <p class="subtitle" id="membership-sub">Yükleniyor...</p>
+
+    <!-- Paket bilgisi -->
+    <div class="card">
+      <div class="card-title">Paket Bilgisi</div>
+      <div class="plan-row">
+        <span class="plan-badge" id="plan-badge">—</span>
+        <span class="plan-name" id="plan-display-name">—</span>
+      </div>
+      <p class="plan-stat" id="plan-stat">—</p>
+    </div>
+
+    <!-- Kullanıcılar (sadece owner görür) -->
+    <div class="card" id="users-card">
+      <div class="card-title">Kullanıcılar</div>
+      <table class="user-table">
+        <thead>
+          <tr>
+            <th></th>
+            <th>Ad / E-posta</th>
+            <th>Rol</th>
+            <th>IP Kilidi</th>
+            <th>Durum</th>
+            <th>İşlem</th>
+          </tr>
+        </thead>
+        <tbody id="user-tbody">
+          <tr><td colspan="6" style="color:#555;padding:20px">Yükleniyor...</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Davet -->
+    <div class="card" id="invite-card">
+      <div class="card-title">Kullanıcı Davet Et</div>
+      <p style="font-size:14px;color:var(--text-dim);margin-bottom:16px">
+        Davet ettiğiniz kişi Google hesabıyla ilk giriş yaptığında otomatik olarak paketinize eklenir.
+      </p>
+      <div class="invite-row">
+        <input type="email" id="invite-email" class="invite-input" placeholder="ornek@gmail.com">
+        <button class="btn-primary" onclick="sendInvite()">Davet Gönder</button>
+      </div>
+    </div>
+  </main>
+
+  <div class="toast" id="toast"></div>
+
+  <script>
+    let myData = null;
+
+    async function init() {
+      const res = await fetch('/api/me');
+      if (res.status === 401) { location.href = '/login.html'; return; }
+      myData = await res.json();
+
+      document.getElementById('membership-name').textContent = myData.membership.name + ' Paketi';
+      document.getElementById('membership-sub').textContent = myData.user.email;
+      document.getElementById('plan-badge').textContent = myData.membership.plan.toUpperCase();
+      document.getElementById('plan-display-name').textContent = myData.membership.name;
+      document.getElementById('plan-stat').textContent =
+        `${myData.users.length} / ${myData.membership.max_users} kullanıcı  •  Durum: ${myData.membership.status}`;
+
+      if (myData.user.role !== 'owner') {
+        document.getElementById('invite-card').style.display = 'none';
+      }
+
+      renderUsers(myData.users);
+    }
+
+    function renderUsers(users) {
+      const tbody = document.getElementById('user-tbody');
+      tbody.innerHTML = users.map(u => `
+        <tr>
+          <td>
+            ${u.avatar
+              ? `<img src="${u.avatar}" class="avatar" alt="">`
+              : `<div class="avatar-placeholder">👤</div>`}
+          </td>
+          <td>
+            <div style="font-weight:500">${esc(u.name || '—')}</div>
+            <div style="font-size:12px;color:#555;margin-top:2px">${esc(u.email)}</div>
+          </td>
+          <td><span class="role-badge role-${u.role}">${u.role === 'owner' ? 'Sahip' : 'Üye'}</span></td>
+          <td class="ip-cell ${u.locked_ip ? 'ip-locked' : ''}">
+            ${u.locked_ip || '<span style="color:#444">Henüz kilitlenmedi</span>'}
+          </td>
+          <td>
+            <span style="color:${u.is_active ? '#6fbe6f' : '#e87474'};font-size:13px">
+              ${u.is_active ? '✓ Aktif' : '✗ Pasif'}
+            </span>
+          </td>
+          <td>
+            ${myData.user.role === 'owner' && u.id !== myData.user.id ? `
+              <button class="action-btn danger" onclick="resetIp(${u.id}, '${esc(u.name || u.email)}')">
+                IP Sıfırla
+              </button>
+            ` : '—'}
+          </td>
+        </tr>
+      `).join('');
+    }
+
+    async function sendInvite() {
+      const email = document.getElementById('invite-email').value.trim();
+      if (!email) return;
+      const res = await fetch('/api/invite', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        showToast(data.message, false);
+        document.getElementById('invite-email').value = '';
+      } else {
+        showToast(data.error, true);
+      }
+    }
+
+    async function resetIp(userId, name) {
+      const res = await fetch(`/api/reset-ip/${userId}`, { method: 'POST' });
+      const data = await res.json();
+      if (res.ok) {
+        showToast(`${name} için IP kilidi sıfırlandı.`, false);
+        init();
+      } else {
+        showToast(data.error, true);
+      }
+    }
+
+    async function logout() {
+      await fetch('/auth/logout', { method: 'POST' });
+      location.href = '/login.html';
+    }
+
+    function showToast(msg, isError = false) {
+      const t = document.getElementById('toast');
+      t.textContent = msg;
+      t.className = 'toast' + (isError ? ' error' : '') + ' show';
+      setTimeout(() => t.classList.remove('show'), 3500);
+    }
+
+    function esc(s) {
+      return String(s).replace(/[&<>"']/g, c =>
+        ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
+    }
+
+    init();
+  </script>
+</body>
+</html>
