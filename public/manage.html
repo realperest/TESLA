@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Tesla TV — Yönetim</title>
+  <script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.7/dist/hls.min.js"></script>
   <style>
     *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
     :root {
@@ -28,14 +29,61 @@
     .nav-link:hover { background: var(--surface2); color: var(--text); }
     .nav-link.active { background: var(--surface2); color: var(--text); }
 
-    main { max-width: 900px; margin: 0 auto; padding: 32px 24px; }
+    main { max-width: 1240px; margin: 0 auto; padding: 32px 24px; }
 
     h1 { font-size: 22px; margin-bottom: 6px; }
     .subtitle { color: var(--text-dim); font-size: 14px; margin-bottom: 32px; }
 
+    .settings-tabs {
+      display: flex;
+      gap: 8px;
+      overflow-x: auto;
+      padding-bottom: 8px;
+      margin-bottom: 14px;
+    }
+    .settings-tab {
+      border: 1px solid var(--border);
+      background: var(--surface2);
+      color: var(--text-dim);
+      border-radius: 999px;
+      padding: 10px 14px;
+      font-size: 13px;
+      cursor: pointer;
+      white-space: nowrap;
+      min-height: 42px;
+    }
+    .settings-tab.active {
+      color: #fff;
+      border-color: rgba(232, 33, 39, 0.45);
+      background: #22090b;
+    }
+    .settings-panel { display: none; }
+    .settings-panel.active { display: block; }
+
     .card {
       background: var(--surface); border: 1px solid var(--border);
       border-radius: var(--radius); padding: 24px; margin-bottom: 24px;
+    }
+    .account-actions {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+    .account-btn {
+      min-height: 46px;
+      padding: 12px 18px;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+      background: var(--surface2);
+      color: var(--text);
+      font-size: 14px;
+      cursor: pointer;
+    }
+    .account-btn:hover { border-color: var(--accent); }
+    .account-btn.danger {
+      border-color: #5b262b;
+      background: #231114;
+      color: #ffb4ba;
     }
     .card-title {
       font-size: 14px; font-weight: 700; letter-spacing: 0.5px;
@@ -85,13 +133,13 @@
     /* Davet formu */
     .invite-row { display: flex; gap: 12px; }
     .invite-input {
-      flex: 1; padding: 12px 16px; background: var(--surface2);
+      flex: 1; min-height: 48px; padding: 12px 16px; background: var(--surface2);
       border: 1px solid var(--border); border-radius: 10px;
       color: var(--text); font-size: 14px; outline: none;
     }
     .invite-input:focus { border-color: var(--accent); }
     .btn-primary {
-      padding: 12px 24px; background: var(--accent); color: #fff;
+      min-height: 48px; padding: 12px 24px; background: var(--accent); color: #fff;
       border: none; border-radius: 10px; font-size: 14px; font-weight: 600; cursor: pointer;
     }
     .btn-primary:hover { background: #c01920; }
@@ -105,6 +153,124 @@
     }
     .toast.error { background: #2a1a1a; border-color: #4a2a2a; color: #e87474; }
     .toast.show { opacity: 1; transform: translateY(0); }
+
+    .tv-config-layout { display:flex; gap:14px; align-items:flex-start; }
+    .tv-config-left { flex: 1 1 70%; min-width: 0; }
+    .tv-config-right { flex: 0 0 30%; min-width: 320px; position: sticky; top: 12px; }
+    .tv-config-list { display:flex; flex-direction:column; gap:10px; max-height:460px; overflow:auto; padding-right:4px; }
+    .tv-row { border:1px solid var(--border); border-radius:10px; padding:8px; background: #101010; }
+    .tv-row-line { display:flex; align-items:center; gap:8px; min-width:0; }
+    .tv-row-namebox { display:flex; align-items:center; gap:8px; min-width:180px; max-width:240px; flex:0 0 auto; }
+    .tv-row-name { font-size:13px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .tv-row-cat { font-size:11px; color:var(--text-muted); white-space:nowrap; }
+    .tv-row-top-actions { display:flex; gap:6px; align-items:center; margin-left:auto; flex:0 0 auto; }
+    .tv-mini-btn {
+      min-height: 42px;
+      min-width: 72px;
+      padding: 10px 12px;
+      border-radius:10px;
+      border:1px solid var(--border);
+      background:var(--surface2);
+      color:var(--text);
+      font-size:13px;
+      cursor:pointer;
+    }
+    .tv-mini-btn:hover { border-color:var(--accent); }
+    .tv-mini-input {
+      flex:1 1 auto;
+      width:auto;
+      min-width:180px;
+      min-height: 42px;
+      padding:8px 10px;
+      border:1px solid var(--border);
+      border-radius:10px;
+      background:var(--surface2);
+      color:var(--text);
+      font-size:13px;
+    }
+    .tv-preview-wrap { border:1px solid var(--border); border-radius:10px; overflow:hidden; background:#000; }
+    #tv-preview { width:100%; max-height:220px; background:#000; display:block; }
+    .tv-preview-meta { padding:8px 10px; font-size:12px; color:var(--text-dim); background:#0f0f0f; border-top:1px solid var(--border); }
+
+    .source-modal {
+      position: fixed; inset: 0; background: rgba(0,0,0,0.65);
+      display: none; align-items: center; justify-content: center; z-index: 1000;
+    }
+    .source-modal.open { display: flex; }
+    .source-modal-card {
+      width: min(840px, 92vw); max-height: 76vh; overflow: hidden;
+      border: 1px solid var(--border); border-radius: 12px; background: #111;
+      display: flex; flex-direction: column;
+    }
+    .source-modal-head {
+      display:flex; align-items:center; justify-content:space-between; gap:12px;
+      padding: 12px 14px; border-bottom:1px solid var(--border);
+    }
+    .source-modal-body { padding: 12px; overflow:auto; display:flex; flex-direction:column; gap:8px; }
+    .source-option {
+      border:1px solid var(--border); border-radius:8px; padding:10px; background:#151515;
+      font-size:12px; color:#ddd; cursor:pointer; word-break:break-all;
+    }
+    .source-option:hover { border-color: var(--accent); }
+    .source-option .meta { margin-top:6px; font-size:11px; color:#9aa0aa; display:flex; gap:10px; align-items:center; }
+    .source-badge { padding:2px 7px; border-radius:999px; border:1px solid #333; font-size:10px; letter-spacing:0.3px; text-transform:uppercase; }
+    .source-badge.ok { color:#7bd88f; border-color:#2f6a3e; background:#112318; }
+    .source-badge.fail { color:#ff9fa6; border-color:#6b2b33; background:#261116; }
+    .source-modal-foot {
+      padding: 10px 12px; border-top:1px solid var(--border); display:flex; justify-content:flex-end; gap:8px;
+    }
+
+    .tv-row-top input[type="checkbox"] {
+      width: 22px;
+      height: 22px;
+      accent-color: var(--accent);
+      cursor: pointer;
+      flex-shrink: 0;
+    }
+
+    .action-btn {
+      min-height: 40px;
+      min-width: 94px;
+      padding: 8px 14px;
+      border-radius: 10px;
+      font-size: 13px;
+    }
+
+    @media (pointer: coarse) {
+      .nav-link {
+        min-height: 44px;
+        display: inline-flex;
+        align-items: center;
+      }
+      .btn-primary {
+        min-height: 52px;
+        padding: 14px 24px;
+      }
+      .invite-input, .tv-mini-input {
+        min-height: 50px;
+        font-size: 15px;
+      }
+      .tv-mini-btn {
+        min-height: 48px;
+        min-width: 88px;
+        font-size: 14px;
+      }
+      .tv-row-top input[type="checkbox"] {
+        width: 26px;
+        height: 26px;
+      }
+      .tv-row-line { gap:10px; }
+      .tv-row-namebox { min-width: 160px; }
+    }
+
+    @media (max-width: 980px) {
+      .tv-config-layout { flex-direction: column; }
+      .tv-config-right { position: static; min-width: 0; width: 100%; }
+      .tv-config-list { max-height: 320px; }
+      .tv-row-line { flex-wrap: wrap; }
+      .tv-row-namebox { max-width:100%; min-width:140px; }
+      .tv-row-top-actions { width:100%; margin-left:0; justify-content:flex-end; }
+    }
   </style>
 </head>
 <body>
@@ -121,8 +287,16 @@
     <h1 id="membership-name">Üyelik Paketi</h1>
     <p class="subtitle" id="membership-sub">Yükleniyor...</p>
 
+    <div class="settings-tabs" id="settings-tabs">
+      <button class="settings-tab active" onclick="setSettingsTab('account', this)">Hesap ve Kullanıcılar</button>
+      <button class="settings-tab" onclick="setSettingsTab('youtube', this)">YouTube</button>
+      <button class="settings-tab" onclick="setSettingsTab('tv', this)">TV</button>
+      <button class="settings-tab" onclick="setSettingsTab('iptv', this)">IPTV</button>
+      <button class="settings-tab" onclick="setSettingsTab('other', this)">Diğer Ayarlar</button>
+    </div>
+
     <!-- Paket bilgisi -->
-    <div class="card">
+    <div class="card settings-panel active" data-settings-panel="account">
       <div class="card-title">Paket Bilgisi</div>
       <div class="plan-row">
         <span class="plan-badge" id="plan-badge">—</span>
@@ -131,8 +305,72 @@
       <p class="plan-stat" id="plan-stat">—</p>
     </div>
 
+    <div class="card settings-panel active" data-settings-panel="account">
+      <div class="card-title">Oturum İşlemleri</div>
+      <p style="font-size:14px;color:var(--text-dim);margin-bottom:12px">
+        Aynı araçta farklı kullanıcıların giriş yapabilmesi için hesap değiştirebilirsiniz.
+      </p>
+      <div class="account-actions">
+        <button class="account-btn" onclick="switchAccount()">Hesap Değiştir</button>
+        <button class="account-btn danger" onclick="logout()">Hesaptan Çık</button>
+      </div>
+    </div>
+
+    <div class="card settings-panel" id="interests-card" data-settings-panel="youtube">
+      <div class="card-title">YouTube İlgi Etiketleri</div>
+      <p style="font-size:14px;color:var(--text-dim);margin-bottom:12px">
+        Virgülle ayırın. Sağ panel önerileri bu etiketlere göre ağırlıklandırılır.
+      </p>
+      <div class="invite-row">
+        <input type="text" id="interest-tags" class="invite-input" placeholder="tesla, teknoloji, otomobil, yapay zeka">
+        <button class="btn-primary" onclick="saveInterests()">Kaydet</button>
+      </div>
+    </div>
+
+    <div class="card settings-panel" id="language-card" data-settings-panel="other">
+      <div class="card-title">Dil Tercihi</div>
+      <p style="font-size:14px;color:var(--text-dim);margin-bottom:12px">
+        Sağ panel önerilerinde bu dil önceliklendirilir.
+      </p>
+      <div class="invite-row">
+        <select id="preferred-language" class="invite-input">
+          <option value="tr">Türkçe</option>
+          <option value="en">English</option>
+          <option value="de">Deutsch</option>
+          <option value="fr">Français</option>
+          <option value="es">Español</option>
+          <option value="it">Italiano</option>
+          <option value="pt">Português</option>
+          <option value="nl">Nederlands</option>
+          <option value="ru">Русский</option>
+          <option value="ar">العربية</option>
+        </select>
+        <button class="btn-primary" onclick="saveLanguage()">Dili Kaydet</button>
+      </div>
+    </div>
+
+    <div class="card settings-panel" id="tv-settings-card" data-settings-panel="tv">
+      <div class="card-title">TV Kanalları Ayarla</div>
+      <p style="font-size:14px;color:var(--text-dim);margin-bottom:12px">
+        Tik kaldırırsanız kanal TV ekranında görünmez. İsterseniz kendi güvenilir bağlantınızı girebilirsiniz.
+      </p>
+      <div class="tv-config-layout">
+        <div class="tv-config-left">
+          <div class="tv-config-list" id="tv-config-list">
+            <div style="color:#666;font-size:13px">Yükleniyor...</div>
+          </div>
+        </div>
+        <div class="tv-config-right">
+          <div class="tv-preview-wrap">
+            <video id="tv-preview" controls playsinline></video>
+            <div class="tv-preview-meta" id="tv-preview-meta">Ön izleme için bir kanal seçin.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- Kullanıcılar (sadece owner görür) -->
-    <div class="card" id="users-card">
+    <div class="card settings-panel" id="users-card" data-settings-panel="account">
       <div class="card-title">Kullanıcılar</div>
       <table class="user-table">
         <thead>
@@ -152,7 +390,7 @@
     </div>
 
     <!-- Davet -->
-    <div class="card" id="invite-card">
+    <div class="card settings-panel" id="invite-card" data-settings-panel="account">
       <div class="card-title">Kullanıcı Davet Et</div>
       <p style="font-size:14px;color:var(--text-dim);margin-bottom:16px">
         Davet ettiğiniz kişi Google hesabıyla ilk giriş yaptığında otomatik olarak paketinize eklenir.
@@ -162,12 +400,43 @@
         <button class="btn-primary" onclick="sendInvite()">Davet Gönder</button>
       </div>
     </div>
+
+    <div class="card settings-panel" id="iptv-settings-card" data-settings-panel="iptv">
+      <div class="card-title">IPTV Ayarları</div>
+      <p style="font-size:14px;color:var(--text-dim)">
+        IPTV bölümü için kanal kaynak yönetimi yakında bu sekmeye taşınacaktır.
+      </p>
+    </div>
   </main>
 
   <div class="toast" id="toast"></div>
+  <div class="source-modal" id="source-modal">
+    <div class="source-modal-card">
+      <div class="source-modal-head">
+        <div style="font-weight:600" id="source-modal-title">Kaynak seç</div>
+        <button class="tv-mini-btn" onclick="closeSourceModal()">Kapat</button>
+      </div>
+      <div class="source-modal-body" id="source-modal-body"></div>
+      <div class="source-modal-foot">
+        <button class="tv-mini-btn" onclick="closeSourceModal()">Tamam</button>
+      </div>
+    </div>
+  </div>
 
   <script>
     let myData = null;
+    let tvSettings = [];
+    let tvPreviewHls = null;
+    let sourceModalChannelId = null;
+
+    function setSettingsTab(tabId, btn) {
+      document.querySelectorAll('.settings-tab').forEach(el => {
+        el.classList.toggle('active', el === btn || el.getAttribute('data-tab') === tabId);
+      });
+      document.querySelectorAll('.settings-panel').forEach(el => {
+        el.classList.toggle('active', el.getAttribute('data-settings-panel') === tabId);
+      });
+    }
 
     async function init() {
       const res = await fetch('/api/me');
@@ -183,9 +452,13 @@
 
       if (myData.user.role !== 'owner') {
         document.getElementById('invite-card').style.display = 'none';
+        document.getElementById('interests-card').style.display = 'none';
       }
+      document.getElementById('interest-tags').value = myData.membership.interest_tags || '';
+      document.getElementById('preferred-language').value = myData.user.preferred_language || 'tr';
 
       renderUsers(myData.users);
+      await loadTvSettings();
     }
 
     function renderUsers(users) {
@@ -252,6 +525,204 @@
     async function logout() {
       await fetch('/auth/logout', { method: 'POST' });
       location.href = '/login.html';
+    }
+
+    async function switchAccount() {
+      await fetch('/auth/logout', { method: 'POST' });
+      location.href = '/login.html';
+    }
+
+    async function saveInterests() {
+      const interestTags = document.getElementById('interest-tags').value.trim();
+      const res = await fetch('/api/membership/interests', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ interestTags }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        showToast('İlgi etiketleri güncellendi.', false);
+      } else {
+        showToast(data.error || 'Güncellenemedi.', true);
+      }
+    }
+
+    async function saveLanguage() {
+      const language = document.getElementById('preferred-language').value;
+      const res = await fetch('/api/user/language', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ language }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        showToast('Dil tercihi güncellendi.', false);
+      } else {
+        showToast(data.error || 'Güncellenemedi.', true);
+      }
+    }
+
+    async function loadTvSettings() {
+      const res = await fetch('/api/user-tv-settings');
+      if (!res.ok) return;
+      tvSettings = await res.json();
+      renderTvSettings();
+    }
+
+    function renderTvSettings() {
+      const wrap = document.getElementById('tv-config-list');
+      if (!Array.isArray(tvSettings) || !tvSettings.length) {
+        wrap.innerHTML = '<div style="color:#666;font-size:13px">Kanal bulunamadı.</div>';
+        return;
+      }
+      wrap.innerHTML = tvSettings.map(ch => `
+        <div class="tv-row">
+          <div class="tv-row-line">
+            <div class="tv-row-namebox">
+              <input type="checkbox" ${ch.enabled ? 'checked' : ''} onchange="toggleTvEnabled(${ch.id}, this.checked)">
+              <div>
+                <div class="tv-row-name">${esc(ch.name)}</div>
+                <div class="tv-row-cat">${esc(ch.category || 'genel')}</div>
+              </div>
+            </div>
+            <input class="tv-mini-input" id="tv-custom-${ch.id}" value="${esc(ch.custom_url || '')}" placeholder="${esc(ch.default_url || '')}">
+            <div class="tv-row-top-actions">
+              <button class="tv-mini-btn" onclick="refreshChannelSources(${ch.id})">Araştır/Tazele</button>
+              <button class="tv-mini-btn" onclick="previewTv(${ch.id})">Önizle</button>
+              <button class="tv-mini-btn" onclick="saveTvCustomUrl(${ch.id})">Kaydet</button>
+            </div>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    async function toggleTvEnabled(channelId, enabled) {
+      const row = tvSettings.find(x => x.id === channelId);
+      if (!row) return;
+      const res = await fetch(`/api/user-tv-settings/${channelId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ enabled, customUrl: row.custom_url || '' }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        showToast(data.error || 'Güncellenemedi.', true);
+        return;
+      }
+      row.enabled = enabled ? 1 : 0;
+      showToast('Kanal görünürlüğü güncellendi.', false);
+    }
+
+    async function saveTvCustomUrl(channelId) {
+      const row = tvSettings.find(x => x.id === channelId);
+      if (!row) return;
+      const input = document.getElementById(`tv-custom-${channelId}`);
+      const customUrl = String(input?.value || '').trim();
+      const res = await fetch(`/api/user-tv-settings/${channelId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ enabled: !!row.enabled, customUrl }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        showToast(data.error || 'Kaydedilemedi.', true);
+        return;
+      }
+      row.custom_url = customUrl;
+      showToast('Özel bağlantı kaydedildi.', false);
+    }
+
+    function previewTv(channelId) {
+      const row = tvSettings.find(x => x.id === channelId);
+      if (!row) return;
+      const input = document.getElementById(`tv-custom-${channelId}`);
+      const draftUrl = String(input?.value || '').trim();
+      const url = draftUrl || row.custom_url || row.default_url;
+      if (!url) return;
+
+      const video = document.getElementById('tv-preview');
+      const meta = document.getElementById('tv-preview-meta');
+      const sourceLabel = draftUrl ? 'Taslak URL (kaydedilmedi)' : 'Kayıtlı URL';
+      meta.textContent = `${row.name} • ${sourceLabel} • ${url}`;
+
+      if (tvPreviewHls) {
+        tvPreviewHls.destroy();
+        tvPreviewHls = null;
+      }
+
+      const proxied = `/proxy/hls?url=${encodeURIComponent(url)}`;
+      if (window.Hls && Hls.isSupported()) {
+        tvPreviewHls = new Hls({ enableWorker: true, lowLatencyMode: false });
+        tvPreviewHls.loadSource(proxied);
+        tvPreviewHls.attachMedia(video);
+        tvPreviewHls.on(Hls.Events.MANIFEST_PARSED, () => {
+          video.play().catch(() => {});
+        });
+      } else {
+        video.src = proxied;
+        video.play().catch(() => {});
+      }
+    }
+
+    async function refreshChannelSources(channelId) {
+      const row = tvSettings.find(x => x.id === channelId);
+      if (!row) return;
+
+      const body = document.getElementById('source-modal-body');
+      document.getElementById('source-modal-title').textContent = `${row.name} kaynakları`;
+      body.innerHTML = '<div style="color:#888;font-size:13px">Kaynaklar araştırılıyor...</div>';
+      sourceModalChannelId = channelId;
+      document.getElementById('source-modal').classList.add('open');
+
+      try {
+        const res = await fetch(`/api/channel-sources/${channelId}`);
+        const rawText = await res.text();
+        let data = {};
+        try {
+          data = JSON.parse(rawText);
+        } catch {
+          body.innerHTML = `<div style="color:#d77;font-size:13px">Sunucu JSON yerine farklı bir yanıt döndürdü. Lütfen sunucuyu yeniden başlatıp tekrar deneyin.</div>`;
+          return;
+        }
+        if (!res.ok) {
+          body.innerHTML = `<div style="color:#d77;font-size:13px">${esc(data.error || 'Araştırma başarısız.')}</div>`;
+          return;
+        }
+        if (!Array.isArray(data.sources) || !data.sources.length) {
+          body.innerHTML = '<div style="color:#888;font-size:13px">Kaynak bulunamadı.</div>';
+          return;
+        }
+
+        body.innerHTML = data.sources.map((item, idx) => `
+          <div class="source-option" onclick="pickSourceUrl(${idx})" data-url="${encodeURIComponent(item.url)}">
+            ${esc(item.url)}
+            <div class="meta">
+              <span>${esc(item.source || 'unknown')}</span>
+              <span class="source-badge ${item.healthy ? 'ok' : 'fail'}">${item.healthy ? 'doğrulandı' : 'zayıf'}</span>
+              <span>${esc(item.reason || '')}</span>
+            </div>
+          </div>
+        `).join('');
+      } catch (err) {
+        body.innerHTML = `<div style="color:#d77;font-size:13px">Araştırma sırasında bağlantı hatası oluştu: ${esc(err.message || 'Bilinmeyen hata')}</div>`;
+      }
+    }
+
+    function pickSourceUrl(idx) {
+      const modalBody = document.getElementById('source-modal-body');
+      const node = modalBody.querySelectorAll('.source-option')[idx];
+      const encoded = node ? node.getAttribute('data-url') : '';
+      const url = encoded ? decodeURIComponent(encoded) : '';
+      if (!url || !sourceModalChannelId) return;
+      const input = document.getElementById(`tv-custom-${sourceModalChannelId}`);
+      if (input) input.value = url;
+      showToast('Kaynak adres satırına aktarıldı. Kaydet ile onaylayın.', false);
+      closeSourceModal();
+    }
+
+    function closeSourceModal() {
+      document.getElementById('source-modal').classList.remove('open');
+      sourceModalChannelId = null;
     }
 
     function showToast(msg, isError = false) {

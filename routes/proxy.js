@@ -120,7 +120,7 @@ router.get('/resolve', async (req, res) => {
 
 /**
  * yt-dlp ile en iyi video stream URL'sini al
- * Öncelik: HLS (m3u8) > mp4 (480p-720p)
+ * Öncelik: 1080p'e kadar en iyi birleşik stream (ses+video)
  */
 const path = require('path');
 const YT_DLP = (() => {
@@ -128,45 +128,99 @@ const YT_DLP = (() => {
   try { require('fs').accessSync(venvExe); return venvExe; } catch { return 'yt-dlp'; }
 })();
 
-function resolveWithYtDlp(url) {
+function runYtDlp(args, options = {}) {
   return new Promise((resolve, reject) => {
-    // JSON formatında tüm format bilgilerini al
-    execFile(YT_DLP, [
-      '--dump-json',
-      '--no-playlist',
-      '--no-warnings',
-      // Önce YouTube format 22 (720p ses+video birleşik), sonra 18 (360p), sonra generic best
-      '-f', '22/18/best[height<=720][ext=mp4][vcodec!=none][acodec!=none][protocol!=m3u8][protocol!=m3u8_native]/best[ext=mp4][vcodec!=none][acodec!=none][protocol!=m3u8][protocol!=m3u8_native]/best[vcodec!=none][acodec!=none][protocol!=m3u8][protocol!=m3u8_native]/best',
-      url,
-    ], { timeout: 20000, maxBuffer: 5 * 1024 * 1024 }, (err, stdout, stderr) => {
-      if (err) return reject(new Error(stderr || err.message));
+    execFile(
+      YT_DLP,
+      args,
+      { timeout: options.timeout || 20000, maxBuffer: options.maxBuffer || 5 * 1024 * 1024 },
+      (err, stdout, stderr) => {
+        if (err) return reject(new Error((stderr || err.message || '').trim()));
+        const lastLine = (stdout || '').trim().split('\n').pop();
+        if (!lastLine) return reject(new Error('yt-dlp boş çıktı döndürdü'));
+        try {
+          resolve(JSON.parse(lastLine));
+        } catch {
+          reject(new Error('yt-dlp çıktısı ayrıştırılamadı'));
+        }
+      }
+    );
+  });
+}
 
-      let info;
+function resolveWithYtDlp(url) {
+  return new Promise(async (resolve, reject) => {
+    const attempts = [
+      [
+        '--dump-json',
+        '--no-playlist',
+        '--no-warnings',
+        '--geo-bypass',
+        '--extractor-args', 'youtube:player_client=web,web_safari,android',
+        '-f', 'best[height<=1080][vcodec!=none][acodec!=none][protocol=m3u8_native]/best[height<=1080][vcodec!=none][acodec!=none][protocol=https]/best[height<=1080][vcodec!=none][acodec!=none]/best',
+        url,
+      ],
+      [
+        '--dump-json',
+        '--no-playlist',
+        '--no-warnings',
+        '--geo-bypass',
+        '--extractor-args', 'youtube:player_client=android,web',
+        '-f', 'best[height<=1080][vcodec!=none][acodec!=none][protocol=https]/best[height<=1080][vcodec!=none][acodec!=none]/best[height<=720][vcodec!=none][acodec!=none]/best',
+        url,
+      ],
+      [
+        '--dump-json',
+        '--no-playlist',
+        '--no-warnings',
+        '--geo-bypass',
+        '--extractor-args', 'youtube:player_client=web',
+        url,
+      ],
+    ];
+
+    let info = null;
+    let lastError = null;
+
+    for (const args of attempts) {
       try {
-        info = JSON.parse(stdout.trim().split('\n').pop());
-      } catch {
-        return reject(new Error('yt-dlp çıktısı ayrıştırılamadı'));
+        info = await runYtDlp(args, { timeout: 25000, maxBuffer: 8 * 1024 * 1024 });
+        if (info) break;
+      } catch (err) {
+        lastError = err;
       }
+    }
 
-      const streamUrl = info.url;
-      if (!streamUrl) return reject(new Error('Stream URL alınamadı'));
-
-      const isLive = !!(info.is_live || info.live_status === 'is_live');
-      const isHls = isLive || streamUrl.includes('.m3u8') || info.protocol === 'm3u8_native';
-
-      // Canlı yayın HLS → oynatma desteklenmiyor, net hata döndür
-      if (isLive && isHls) {
-        return reject(Object.assign(new Error('Canlı yayınlar şu an desteklenmiyor'), { code: 'LIVE_STREAM' }));
+    if (!info) {
+      const msg = String(lastError?.message || 'Video çözümlenemedi');
+      if (msg.toLowerCase().includes('video is not available')) {
+        return reject(new Error('Bu video YouTube tarafında oynatmaya kapalı veya bölgesel kısıtlı olabilir.'));
       }
+      return reject(lastError || new Error('Video çözümlenemedi'));
+    }
 
-      resolve({
-        streamUrl,
-        title: info.title || 'Video',
-        thumbnail: info.thumbnail || null,
-        duration: info.duration || null,
-        isHls,
-        isLive,
-      });
+    const streamUrl = info.url;
+    if (!streamUrl) return reject(new Error('Stream URL alınamadı'));
+
+    const isLive = !!(info.is_live || info.live_status === 'is_live');
+    const isHls = isLive || streamUrl.includes('.m3u8') || info.protocol === 'm3u8_native';
+
+    // Canlı yayın HLS → oynatma desteklenmiyor, net hata döndür
+    if (isLive && isHls) {
+      return reject(Object.assign(new Error('Canlı yayınlar şu an desteklenmiyor'), { code: 'LIVE_STREAM' }));
+    }
+
+    resolve({
+      streamUrl,
+      title: info.title || 'Video',
+      thumbnail: info.thumbnail || null,
+      duration: info.duration || null,
+      width: info.width || null,
+      height: info.height || null,
+      formatId: info.format_id || null,
+      formatNote: info.format_note || null,
+      isHls,
+      isLive,
     });
   });
 }

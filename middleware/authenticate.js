@@ -18,7 +18,7 @@ function authenticate(req, res, next) {
   const db = database.db;
 
   const session = db.prepare(`
-    SELECT s.*, u.id as uid, u.email, u.name, u.avatar, u.role,
+    SELECT s.*, u.id as uid, u.email, u.name, u.avatar, u.role, u.preferred_language,
            u.locked_ip, u.is_active, u.membership_id,
            m.status as membership_status, m.max_users
     FROM sessions s
@@ -56,6 +56,7 @@ function authenticate(req, res, next) {
     name: session.name,
     avatar: session.avatar,
     role: session.role,
+    preferred_language: session.preferred_language || 'tr',
     membership_id: session.membership_id,
     locked_ip: session.locked_ip,
     sessionToken: payload.jti,

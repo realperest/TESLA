@@ -70,6 +70,53 @@ html, body {
   object-fit: cover;
 }
 
+.user-menu {
+  position: relative;
+}
+
+.user-menu-pop {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  min-width: 180px;
+  background: #141414;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 8px;
+  display: none;
+  z-index: 250;
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.45);
+}
+
+.user-menu.open .user-menu-pop {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.user-menu-btn {
+  width: 100%;
+  border: 1px solid var(--border);
+  background: var(--surface2);
+  color: var(--text);
+  border-radius: 10px;
+  min-height: 40px;
+  padding: 8px 10px;
+  cursor: pointer;
+  text-align: left;
+  font-size: 13px;
+}
+
+.user-menu-btn:hover {
+  border-color: #444;
+}
+
+.user-menu-btn.danger {
+  color: #ff9fa6;
+  border-color: #5b262b;
+  background: #231114;
+}
+
 /* ── Ana içerik alanı ─────────────────────────────────── */
 #main-content {
   position: fixed;

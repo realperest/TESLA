@@ -10,6 +10,7 @@ const proxyRoutes = require('./routes/proxy');
 const youtubeRoutes = require('./routes/youtube');
 const { authenticate } = require('./middleware/authenticate');
 const { ipLock } = require('./middleware/ipLock');
+const { startChannelUpdater } = require('./services/channelUpdater');
 
 const app = express();
 app.set('trust proxy', 1); // Reverse proxy arkasında gerçek IP için
@@ -52,6 +53,7 @@ app.use((req, res) => {
 const PORT = process.env.PORT || 3000;
 
 initDB().then(() => {
+  startChannelUpdater();
   app.listen(PORT, () => {
     const base = process.env.BASE_URL || `http://localhost:${PORT}`;
     console.log('\n========================================');

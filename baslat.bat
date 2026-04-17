@@ -24,21 +24,63 @@ echo    UYARI: Python bulunamadi - YouTube ozelligi olmayacak.
 goto skip_python
 
 :python_found
-for /f "tokens=*" %%v in ('python --version 2^>^&1') do echo    %%v
+for /f "tokens=*" %%v in ('%PYTHON_EXE% --version 2^>^&1') do echo    %%v
 
-if not exist "venv\Scripts\activate.bat" (
+set "VENV_PY=venv\Scripts\python.exe"
+if not exist "%VENV_PY%" (
     echo [3/5] venv olusturuluyor...
     %PYTHON_EXE% -m venv venv
-    if errorlevel 1 goto skip_python
+    if errorlevel 1 (
+        echo HATA: venv olusturulamadi.
+        pause
+        exit /b 1
+    )
     echo    venv hazir.
 ) else (
-    echo [3/5] venv mevcut.
+    "%VENV_PY%" --version >nul 2>&1
+    if errorlevel 1 (
+        echo [3/5] venv kirik bulundu. Yeniden olusturuluyor...
+        rmdir /s /q venv
+        %PYTHON_EXE% -m venv venv
+        if errorlevel 1 (
+            echo HATA: venv yeniden olusturulamadi.
+            pause
+            exit /b 1
+        )
+        echo    venv yeniden olusturuldu.
+    ) else (
+        echo [3/5] venv mevcut.
+    )
 )
 
 echo [4/5] Paketler yukleniyor...
-call venv\Scripts\activate.bat
-pip install -q -r requirements.txt --upgrade 2>nul
-call venv\Scripts\deactivate.bat
+"%VENV_PY%" -m ensurepip --upgrade
+if errorlevel 1 (
+    echo HATA: pip hazirlanamadi.
+    pause
+    exit /b 1
+)
+
+"%VENV_PY%" -m pip install --upgrade pip
+if errorlevel 1 (
+    echo HATA: pip guncellenemedi.
+    pause
+    exit /b 1
+)
+
+"%VENV_PY%" -m pip install -r requirements.txt --upgrade
+if errorlevel 1 (
+    echo HATA: requirements kurulumu basarisiz.
+    pause
+    exit /b 1
+)
+
+"%VENV_PY%" -m yt_dlp --version >nul 2>&1
+if errorlevel 1 (
+    echo HATA: yt-dlp dogrulamasi basarisiz.
+    pause
+    exit /b 1
+)
 set "PATH=%~dp0venv\Scripts;%PATH%"
 echo    Hazir.
 goto after_python

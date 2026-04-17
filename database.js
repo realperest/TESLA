@@ -149,6 +149,7 @@ async function initDB() {
       name            TEXT,
       avatar          TEXT,
       role            TEXT    NOT NULL DEFAULT 'member',
+      preferred_language TEXT NOT NULL DEFAULT 'tr',
       locked_ip       TEXT,
       ip_locked_at    DATETIME,
       is_active       INTEGER NOT NULL DEFAULT 1,
@@ -196,18 +197,131 @@ async function initDB() {
       used          INTEGER NOT NULL DEFAULT 0,
       created_at    DATETIME DEFAULT (datetime('now'))
     );
+
+    CREATE TABLE IF NOT EXISTS user_search_history (
+      id          INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id     INTEGER NOT NULL REFERENCES users(id),
+      query       TEXT    NOT NULL,
+      created_at  DATETIME DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS user_watch_history (
+      id          INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id     INTEGER NOT NULL REFERENCES users(id),
+      video_id    TEXT    NOT NULL,
+      title       TEXT,
+      channel     TEXT,
+      created_at  DATETIME DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS user_interest_keywords (
+      id          INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id     INTEGER NOT NULL REFERENCES users(id),
+      keyword     TEXT    NOT NULL,
+      weight      INTEGER NOT NULL DEFAULT 1,
+      updated_at  DATETIME DEFAULT (datetime('now')),
+      UNIQUE(user_id, keyword)
+    );
+
+    CREATE TABLE IF NOT EXISTS user_channel_settings (
+      id          INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id     INTEGER NOT NULL REFERENCES users(id),
+      channel_id  INTEGER NOT NULL REFERENCES channels(id),
+      enabled     INTEGER NOT NULL DEFAULT 1,
+      custom_url  TEXT,
+      updated_at  DATETIME DEFAULT (datetime('now')),
+      UNIQUE(user_id, channel_id)
+    );
   `);
 
-  // Örnek veri (ilk kurulumda)
+  // Şema güncelleme: memberships.interest_tags (virgülle ayrılmış etiketler)
+  const membershipCols = sqlDb.exec(`PRAGMA table_info(memberships)`);
+  const hasInterestTags =
+    Array.isArray(membershipCols) &&
+    membershipCols[0] &&
+    Array.isArray(membershipCols[0].values) &&
+    membershipCols[0].values.some((row) => row[1] === 'interest_tags');
+
+  if (!hasInterestTags) {
+    sqlDb.run(`ALTER TABLE memberships ADD COLUMN interest_tags TEXT DEFAULT ''`);
+  }
+
+  const userCols = sqlDb.exec(`PRAGMA table_info(users)`);
+  const hasPreferredLanguage =
+    Array.isArray(userCols) &&
+    userCols[0] &&
+    Array.isArray(userCols[0].values) &&
+    userCols[0].values.some((row) => row[1] === 'preferred_language');
+
+  if (!hasPreferredLanguage) {
+    sqlDb.run(`ALTER TABLE users ADD COLUMN preferred_language TEXT NOT NULL DEFAULT 'tr'`);
+  }
+
+  // Kamuya açık Türkiye canlı TV listesi (kaynak: iptv-org/iptv streams/tr.m3u)
+  const defaultPublicChannels = [
+    { name: 'TRT 1', url: 'https://tv-trt1.medya.trt.com.tr/master.m3u8', category: 'ulusal' },
+    { name: 'TRT 2', url: 'https://tv-trt2.medya.trt.com.tr/master.m3u8', category: 'ulusal' },
+    { name: 'TRT Haber', url: 'https://tv-trthaber.medya.trt.com.tr/master.m3u8', category: 'haber' },
+    { name: 'TRT Türk', url: 'https://tv-trtturk.medya.trt.com.tr/master.m3u8', category: 'haber' },
+    { name: 'TRT Belgesel', url: 'https://tv-trtbelgesel.medya.trt.com.tr/master.m3u8', category: 'belgesel' },
+    { name: 'TRT Çocuk', url: 'https://tv-trtcocuk.medya.trt.com.tr/master.m3u8', category: 'cocuk' },
+    { name: 'TRT Müzik', url: 'https://tv-trtmuzik.medya.trt.com.tr/master.m3u8', category: 'muzik' },
+    { name: 'TRT Avaz', url: 'https://tv-trtavaz.medya.trt.com.tr/master.m3u8', category: 'ulusal' },
+    { name: 'TRT Kurdi', url: 'https://tv-trtkurdi.medya.trt.com.tr/master.m3u8', category: 'ulusal' },
+    { name: 'TRT World', url: 'https://tv-trtworld.medya.trt.com.tr/master.m3u8', category: 'haber' },
+    { name: 'TRT Arabi', url: 'https://tv-trtarabi.medya.trt.com.tr/master.m3u8', category: 'haber' },
+    { name: 'TV8', url: 'https://tv8-live.daioncdn.net/tv8/tv8.m3u8', category: 'ulusal' },
+    { name: 'TV8 (Alternatif)', url: 'https://tv8.daioncdn.net/tv8/tv8.m3u8?app=7ddc255a-ef47-4e81-ab14-c0e5f2949788&ce=3', category: 'ulusal' },
+    { name: 'Kanal D', url: 'https://demiroren.daioncdn.net/kanald/kanald.m3u8?app=kanald_web&ce=3', category: 'ulusal' },
+    { name: 'Teve2', url: 'https://demiroren-live.daioncdn.net/teve2/teve2.m3u8', category: 'ulusal' },
+    { name: 'NTV', url: 'https://dogus-live.daioncdn.net/ntv/ntv.m3u8', category: 'haber' },
+    { name: 'Kral Pop TV', url: 'https://dogus-live.daioncdn.net/kralpoptv/playlist.m3u8', category: 'muzik' },
+    { name: 'Habertürk TV', url: 'https://ciner-live.daioncdn.net/haberturktv/haberturktv.m3u8', category: 'haber' },
+    { name: 'Bloomberg HT', url: 'https://ciner-live.daioncdn.net/bloomberght/bloomberght.m3u8', category: 'haber' },
+    { name: 'Halk TV', url: 'https://halktv-live.daioncdn.net/halktv/halktv.m3u8', category: 'haber' },
+    { name: 'TV100', url: 'https://tv100-live.daioncdn.net/tv100/tv100.m3u8', category: 'haber' },
+    { name: 'TGRT Haber', url: 'https://canli.tgrthaber.com/tgrt.m3u8', category: 'haber' },
+    { name: 'Tele 1', url: 'https://tele1-live.ercdn.net/tele1/tele1.m3u8', category: 'haber' },
+    { name: 'TVNET', url: 'https://mn-nl.mncdn.com/tvnet/tvnet/playlist.m3u8', category: 'haber' },
+    { name: 'TV24', url: 'https://turkmedya-live.ercdn.net/tv24/tv24.m3u8', category: 'haber' },
+    { name: 'TV4', url: 'https://turkmedya-live.ercdn.net/tv4/tv4.m3u8', category: 'ulusal' },
+    { name: 'Akit TV', url: 'https://akittv-live.ercdn.net/akittv/akittv.m3u8', category: 'haber' },
+    { name: 'A Spor TV', url: 'https://tv.ensonhaber.com/aspor/aspor.m3u8', category: 'spor' },
+    { name: 'TRT Spor', url: 'https://tv-trtspor1.medya.trt.com.tr/master.m3u8', category: 'spor' },
+    { name: 'TRT Spor 2', url: 'https://tv-trtspor2.medya.trt.com.tr/master.m3u8', category: 'spor' },
+    { name: 'HT Spor', url: 'https://ciner.daioncdn.net/ht-spor/ht-spor.m3u8?app=web', category: 'spor' },
+    { name: 'TJK TV', url: 'https://tjktv-live.tjk.org/tjktv.m3u8', category: 'spor' },
+    { name: 'TJK TV2', url: 'https://tjktv-live.tjk.org/tjktv2/tjktv2.m3u8', category: 'spor' },
+    { name: 'Power TV', url: 'https://livetv.powerapp.com.tr/powerTV/powerhd.smil/playlist.m3u8', category: 'muzik' },
+    { name: 'Power Türk', url: 'https://livetv.powerapp.com.tr/powerturkTV/powerturkhd.smil/playlist.m3u8', category: 'muzik' },
+    { name: 'Dream Türk', url: 'https://live.duhnet.tv/S2/HLS_LIVE/dreamturknp/playlist.m3u8', category: 'muzik' },
+    { name: 'Number 1 TV', url: 'https://mn-nl.mncdn.com/blutv_nr12/live.m3u8', category: 'muzik' },
+    { name: 'Number 1 Türk', url: 'https://mn-nl.mncdn.com/blutv_nr1turk2/live.m3u8', category: 'muzik' },
+    { name: 'Kanal 7', url: 'https://kanal7-live.daioncdn.net/kanal7/kanal7.m3u8', category: 'ulusal' },
+    { name: 'Euro D', url: 'https://live.duhnet.tv/S2/HLS_LIVE/eurodnp/playlist.m3u8', category: 'ulusal' },
+    { name: 'Diyanet TV', url: 'https://eustr73.mediatriple.net/videoonlylive/mtikoimxnztxlive/broadcast_5e3bf95a47e07.smil/playlist.m3u8', category: 'ulusal' },
+    { name: 'TBMM TV', url: 'https://meclistv-live.ercdn.net/meclistv/meclistv.m3u8', category: 'haber' },
+  ];
+
+  // Örnek üyelik (ilk kurulumda)
   const cnt = db.prepare('SELECT COUNT(*) as cnt FROM memberships').get().cnt;
   if (cnt === 0) {
     sqlDb.run(`INSERT INTO memberships (name, plan, max_users) VALUES ('DEMO', 'pro', 10)`);
-
-    sqlDb.run(`INSERT INTO channels (membership_id, name, url, category, is_public)
-               VALUES (1, 'TRT 1 HD', 'https://trtyayin-lh.akamaihd.net/i/trtyayin_1@181520/master.m3u8', 'haber', 1)`);
-    sqlDb.run(`INSERT INTO channels (membership_id, name, url, category, is_public)
-               VALUES (1, 'TRT Haber', 'https://trthaber-lh.akamaihd.net/i/trthaber_1@181519/master.m3u8', 'haber', 1)`);
   }
+
+  const membershipSeedId = db.prepare('SELECT id FROM memberships ORDER BY id ASC LIMIT 1').get()?.id || 1;
+  defaultPublicChannels.forEach((ch, i) => {
+    const exists = db.prepare(
+      'SELECT id FROM channels WHERE is_public = 1 AND name = ? AND url = ?'
+    ).get(ch.name, ch.url);
+
+    if (!exists) {
+      db.prepare(`
+        INSERT INTO channels (membership_id, name, url, category, logo, sort_order, is_public, is_active)
+        VALUES (?, ?, ?, ?, NULL, ?, 1, 1)
+      `).run(membershipSeedId, ch.name, ch.url, ch.category, i + 1);
+    }
+  });
 
   db._save();
   console.log('[DB] Veritabanı hazır →', DB_PATH);

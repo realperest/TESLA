@@ -16,9 +16,15 @@
   <!-- ── Header ──────────────────────────────────────── -->
   <header id="header">
     <div class="logo">Tesla<span>TV</span></div>
-    <div class="user-pill" id="user-pill">
-      <img src="" alt="" id="user-avatar" referrerpolicy="no-referrer" style="display:none">
-      <span id="user-name">...</span>
+    <div class="user-menu" id="user-menu">
+      <div class="user-pill" id="user-pill" onclick="toggleUserMenu(event)">
+        <img src="" alt="" id="user-avatar" referrerpolicy="no-referrer" style="display:none">
+        <span id="user-name">...</span>
+      </div>
+      <div class="user-menu-pop" id="user-menu-pop">
+        <button type="button" class="user-menu-btn" onclick="switchAccount()">Hesap Değiştir</button>
+        <button type="button" class="user-menu-btn danger" onclick="logout()">Hesaptan Çık</button>
+      </div>
     </div>
   </header>
 
@@ -40,17 +46,31 @@
       <!-- ── Ortak üst bar (her iki view'de de görünür) ────── -->
       <div id="yt-topbar">
         <div id="yt-search-row">
-          <input type="search" id="yt-search-input" class="yt-search-input"
-            placeholder="YouTube'da ara..."
-            onkeydown="if(event.key==='Enter') ytSearch(this.value)">
-          <button class="yt-btn" onclick="ytSearch(document.getElementById('yt-search-input').value)">Ara</button>
-          <button class="yt-url-toggle" onclick="toggleYtUrlBar()" title="URL yapıştır">🔗</button>
-        </div>
-        <div id="yt-url-bar" style="display:none">
-          <input type="url" id="yt-url-input" class="yt-search-input"
-            placeholder="https://www.youtube.com/watch?v=..."
-            onkeydown="if(event.key==='Enter') resolveUrl()">
-          <button class="yt-btn" onclick="resolveUrl()">Oynat</button>
+          <div id="yt-input-mode">
+            <button class="yt-mode-btn active" id="yt-input-search" onclick="setYtInputMode('search')">
+              <span class="btn-ico">🔎</span><span>ARAMA</span>
+            </button>
+            <button class="yt-mode-btn" id="yt-input-link" onclick="setYtInputMode('link')">
+              <span class="btn-ico">🔗</span><span>LİNK</span>
+            </button>
+          </div>
+          <input type="text" id="yt-main-input" class="yt-search-input"
+            placeholder="Buraya aramak istediğiniz kelimeleri yazın..."
+            onkeydown="if(event.key==='Enter') ytSubmitMainInput()">
+          <button class="yt-btn" id="yt-action-search" onclick="ytSubmitMainInput()">
+            <span class="btn-ico">🔎</span><span>Ara</span>
+          </button>
+          <button class="yt-btn" id="yt-action-link" onclick="ytSubmitMainInput()" style="display:none">
+            <span class="btn-ico">▶</span><span>Linki Aç</span>
+          </button>
+          <div id="yt-feed-mode">
+            <button class="yt-mode-btn active" id="yt-mode-smart" onclick="setYtFeedMode('smart')">
+              <span class="btn-ico">✨</span><span>SEZGİSEL SEÇİMLER</span>
+            </button>
+            <button class="yt-mode-btn" id="yt-mode-history" onclick="setYtFeedMode('history')">
+              <span class="btn-ico">🕘</span><span>GEÇMİŞ</span>
+            </button>
+          </div>
         </div>
         <div class="yt-loading" id="yt-loading">Yükleniyor...</div>
         <div class="yt-error" id="yt-error"></div>
@@ -116,20 +136,12 @@
 
     <!-- TV (Canlı) -->
     <section class="section" id="section-tv">
-      <aside id="sidebar">
-        <div id="channel-list" class="channel-list">
-          <div style="padding:20px;color:#555;font-size:13px;text-align:center">Yükleniyor...</div>
-        </div>
-        <div class="sidebar-add">
-          <button class="btn-add" onclick="openAddModal()">+ M3U8 Kanal Ekle</button>
-        </div>
-      </aside>
       <main id="player-area">
         <canvas id="video-canvas"></canvas>
         <div id="empty-state">
           <div class="big-icon">📺</div>
           <h2>Canlı TV</h2>
-          <p>Sol listeden kanal seçin</p>
+          <p>Sağ listeden kanal seçin</p>
         </div>
         <div class="spinner" id="spinner"><div class="spinner-ring"></div></div>
         <div id="player-overlay">
@@ -137,13 +149,39 @@
             <span id="now-playing-title">—</span>
             <small id="now-playing-sub"></small>
           </div>
-          <div class="player-controls">
-            <button class="ctrl-btn primary" id="btn-play" onclick="togglePlay()">⏸</button>
-            <button class="ctrl-btn" id="btn-mute" onclick="toggleMute()">🔊</button>
-            <button class="ctrl-btn" onclick="toggleFullscreen()">⛶</button>
+          <div class="tv-controls-bar">
+            <button class="ctrl-btn primary" id="btn-play" onclick="togglePlay()" title="Oynat / Duraklat">
+              <svg viewBox="0 0 24 24"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z" fill="#fff"/></svg>
+            </button>
+            <button class="ctrl-btn" id="btn-mute" onclick="toggleMute()" title="Sesi Aç / Kapat">
+              <svg viewBox="0 0 24 24"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02z" fill="#fff"/></svg>
+            </button>
+            <div class="tv-volume-wrap">
+              <input type="range" id="tv-volume" min="0" max="100" value="100" oninput="setTvVolume(this.value)">
+            </div>
+            <button class="ctrl-btn" onclick="toggleFullscreen()" title="Tam ekran">
+              <svg viewBox="0 0 24 24"><path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z" fill="#fff"/></svg>
+            </button>
           </div>
         </div>
       </main>
+      <aside id="sidebar">
+        <div class="tv-tools">
+          <input id="tv-search-input" type="search" placeholder="Kanal ara...">
+          <select id="tv-category-select" onchange="setTvCategory(this.value)">
+            <option value="all">Tümü</option>
+            <option value="haber">Haber</option>
+            <option value="ulusal">Ulusal</option>
+            <option value="belgesel">Belgesel</option>
+            <option value="cocuk">Çocuk</option>
+            <option value="muzik">Müzik</option>
+            <option value="spor">Spor</option>
+          </select>
+        </div>
+        <div id="channel-list" class="channel-list">
+          <div style="padding:20px;color:#555;font-size:13px;text-align:center">Yükleniyor...</div>
+        </div>
+      </aside>
     </section>
 
     <!-- IPTV -->
@@ -237,42 +275,6 @@
       </div>
 
     </nav>
-  </div>
-
-  <!-- ── Kanal Ekleme Modalı ───────────────────────────── -->
-  <div class="modal-backdrop" id="add-modal" onclick="if(event.target===this)closeAddModal()">
-    <div class="modal">
-      <h2>📡 M3U8 Kanal Ekle</h2>
-      <form id="add-form" onsubmit="submitChannel(event)">
-        <div class="form-field">
-          <label>Kanal Adı</label>
-          <input name="chName" id="ch-name" placeholder="Kanal adı" required>
-        </div>
-        <div class="form-field">
-          <label>M3U8 Stream URL</label>
-          <input name="chUrl" placeholder="https://...master.m3u8" required type="url">
-        </div>
-        <div class="form-field">
-          <label>Kategori</label>
-          <select name="chCat">
-            <option value="genel">Genel</option>
-            <option value="haber">Haber</option>
-            <option value="spor">Spor</option>
-            <option value="müzik">Müzik</option>
-            <option value="belgesel">Belgesel</option>
-            <option value="eğlence">Eğlence</option>
-          </select>
-        </div>
-        <div class="form-field">
-          <label>Logo URL <small style="color:#555;text-transform:none">(isteğe bağlı)</small></label>
-          <input name="chLogo" type="url" placeholder="https://...logo.png">
-        </div>
-        <div class="modal-actions">
-          <button type="button" class="btn-secondary" onclick="closeAddModal()">İptal</button>
-          <button type="submit" class="btn-primary">Ekle</button>
-        </div>
-      </form>
-    </div>
   </div>
 
   <script src="/js/player.js"></script>

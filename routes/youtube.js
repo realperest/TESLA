@@ -111,13 +111,27 @@ router.get('/liked', async (req, res) => {
 
 // ── Arama — yt-dlp ytsearch ───────────────────────────────────
 router.get('/search', (req, res) => {
-  const { q, n = 20 } = req.query;
+  const { q, n = 20, lang = 'tr' } = req.query;
   if (!q) return res.status(400).json({ error: 'q gerekli' });
 
   const count = Math.min(parseInt(n) || 20, 50);
+  const l = String(lang || 'tr').toLowerCase();
+  const langHint = {
+    tr: 'turkce',
+    en: 'english',
+    de: 'deutsch',
+    fr: 'francais',
+    es: 'espanol',
+    it: 'italiano',
+    pt: 'portugues',
+    nl: 'nederlands',
+    ru: 'russian',
+    ar: 'arabic',
+  }[l] || '';
+  const queryText = langHint ? `${q} ${langHint}` : String(q);
 
   execFile(YT_DLP, [
-    `ytsearch${count}:${q}`,
+    `ytsearch${count}:${queryText}`,
     '--dump-json',
     '--flat-playlist',
     '--no-download',

@@ -12,10 +12,47 @@
   width: 280px;
   flex-shrink: 0;
   background: var(--surface);
-  border-right: 1px solid var(--border);
+  border-left: 1px solid var(--border);
   display: flex;
   flex-direction: column;
   overflow: hidden;
+}
+
+.tv-tools {
+  padding: 10px 8px 8px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+#tv-search-input {
+  width: 100%;
+  padding: 9px 10px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--surface2);
+  color: var(--text);
+  font-size: 13px;
+  outline: none;
+}
+#tv-search-input:focus {
+  border-color: var(--accent);
+}
+
+#tv-category-select {
+  width: 100%;
+  height: 36px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface2);
+  color: var(--text);
+  font-size: 12px;
+  padding: 0 10px;
+  outline: none;
+}
+#tv-category-select:focus {
+  border-color: var(--accent);
 }
 
 .sidebar-section {
@@ -99,13 +136,12 @@
   flex: 1;
   position: relative;
   background: #000;
-  display: flex;
-  align-items: center;
-  justify-content: center;
   overflow: hidden;
 }
 
 #video-canvas {
+  position: absolute;
+  inset: 0;
   max-width: 100%;
   max-height: 100%;
   width: 100%;
@@ -114,6 +150,8 @@
 }
 
 #empty-state {
+  position: absolute;
+  inset: 0;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -140,31 +178,46 @@
   transition: opacity 0.3s;
   pointer-events: none;
 }
-#player-area:hover #player-overlay,
 #player-overlay.visible { opacity: 1; pointer-events: all; }
 
-.player-controls {
+.tv-controls-bar {
   display: flex;
   align-items: center;
   gap: 12px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: rgba(0,0,0,0.35);
+  backdrop-filter: blur(10px);
 }
 
 .ctrl-btn {
   background: rgba(255,255,255,0.12);
   border: none;
-  border-radius: 50%;
-  width: 50px; height: 50px;
+  border-radius: 10px;
+  width: 42px; height: 42px;
   display: flex; align-items: center; justify-content: center;
   color: #fff;
-  font-size: 20px;
+  font-size: 18px;
   cursor: pointer;
-  backdrop-filter: blur(10px);
   transition: background 0.15s, transform 0.1s;
 }
 .ctrl-btn:hover  { background: rgba(255,255,255,0.22); }
 .ctrl-btn:active { transform: scale(0.92); }
 .ctrl-btn.primary { background: var(--accent); }
 .ctrl-btn.primary:hover { background: var(--accent-dim); }
+
+.ctrl-btn svg {
+  width: 22px;
+  height: 22px;
+}
+
+.tv-volume-wrap {
+  width: 170px;
+}
+
+.tv-volume-wrap input[type="range"] {
+  width: 100%;
+}
 
 .now-playing {
   flex: 1;
