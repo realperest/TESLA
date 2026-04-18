@@ -42,9 +42,7 @@ self.onmessage = function (e) {
 
   if (msg.type === 'start') {
     _cleanup();
-    let mode = msg.mode || 'h264';
-    if (mode === 'h264' && typeof VideoDecoder === 'undefined') mode = 'mjpeg';
-    _connect(msg.wsUrl, mode);
+    _connect(msg.wsUrl, 'h264');
     return;
   }
   if (msg.type === 'stop') {
@@ -56,19 +54,15 @@ self.onmessage = function (e) {
 // WebSocket
 // ─────────────────────────────────────────────────────────────────────────────
 
-function _connect(wsUrl, mode) {
-  const url = mode === 'mjpeg'
-    ? wsUrl + (wsUrl.includes('?') ? '&' : '?') + 'mode=mjpeg'
-    : wsUrl;
-
-  ws = new WebSocket(url);
+function _connect(wsUrl) {
+  ws = new WebSocket(wsUrl);
   ws.binaryType = 'arraybuffer';
 
   ws.onopen = function () {
-    self.postMessage({ type: 'ready', mode });
+    self.postMessage({ type: 'ready', mode: 'h264' });
   };
 
-  ws.onmessage = mode === 'h264' ? _onH264 : _onMjpeg;
+  ws.onmessage = _onH264;
 
   ws.onerror = function () {
     self.postMessage({ type: 'error', message: 'WebSocket bağlantı hatası' });
