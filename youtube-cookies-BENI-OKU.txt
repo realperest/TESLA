@@ -11,3 +11,6 @@ GERCEK COOKIES DOSYASI BEN DEGIL, SEN OLUSTURURSUN.
 
 5) Railway: cookies dosyasini volume'a koyup Variable:
    YOUTUBE_COOKIES_FILE=/data/youtube-cookies.txt
+
+6) Windows Git Bash: uzun pipe komutu yapistirmak terminali bozabiliyor. Bunun yerine
+   proje kokunde:  bash upload-cookies-to-railway.sh
