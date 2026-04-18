@@ -1,13 +1,8 @@
 'use strict';
 
-const { spawn }  = require('child_process');
-const dns        = require('dns');
-const https      = require('https');
-const http_mod   = require('http');
-
-// Node.js dns.resolve*() için Google DNS (ffmpeg child process'ini etkilemez,
-// ama _fetchAndPipe içindeki https.request lookup override'ını etkiler)
-dns.setServers(['8.8.8.8', '8.8.4.4', '1.1.1.1']);
+const { spawn } = require('child_process');
+const https     = require('https');
+const http_mod  = require('http');
 
 let FFMPEG_PATH;
 try {
@@ -16,11 +11,50 @@ try {
   FFMPEG_PATH = process.env.FFMPEG_PATH || 'ffmpeg';
 }
 
-// Aktif stream process'leri: ws → { proc, req }
+// Aktif stream'ler: ws → { proc, abortFetch }
 const ACTIVE = new Map();
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Railway'de çözümlenemeyen googlevideo.com CDN hostname tespiti
+// DNS-over-HTTPS (DoH) — Railway UDP/53 bloke etse bile çalışır (port 443)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Hostname'i Cloudflare ve Google DoH üzerinden çözer.
+ * UDP/53 yerine HTTPS kullandığı için Railway ağında kesinlikle çalışır.
+ * @returns {Promise<string|null>} IPv4 adresi veya null
+ */
+async function _dohResolve(hostname) {
+  const endpoints = [
+    `https://cloudflare-dns.com/dns-query?name=${encodeURIComponent(hostname)}&type=A`,
+    `https://8.8.8.8/resolve?name=${encodeURIComponent(hostname)}&type=A`,
+    `https://dns.google/resolve?name=${encodeURIComponent(hostname)}&type=A`,
+  ];
+
+  for (const url of endpoints) {
+    try {
+      const ctrl  = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), 5000);
+      const res   = await fetch(url, {
+        headers : { accept: 'application/dns-json' },
+        signal  : ctrl.signal,
+      });
+      clearTimeout(timer);
+      if (!res.ok) continue;
+      const json   = await res.json();
+      const record = (json.Answer || []).find(r => r.type === 1); // A record
+      if (record?.data) {
+        console.log(`[DoH] ${hostname} → ${record.data}`);
+        return record.data;
+      }
+    } catch (e) {
+      console.warn(`[DoH] ${url} başarısız:`, e.message);
+    }
+  }
+  return null;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CDN URL tespiti
 // ─────────────────────────────────────────────────────────────────────────────
 
 function _isGoogleVideoCdn(url) {
@@ -28,77 +62,95 @@ function _isGoogleVideoCdn(url) {
   catch { return false; }
 }
 
-/**
- * Node.js dns.resolve4() ile hostname çözer → 8.8.8.8 kullanır.
- * https.request / http.request'in lookup seçeneğine verilir.
- */
-function _customLookup(hostname, options, callback) {
-  dns.resolve4(hostname, (err, addresses) => {
-    if (err || !addresses || !addresses.length) {
-      // 8.8.8.8 de çözemediyse OS fallback
-      dns.lookup(hostname, options, callback);
-      return;
-    }
-    callback(null, addresses[0], 4);
-  });
-}
+// ─────────────────────────────────────────────────────────────────────────────
+// DoH ile çözülmüş IP üzerinden HTTP fetch + ffmpeg stdin pipe
+// ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * googlevideo.com URL'sini Node.js HTTPS üzerinden çeker ve `writable`'a pipe eder.
- * ffmpeg child process DNS'ini bypass etmek için kullanılır.
- * Yönlendirmeleri takip eder (max 5).
- * onError(err)  → HTTP/DNS hatası
- * returns: NodeJS.ClientRequest — abort etmek için kullanılabilir
+ * YouTube CDN URL'sini Node.js HTTPS üzerinden çeker ve `writable`'a pipe eder.
+ * 1. DoH ile hostname → IP çözümü (port 443, Railway'de çalışır)
+ * 2. https.request ile doğrudan IP'ye bağlan (servername ile TLS SNI ayarlı)
+ * 3. Response'u ffmpeg stdin'e pipe et
+ *
+ * @returns {Promise<{abort:Function}>}
  */
-function _fetchAndPipe(inputUrl, writable, onError) {
-  let activeReq = null;
+async function _fetchAndPipe(inputUrl, writable, onError) {
+  let parsed;
+  try { parsed = new URL(inputUrl); }
+  catch (e) { onError(e); return { abort: () => {} }; }
 
-  function doRequest(url, depth) {
-    if (depth > 5) { onError(new Error('Çok fazla yönlendirme')); return; }
-
-    let parsed;
-    try { parsed = new URL(url); }
-    catch (e) { onError(e); return; }
-
-    const isHttps = parsed.protocol === 'https:';
-    const mod     = isHttps ? https : http_mod;
-
-    const reqOpts = {
-      hostname : parsed.hostname,
-      port     : parsed.port || (isHttps ? 443 : 80),
-      path     : parsed.pathname + parsed.search,
-      method   : 'GET',
-      headers  : {
-        'User-Agent' : 'Mozilla/5.0 (Linux; Android 11; Pixel 5) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/109.0.0.0 Mobile Safari/537.36',
-        'Referer'    : 'https://www.youtube.com/',
-        'Origin'     : 'https://www.youtube.com',
-      },
-      lookup             : _customLookup,
-      rejectUnauthorized : false, // IP ile TLS doğrulaması bazen başarısız olur
-    };
-
-    const req = mod.request(reqOpts, (res) => {
-      if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
-        res.resume();
-        doRequest(res.headers.location, depth + 1);
-        return;
-      }
-      if (res.statusCode !== 200) {
-        res.resume();
-        onError(new Error('CDN HTTP ' + res.statusCode));
-        return;
-      }
-      res.pipe(writable);
-      res.on('error', onError);
-    });
-
-    req.on('error', onError);
-    req.end();
-    activeReq = req;
+  const ip = await _dohResolve(parsed.hostname);
+  if (!ip) {
+    onError(new Error(`DoH DNS çözümü başarısız: ${parsed.hostname}`));
+    return { abort: () => {} };
   }
 
-  doRequest(inputUrl, 0);
-  return { abort: () => { if (activeReq) try { activeReq.destroy(); } catch {} } };
+  return new Promise((resolve) => {
+    async function doRequest(url, depth) {
+      if (depth > 5) {
+        onError(new Error('Çok fazla yönlendirme'));
+        resolve({ abort: () => {} });
+        return;
+      }
+
+      let p;
+      try { p = new URL(url); } catch(e) { onError(e); resolve({ abort: () => {} }); return; }
+
+      // Redirect olursa yeni hostname'i de DoH ile çöz
+      let targetIp = ip;
+      if (depth > 0) {
+        targetIp = await _dohResolve(p.hostname);
+        if (!targetIp) {
+          onError(new Error(`Redirect DoH başarısız: ${p.hostname}`));
+          resolve({ abort: () => {} });
+          return;
+        }
+      }
+
+      const isHttps = p.protocol === 'https:';
+      const mod     = isHttps ? https : http_mod;
+
+      const reqOpts = {
+        hostname           : targetIp,         // IP → DNS bypass
+        servername         : p.hostname,       // TLS SNI → doğru sertifika
+        port               : Number(p.port) || (isHttps ? 443 : 80),
+        path               : p.pathname + p.search,
+        method             : 'GET',
+        rejectUnauthorized : false,            // IP ile bağlandığımız için
+        headers            : {
+          'Host'       : p.hostname,
+          'User-Agent' : 'Mozilla/5.0 (Linux; Android 11; Pixel 5) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/109.0.0.0 Mobile Safari/537.36',
+          'Referer'    : 'https://www.youtube.com/',
+          'Origin'     : 'https://www.youtube.com',
+        },
+      };
+
+      const req = mod.request(reqOpts, (res) => {
+        if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+          res.resume();
+          doRequest(res.headers.location, depth + 1);
+          return;
+        }
+        if (res.statusCode !== 200) {
+          res.resume();
+          onError(new Error(`CDN HTTP ${res.statusCode}`));
+          resolve({ abort: () => req.destroy() });
+          return;
+        }
+        res.pipe(writable);
+        res.on('error', onError);
+        resolve({ abort: () => req.destroy() });
+      });
+
+      req.on('error', (err) => {
+        onError(err);
+        resolve({ abort: () => {} });
+      });
+      req.end();
+    }
+
+    doRequest(inputUrl, 0);
+  });
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -128,6 +180,13 @@ function handleStreamConnection(ws, req) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 function _startH264(ws, inputUrl) {
+  _startH264Async(ws, inputUrl).catch(err => {
+    console.error('[Stream/H264] Başlatma hatası:', err.message);
+    if (ws.readyState <= 1) ws.close(1011, 'stream hatası');
+  });
+}
+
+async function _startH264Async(ws, inputUrl) {
   const usePipe = _isGoogleVideoCdn(inputUrl);
 
   const ytHeaders =
@@ -135,7 +194,6 @@ function _startH264(ws, inputUrl) {
     'Referer: https://www.youtube.com/\r\n' +
     'Origin: https://www.youtube.com\r\n';
 
-  // Pipe modunda -headers ve -rtsp_transport gerekmiyor
   const inputArgs = usePipe
     ? ['-i', 'pipe:0']
     : ['-headers', ytHeaders, '-rtsp_transport', 'tcp', '-i', inputUrl];
@@ -162,24 +220,23 @@ function _startH264(ws, inputUrl) {
     stdio: [usePipe ? 'pipe' : 'ignore', 'pipe', 'pipe'],
   });
 
-  let fetchHandle = null;
+  let fetchHandle = { abort: () => {} };
 
   if (usePipe) {
-    console.log('[Stream/H264] googlevideo CDN → Node.js pipe modu');
-    fetchHandle = _fetchAndPipe(inputUrl, ff.stdin, (err) => {
-      console.error('[Stream/H264] CDN fetch hatası:', err.message);
+    console.log('[Stream/H264] DoH+pipe modu:', inputUrl.slice(0, 80));
+    fetchHandle = await _fetchAndPipe(inputUrl, ff.stdin, (err) => {
+      console.error('[Stream/H264] Fetch hatası:', err.message);
       try { ff.kill('SIGKILL'); } catch {}
     });
-    ff.stdin.on('error', () => {}); // ws kapanınca pipe kopabilir, yoksay
+    ff.stdin.on('error', () => {});
   } else {
-    console.log('[Stream/H264] Direkt URL modu:', inputUrl.slice(0, 80));
+    console.log('[Stream/H264] Direkt URL modu');
   }
 
   ACTIVE.set(ws, { proc: ff, fetch: fetchHandle });
 
   let buffer  = Buffer.alloc(0);
   let spsRaw  = null;
-  let ppsRaw  = null;
   let startMs = Date.now();
 
   ff.stdout.on('data', (chunk) => {
@@ -189,7 +246,6 @@ function _startH264(ws, inputUrl) {
 
     for (const unit of units) {
       if (!unit.length) continue;
-
       const scLen = (unit[0] === 0 && unit[1] === 0 && unit[2] === 0 && unit[3] === 1) ? 4 : 3;
       if (unit.length <= scLen) continue;
       const nalType = unit[scLen] & 0x1F;
@@ -207,7 +263,7 @@ function _startH264(ws, inputUrl) {
       }
 
       if (nalType === 8) {
-        ppsRaw = unit.slice(scLen);
+        const ppsRaw = unit.slice(scLen);
         const msg = Buffer.allocUnsafe(1 + ppsRaw.length);
         msg[0] = 0x08;
         ppsRaw.copy(msg, 1);
@@ -220,9 +276,7 @@ function _startH264(ws, inputUrl) {
       avcc.writeUInt32BE(rawNal.length, 0);
       rawNal.copy(avcc, 4);
 
-      const tsUs  = BigInt(Date.now() - startMs) * 1000n;
-      const isKey = nalType === 5;
-      _sendFrame(ws, isKey, tsUs, avcc);
+      _sendFrame(ws, nalType === 5, BigInt(Date.now() - startMs) * 1000n, avcc);
     }
   });
 
@@ -234,7 +288,7 @@ function _startH264(ws, inputUrl) {
     lines.forEach(l => { if (l.trim()) console.error('[ffmpeg/H264]', l); });
   });
 
-  ff.on('close', (code) => {
+  ff.on('close', () => {
     if (stderrBuf.trim()) console.error('[ffmpeg/H264]', stderrBuf);
     ACTIVE.delete(ws);
     if (ws.readyState <= 1) ws.close(1001, 'stream sona erdi');
@@ -255,6 +309,13 @@ function _startH264(ws, inputUrl) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 function _startMjpeg(ws, inputUrl) {
+  _startMjpegAsync(ws, inputUrl).catch(err => {
+    console.error('[Stream/MJPEG] Başlatma hatası:', err.message);
+    if (ws.readyState <= 1) ws.close(1011, 'stream hatası');
+  });
+}
+
+async function _startMjpegAsync(ws, inputUrl) {
   const usePipe = _isGoogleVideoCdn(inputUrl);
 
   const ytHeaders =
@@ -284,12 +345,12 @@ function _startMjpeg(ws, inputUrl) {
     stdio: [usePipe ? 'pipe' : 'ignore', 'pipe', 'pipe'],
   });
 
-  let fetchHandle = null;
+  let fetchHandle = { abort: () => {} };
 
   if (usePipe) {
-    console.log('[Stream/MJPEG] googlevideo CDN → Node.js pipe modu');
-    fetchHandle = _fetchAndPipe(inputUrl, ff.stdin, (err) => {
-      console.error('[Stream/MJPEG] CDN fetch hatası:', err.message);
+    console.log('[Stream/MJPEG] DoH+pipe modu');
+    fetchHandle = await _fetchAndPipe(inputUrl, ff.stdin, (err) => {
+      console.error('[Stream/MJPEG] Fetch hatası:', err.message);
       try { ff.kill('SIGKILL'); } catch {}
     });
     ff.stdin.on('error', () => {});
@@ -303,15 +364,12 @@ function _startMjpeg(ws, inputUrl) {
 
   ff.stdout.on('data', (chunk) => {
     buffer = Buffer.concat([buffer, chunk]);
-
-    let searchFrom = 0;
+    let from = 0;
     while (true) {
-      const soiIdx = buffer.indexOf(SOI, searchFrom);
+      const soiIdx = buffer.indexOf(SOI, from);
       if (soiIdx === -1) { buffer = Buffer.alloc(0); break; }
-
       const eoiIdx = buffer.indexOf(EOI, soiIdx + 2);
       if (eoiIdx === -1) { buffer = buffer.slice(soiIdx); break; }
-
       const frame = buffer.slice(soiIdx, eoiIdx + 2);
       if (ws.readyState === 1) {
         const msg = Buffer.allocUnsafe(1 + frame.length);
@@ -319,20 +377,20 @@ function _startMjpeg(ws, inputUrl) {
         frame.copy(msg, 1);
         ws.send(msg, { binary: true });
       }
-      searchFrom = eoiIdx + 2;
+      from = eoiIdx + 2;
     }
   });
 
-  let stderrBufM = '';
+  let stderrBuf = '';
   ff.stderr.on('data', (chunk) => {
-    stderrBufM += chunk.toString();
-    const lines = stderrBufM.split('\n');
-    stderrBufM = lines.pop();
+    stderrBuf += chunk.toString();
+    const lines = stderrBuf.split('\n');
+    stderrBuf = lines.pop();
     lines.forEach(l => { if (l.trim()) console.error('[ffmpeg/MJPEG]', l); });
   });
 
   ff.on('close', () => {
-    if (stderrBufM.trim()) console.error('[ffmpeg/MJPEG]', stderrBufM);
+    if (stderrBuf.trim()) console.error('[ffmpeg/MJPEG]', stderrBuf);
     ACTIVE.delete(ws);
     if (ws.readyState <= 1) ws.close(1001, 'stream sona erdi');
   });
@@ -355,37 +413,27 @@ function _splitNalUnits(buf) {
   const units = [];
   let unitStart = -1;
   let i = 0;
-
   while (i < buf.length - 2) {
-    let found = false;
-    let scLen = 0;
-
+    let found = false, scLen = 0;
     if (i + 3 < buf.length && buf[i] === 0 && buf[i+1] === 0 && buf[i+2] === 0 && buf[i+3] === 1) {
       found = true; scLen = 4;
     } else if (buf[i] === 0 && buf[i+1] === 0 && buf[i+2] === 1) {
       found = true; scLen = 3;
     }
-
     if (found) {
       if (unitStart >= 0) units.push(buf.slice(unitStart, i));
       unitStart = i;
       i += scLen;
-    } else {
-      i++;
-    }
+    } else { i++; }
   }
-
-  const remaining = unitStart >= 0 ? buf.slice(unitStart) : buf;
-  return { units, remaining };
+  return { units, remaining: unitStart >= 0 ? buf.slice(unitStart) : buf };
 }
 
 function _sendFrame(ws, isKey, tsUs, data) {
   const header = Buffer.allocUnsafe(9);
   header[0] = isKey ? 0x01 : 0x00;
-  const view = new DataView(header.buffer, header.byteOffset, 8);
-  view.setBigUint64(0, tsUs, true);
-  const msg = Buffer.concat([header, data]);
-  try { ws.send(msg, { binary: true }); } catch {}
+  new DataView(header.buffer, header.byteOffset, 8).setBigUint64(0, tsUs, true);
+  try { ws.send(Buffer.concat([header, data]), { binary: true }); } catch {}
 }
 
 function _killStream(ws) {
