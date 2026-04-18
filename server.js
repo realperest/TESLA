@@ -1,4 +1,9 @@
 require('dotenv').config();
+
+// Railway DNS override — googlevideo.com CDN hostname'lerini çözmek için
+const dns = require('dns');
+dns.setServers(['8.8.8.8', '8.8.4.4', '1.1.1.1']);
+
 const http = require('http');
 const express = require('express');
 const cookieParser = require('cookie-parser');
