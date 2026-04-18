@@ -179,7 +179,7 @@ async function init() {
     const controls = document.getElementById('yt-controls');
     if (controls && controls.contains(e.target)) return;
     if (!ytPlayer) return;
-    const hasActiveSource = !!ytPlayer.video.src || !!ytPlayer.hls;
+    const hasActiveSource = ytPlayer.hasActiveSource;
     if (hasActiveSource) {
       toggleYtPlay();
       return;
@@ -386,10 +386,10 @@ function updateDockBackButton() {
   if (!btn) return;
   let show = false;
   if (_activeSection === 'youtube' && _ytCurrentView === 'player') show = true;
-  else if (_activeSection === 'iptv' && iptvPlayer && (!!(iptvPlayer.video && iptvPlayer.video.src) || !!iptvPlayer.hls)) {
+  else if (_activeSection === 'iptv' && iptvPlayer && iptvPlayer.hasActiveSource) {
     show = true;
   }
-  else if (_activeSection === 'tv' && player && (!!(player.video && player.video.src) || !!player.hls)) {
+  else if (_activeSection === 'tv' && player && player.hasActiveSource) {
     show = true;
   }
   btn.style.display = show ? 'flex' : 'none';
@@ -400,11 +400,11 @@ function dockSectionBack() {
     ytGoSectionHome();
     return;
   }
-  if (_activeSection === 'iptv' && iptvPlayer && (!!(iptvPlayer.video && iptvPlayer.video.src) || !!iptvPlayer.hls)) {
+  if (_activeSection === 'iptv' && iptvPlayer && iptvPlayer.hasActiveSource) {
     iptvGoSectionHome();
     return;
   }
-  if (_activeSection === 'tv' && player && (!!(player.video && player.video.src) || !!player.hls)) {
+  if (_activeSection === 'tv' && player && player.hasActiveSource) {
     tvGoSectionHome();
   }
 }
@@ -580,7 +580,7 @@ function iptvGoSectionHome() {
 function toggleIptvPlay() {
   iptvPlayer.togglePlay();
   const btn = document.getElementById('iptv-btn-play');
-  if (btn) btn.innerHTML = iptvPlayer.video.paused ? TV_ICONS.play : TV_ICONS.pause;
+  if (btn) btn.innerHTML = iptvPlayer.paused ? TV_ICONS.play : TV_ICONS.pause;
 }
 
 function toggleIptvMute() {
@@ -630,7 +630,7 @@ function setNowPlaying(title, sub) {
 // Oynat / Duraklat
 function togglePlay() {
   player.togglePlay();
-  document.getElementById('btn-play').innerHTML = player.video.paused ? TV_ICONS.play : TV_ICONS.pause;
+  document.getElementById('btn-play').innerHTML = player.paused ? TV_ICONS.play : TV_ICONS.pause;
 }
 
 function toggleMute() {
@@ -1202,14 +1202,14 @@ const TV_ICONS = {
 };
 
 async function toggleYtPlay() {
-  const hasActiveSource = !!ytPlayer.video.src || !!ytPlayer.hls;
+  const hasActiveSource = ytPlayer.hasActiveSource;
   if (!hasActiveSource && resolvedVideo) {
     await playResolved();
     return;
   }
   ytPlayer.togglePlay();
   const btn = document.getElementById('yt-btn-play');
-  btn.innerHTML = ytPlayer.video.paused ? YC_ICONS.play : YC_ICONS.pause;
+  btn.innerHTML = ytPlayer.paused ? YC_ICONS.play : YC_ICONS.pause;
 }
 
 function toggleYtMute() {
