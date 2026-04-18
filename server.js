@@ -15,6 +15,35 @@ const { startChannelUpdater } = require('./services/channelUpdater');
 const app = express();
 app.set('trust proxy', 1); // Reverse proxy arkasında gerçek IP için
 
+/**
+ * BASE_URL kanonik domain ise, *.up.railway.app vb. adreslerde adres çubuğunda kalmamak için
+ * aynı yolu kanonik siteye 301 yönlendirir. Yerel geliştirme (localhost) etkilenmez.
+ * İsteğe bağlı: ALLOWED_HOSTS=www.acilsusam.net (BASE_URL hostname’i dışında izin verilen hostlar)
+ */
+app.use((req, res, next) => {
+  const raw = process.env.BASE_URL;
+  if (!raw || typeof raw !== 'string') return next();
+  let canonical;
+  try {
+    canonical = new URL(raw.trim());
+  } catch {
+    return next();
+  }
+  const canonicalHost = canonical.hostname.toLowerCase();
+  const hostRaw = (req.get('host') || '').split(':')[0].toLowerCase();
+  if (!hostRaw || hostRaw === 'localhost' || hostRaw === '127.0.0.1') return next();
+  const allowed = new Set([canonicalHost]);
+  if (process.env.ALLOWED_HOSTS) {
+    process.env.ALLOWED_HOSTS.split(/[\s,]+/).forEach((h) => {
+      const t = h.trim().toLowerCase();
+      if (t) allowed.add(t);
+    });
+  }
+  if (allowed.has(hostRaw)) return next();
+  const target = new URL(req.originalUrl || '/', canonical.origin);
+  return res.redirect(301, target.toString());
+});
+
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 app.use(cookieParser());
