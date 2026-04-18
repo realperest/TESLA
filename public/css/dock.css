@@ -55,6 +55,24 @@
   display: flex;
   align-items: center;
   justify-content: flex-end;
+  gap: 10px;
+}
+
+#app-version-badge {
+  font-size: 11px;
+  font-family: monospace;
+  letter-spacing: 0.03em;
+  opacity: 0.55;
+  color: #aaa;
+  white-space: nowrap;
+  pointer-events: none;
+  user-select: none;
+  transition: color 0.4s, opacity 0.4s;
+}
+
+#app-version-badge.is-new {
+  color: #4cde80;
+  opacity: 0.9;
 }
 
 #dock-bar .user-menu {
