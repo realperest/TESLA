@@ -1,0 +1,13 @@
+GERCEK COOKIES DOSYASI BEN DEGIL, SEN OLUSTURURSUN.
+
+1) Chrome'da youtube.com acik ve hesaba giris yapilmis olsun.
+2) "Get cookies.txt LOCALLY" eklentisi ile Export (Netscape) yap.
+3) Indirilen dosyayi bu klasorde su dosya adiyla kaydet:
+   youtube-cookies.txt
+
+   (Bu ad .gitignore'da oldugu icin Git'e commitlenmez; hesap guvenligi icin boyle olmali.)
+
+4) Yerelde: baslat.bat ile sunucu bu dosyayi kullanir (lib/ytDlpCookies.js).
+
+5) Railway: cookies dosyasini volume'a koyup Variable:
+   YOUTUBE_COOKIES_FILE=/data/youtube-cookies.txt
