@@ -99,8 +99,9 @@ function _startH264(ws, inputUrl) {
   ACTIVE.set(ws, ff);
 
   let buffer  = Buffer.alloc(0);
-  let spsData = null; // en son SPS NAL
-  let ppsData = null; // en son PPS NAL
+  let spsRaw  = null; // start code OLMADAN raw SPS
+  let ppsRaw  = null; // start code OLMADAN raw PPS
+  let spsSent = false; // SPS/PPS istemciye gönderildi mi?
   let startMs = Date.now();
 
   ff.stdout.on('data', (chunk) => {
@@ -111,31 +112,49 @@ function _startH264(ws, inputUrl) {
     for (const unit of units) {
       if (!unit.length) continue;
 
-      // NAL unit type: start code'dan sonraki ilk byte'ın alt 5 biti
-      const startCodeLen = (unit[2] === 1) ? 3 : 4; // 00 00 01 vs 00 00 00 01
-      if (unit.length <= startCodeLen) continue;
-      const nalType = unit[startCodeLen] & 0x1F;
-
-      // SPS (7) ve PPS (8) biriktir
-      if (nalType === 7) { spsData = unit; continue; }
-      if (nalType === 8) { ppsData = unit; continue; }
+      // Start code uzunluğunu bul (00 00 00 01 veya 00 00 01)
+      const scLen = (unit[0] === 0 && unit[1] === 0 && unit[2] === 0 && unit[3] === 1) ? 4 : 3;
+      if (unit.length <= scLen) continue;
+      const nalType = unit[scLen] & 0x1F;
 
       // AUD (9) ve filler (12) → atla
       if (nalType === 9 || nalType === 12) continue;
 
-      if (ws.readyState !== 1) return; // OPEN değilse dur
+      if (ws.readyState !== 1) return;
 
-      const tsUs = BigInt(Date.now() - startMs) * 1000n;
-
-      if (nalType === 5) {
-        // IDR keyframe: SPS + PPS + IDR birleştirerek gönder
-        const parts = [spsData, ppsData, unit].filter(Boolean);
-        const payload = Buffer.concat(parts);
-        _sendFrame(ws, true, tsUs, payload);
-      } else {
-        // P/B frame
-        _sendFrame(ws, false, tsUs, unit);
+      if (nalType === 7) {
+        // SPS — start code olmadan raw NAL'ı sakla ve istemciye gönder
+        spsRaw  = unit.slice(scLen);
+        spsSent = false;
+        // Mesaj: [0x07, ...raw_sps]
+        const msg = Buffer.allocUnsafe(1 + spsRaw.length);
+        msg[0] = 0x07;
+        spsRaw.copy(msg, 1);
+        ws.send(msg, { binary: true });
+        continue;
       }
+
+      if (nalType === 8) {
+        // PPS — start code olmadan raw NAL'ı sakla ve gönder
+        ppsRaw = unit.slice(scLen);
+        // Mesaj: [0x08, ...raw_pps]
+        const msg = Buffer.allocUnsafe(1 + ppsRaw.length);
+        msg[0] = 0x08;
+        ppsRaw.copy(msg, 1);
+        ws.send(msg, { binary: true });
+        continue;
+      }
+
+      // Frame: AVCC formatına çevir (4-byte big-endian length + raw NAL)
+      const rawNal = unit.slice(scLen);
+      const avcc   = Buffer.allocUnsafe(4 + rawNal.length);
+      avcc.writeUInt32BE(rawNal.length, 0);
+      rawNal.copy(avcc, 4);
+
+      const tsUs  = BigInt(Date.now() - startMs) * 1000n;
+      const isKey = nalType === 5;
+
+      _sendFrame(ws, isKey, tsUs, avcc);
     }
   });
 
