@@ -13,6 +13,8 @@ const { ipLock } = require('../middleware/ipLock');
 const router = express.Router();
 router.use(authenticate, ipLock);
 
+const { getYoutubeCookieArgs, DEFAULT_COOKIE_PATH } = require('../lib/ytDlpCookies');
+
 // venv'deki yt-dlp önce kontrol edilir
 const YT_DLP = (() => {
   const p = path.join(__dirname, '..', 'venv', 'Scripts', 'yt-dlp.exe');
@@ -45,15 +47,17 @@ async function invFetch(path) {
 }
 
 // ── Cookie ile YouTube feed/playlist al ──────────────────────
-const fs = require('fs');
-const COOKIES_FILE = path.join(__dirname, '..', 'youtube-cookies.txt');
+function cookieArgsForFeed() {
+  const fromFile = getYoutubeCookieArgs();
+  if (fromFile.length) return fromFile;
+  if (process.platform === 'win32') {
+    return ['--cookies-from-browser', 'chrome'];
+  }
+  return [];
+}
 
 function ytDlpCookieFetch(url, maxItems = 30) {
-  // Önce cookies.txt dosyasını dene, yoksa browser cookie dene
-  const hasCookieFile = fs.existsSync(COOKIES_FILE);
-  const cookieArgs = hasCookieFile
-    ? ['--cookies', COOKIES_FILE]
-    : ['--cookies-from-browser', 'chrome'];
+  const cookieArgs = cookieArgsForFeed();
 
   return new Promise((resolve, reject) => {
     execFile(YT_DLP, [
@@ -66,9 +70,8 @@ function ytDlpCookieFetch(url, maxItems = 30) {
         const msg = err.message || '';
         if (msg.includes('Could not copy') || msg.includes('cookie')) {
           return reject(new Error(
-            'COOKIE_ERROR: Chrome cookie\'lerine erişilemedi. ' +
-            'Chrome\'daki "Get cookies.txt LOCALLY" eklentisiyle YouTube cookie\'lerini ' +
-            `"youtube-cookies.txt" olarak şuraya kaydedin: ${path.join(__dirname, '..')}`
+            'COOKIE_ERROR: YouTube cookies gerekli. Chrome eklentisiyle export edin veya ' +
+            `sunucuda YOUTUBE_COOKIES_FILE / ${DEFAULT_COOKIE_PATH} dosyasina kaydedin.`
           ));
         }
         return reject(new Error(msg));
@@ -131,6 +134,7 @@ router.get('/search', (req, res) => {
   const queryText = langHint ? `${q} ${langHint}` : String(q);
 
   execFile(YT_DLP, [
+    ...getYoutubeCookieArgs(),
     `ytsearch${count}:${queryText}`,
     '--dump-json',
     '--flat-playlist',
@@ -182,6 +186,7 @@ router.get('/trending', async (req, res) => {
   // Invidious çalışmıyorsa yt-dlp ile popüler arama
   const query = 'ytsearch20:Türkiye gündem 2025';
   execFile(YT_DLP, [
+    ...getYoutubeCookieArgs(),
     query, '--dump-json', '--flat-playlist', '--no-download', '--no-warnings',
   ], { timeout: 25000, maxBuffer: 4 * 1024 * 1024 }, (err, stdout) => {
     if (err) return res.json([]);

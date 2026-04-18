@@ -1,5 +1,6 @@
 node_modules/
 .env
+youtube-cookies.txt
 tesla_tv.db
 tesla_tv.db-shm
 tesla_tv.db-wal

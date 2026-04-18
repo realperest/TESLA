@@ -123,6 +123,7 @@ router.get('/resolve', async (req, res) => {
  * Öncelik: 1080p'e kadar en iyi birleşik stream (ses+video)
  */
 const path = require('path');
+const { getYoutubeCookieArgs } = require('../lib/ytDlpCookies');
 const YT_DLP = (() => {
   const venvExe = path.join(__dirname, '..', 'venv', 'Scripts', 'yt-dlp.exe');
   try { require('fs').accessSync(venvExe); return venvExe; } catch { return 'yt-dlp'; }
@@ -150,6 +151,7 @@ function runYtDlp(args, options = {}) {
 
 function resolveWithYtDlp(url) {
   return new Promise(async (resolve, reject) => {
+    const cookieArgs = getYoutubeCookieArgs();
     const attempts = [
       [
         '--dump-json',
@@ -177,7 +179,7 @@ function resolveWithYtDlp(url) {
         '--extractor-args', 'youtube:player_client=web',
         url,
       ],
-    ];
+    ].map((args) => [...cookieArgs, ...args]);
 
     let info = null;
     let lastError = null;
