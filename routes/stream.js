@@ -1,25 +1,13 @@
-/**
- * WebCodecs Stream — H.264 Annex B over WebSocket
- *
- * Tesla sürüş kısıtlaması HTMLVideoElement pipeline'ını bloke eder.
- * Çözüm: ffmpeg ile kaynak stream'i H.264'e encode edip Annex B NAL
- * unit'lerini WebSocket binary frame olarak göndermek. İstemci Worker
- * içinde VideoDecoder (WebCodecs) ile decode eder, canvas'a çizer.
- *
- * Protokol (sunucu → istemci):
- *   Her binary WebSocket mesajı = 1 NAL unit grubu (access unit)
- *   Byte 0    : 0x01 = keyframe, 0x00 = delta frame
- *   Byte 1-8  : timestamp (microsaniye, Uint64LE)
- *   Byte 9+   : Annex B bitstream (00 00 00 01 + NAL data)
- *
- * MJPEG modu (mode=mjpeg):
- *   Byte 0    : 0xFF (MJPEG marker)
- *   Byte 1+   : raw JPEG data (FF D8 ... FF D9)
- */
-
 'use strict';
 
-const { spawn } = require('child_process');
+const { spawn }  = require('child_process');
+const dns        = require('dns');
+const https      = require('https');
+const http_mod   = require('http');
+
+// Node.js dns.resolve*() için Google DNS (ffmpeg child process'ini etkilemez,
+// ama _fetchAndPipe içindeki https.request lookup override'ını etkiler)
+dns.setServers(['8.8.8.8', '8.8.4.4', '1.1.1.1']);
 
 let FFMPEG_PATH;
 try {
@@ -28,30 +16,105 @@ try {
   FFMPEG_PATH = process.env.FFMPEG_PATH || 'ffmpeg';
 }
 
-// Aktif stream process'leri: ws → ChildProcess
+// Aktif stream process'leri: ws → { proc, req }
 const ACTIVE = new Map();
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Railway'de çözümlenemeyen googlevideo.com CDN hostname tespiti
+// ─────────────────────────────────────────────────────────────────────────────
+
+function _isGoogleVideoCdn(url) {
+  try { return new URL(url).hostname.endsWith('.googlevideo.com'); }
+  catch { return false; }
+}
+
 /**
- * WebSocket bağlantısını karşıla. Verifyfor WS auth server.js tarafından
- * yapılır; buraya gelen ws zaten doğrulanmış kabul edilir.
+ * Node.js dns.resolve4() ile hostname çözer → 8.8.8.8 kullanır.
+ * https.request / http.request'in lookup seçeneğine verilir.
  */
+function _customLookup(hostname, options, callback) {
+  dns.resolve4(hostname, (err, addresses) => {
+    if (err || !addresses || !addresses.length) {
+      // 8.8.8.8 de çözemediyse OS fallback
+      dns.lookup(hostname, options, callback);
+      return;
+    }
+    callback(null, addresses[0], 4);
+  });
+}
+
+/**
+ * googlevideo.com URL'sini Node.js HTTPS üzerinden çeker ve `writable`'a pipe eder.
+ * ffmpeg child process DNS'ini bypass etmek için kullanılır.
+ * Yönlendirmeleri takip eder (max 5).
+ * onError(err)  → HTTP/DNS hatası
+ * returns: NodeJS.ClientRequest — abort etmek için kullanılabilir
+ */
+function _fetchAndPipe(inputUrl, writable, onError) {
+  let activeReq = null;
+
+  function doRequest(url, depth) {
+    if (depth > 5) { onError(new Error('Çok fazla yönlendirme')); return; }
+
+    let parsed;
+    try { parsed = new URL(url); }
+    catch (e) { onError(e); return; }
+
+    const isHttps = parsed.protocol === 'https:';
+    const mod     = isHttps ? https : http_mod;
+
+    const reqOpts = {
+      hostname : parsed.hostname,
+      port     : parsed.port || (isHttps ? 443 : 80),
+      path     : parsed.pathname + parsed.search,
+      method   : 'GET',
+      headers  : {
+        'User-Agent' : 'Mozilla/5.0 (Linux; Android 11; Pixel 5) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/109.0.0.0 Mobile Safari/537.36',
+        'Referer'    : 'https://www.youtube.com/',
+        'Origin'     : 'https://www.youtube.com',
+      },
+      lookup             : _customLookup,
+      rejectUnauthorized : false, // IP ile TLS doğrulaması bazen başarısız olur
+    };
+
+    const req = mod.request(reqOpts, (res) => {
+      if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+        res.resume();
+        doRequest(res.headers.location, depth + 1);
+        return;
+      }
+      if (res.statusCode !== 200) {
+        res.resume();
+        onError(new Error('CDN HTTP ' + res.statusCode));
+        return;
+      }
+      res.pipe(writable);
+      res.on('error', onError);
+    });
+
+    req.on('error', onError);
+    req.end();
+    activeReq = req;
+  }
+
+  doRequest(inputUrl, 0);
+  return { abort: () => { if (activeReq) try { activeReq.destroy(); } catch {} } };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// WebSocket bağlantı girişi
+// ─────────────────────────────────────────────────────────────────────────────
+
 function handleStreamConnection(ws, req) {
   const search = new URL('http://x' + (req.url || '')).searchParams;
   const rawUrl = search.get('url');
   const mode   = search.get('mode') || 'h264';
 
-  if (!rawUrl) {
-    ws.close(1008, 'url gerekli');
-    return;
-  }
+  if (!rawUrl) { ws.close(1008, 'url gerekli'); return; }
 
   let inputUrl;
-  try {
-    inputUrl = decodeURIComponent(rawUrl);
-  } catch {
-    ws.close(1008, 'geçersiz url');
-    return;
-  }
+  try { inputUrl = decodeURIComponent(rawUrl); }
+  catch { ws.close(1008, 'geçersiz url'); return; }
 
   if (mode === 'mjpeg') {
     _startMjpeg(ws, inputUrl);
@@ -65,49 +128,58 @@ function handleStreamConnection(ws, req) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 function _startH264(ws, inputUrl) {
-  // YouTube CDN ve diğer kaynaklara erişmek için HTTP header'ları
+  const usePipe = _isGoogleVideoCdn(inputUrl);
+
   const ytHeaders =
     'User-Agent: Mozilla/5.0 (Linux; Android 11; Pixel 5) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/109.0.0.0 Mobile Safari/537.36\r\n' +
     'Referer: https://www.youtube.com/\r\n' +
     'Origin: https://www.youtube.com\r\n';
 
+  // Pipe modunda -headers ve -rtsp_transport gerekmiyor
+  const inputArgs = usePipe
+    ? ['-i', 'pipe:0']
+    : ['-headers', ytHeaders, '-rtsp_transport', 'tcp', '-i', inputUrl];
+
   const args = [
-    '-headers', ytHeaders,
     '-fflags', 'nobuffer+discardcorrupt',
     '-flags', 'low_delay',
-    '-rtsp_transport', 'tcp',
-    '-i', inputUrl,
-
-    // Sadece video — ses <audio> element ile ayrıca oynatılır
+    ...inputArgs,
     '-an',
-
-    // H.264 encode
     '-c:v', 'libx264',
     '-preset', 'ultrafast',
     '-tune', 'zerolatency',
     '-profile:v', 'baseline',
     '-level', '3.0',
-
-    // Annex B + SPS/PPS her keyframe öncesi tekrar
     '-x264opts', 'annexb=1:repeat-headers=1:keyint=60:min-keyint=30:bframes=0:scenecut=0',
-
-    // Çözünürlük + kare hızı
     '-vf', 'scale=1280:720:force_original_aspect_ratio=decrease,' +
            'pad=1280:720:(ow-iw)/2:(oh-ih)/2:color=black,' +
            'fps=30',
-
-    // raw H.264 bitstream pipe'a
     '-f', 'h264',
     'pipe:1',
   ];
 
-  const ff = spawn(FFMPEG_PATH, args, { stdio: ['ignore', 'pipe', 'pipe'] });
-  ACTIVE.set(ws, ff);
+  const ff = spawn(FFMPEG_PATH, args, {
+    stdio: [usePipe ? 'pipe' : 'ignore', 'pipe', 'pipe'],
+  });
+
+  let fetchHandle = null;
+
+  if (usePipe) {
+    console.log('[Stream/H264] googlevideo CDN → Node.js pipe modu');
+    fetchHandle = _fetchAndPipe(inputUrl, ff.stdin, (err) => {
+      console.error('[Stream/H264] CDN fetch hatası:', err.message);
+      try { ff.kill('SIGKILL'); } catch {}
+    });
+    ff.stdin.on('error', () => {}); // ws kapanınca pipe kopabilir, yoksay
+  } else {
+    console.log('[Stream/H264] Direkt URL modu:', inputUrl.slice(0, 80));
+  }
+
+  ACTIVE.set(ws, { proc: ff, fetch: fetchHandle });
 
   let buffer  = Buffer.alloc(0);
-  let spsRaw  = null; // start code OLMADAN raw SPS
-  let ppsRaw  = null; // start code OLMADAN raw PPS
-  let spsSent = false; // SPS/PPS istemciye gönderildi mi?
+  let spsRaw  = null;
+  let ppsRaw  = null;
   let startMs = Date.now();
 
   ff.stdout.on('data', (chunk) => {
@@ -118,21 +190,15 @@ function _startH264(ws, inputUrl) {
     for (const unit of units) {
       if (!unit.length) continue;
 
-      // Start code uzunluğunu bul (00 00 00 01 veya 00 00 01)
       const scLen = (unit[0] === 0 && unit[1] === 0 && unit[2] === 0 && unit[3] === 1) ? 4 : 3;
       if (unit.length <= scLen) continue;
       const nalType = unit[scLen] & 0x1F;
 
-      // AUD (9) ve filler (12) → atla
       if (nalType === 9 || nalType === 12) continue;
-
       if (ws.readyState !== 1) return;
 
       if (nalType === 7) {
-        // SPS — start code olmadan raw NAL'ı sakla ve istemciye gönder
-        spsRaw  = unit.slice(scLen);
-        spsSent = false;
-        // Mesaj: [0x07, ...raw_sps]
+        spsRaw = unit.slice(scLen);
         const msg = Buffer.allocUnsafe(1 + spsRaw.length);
         msg[0] = 0x07;
         spsRaw.copy(msg, 1);
@@ -141,9 +207,7 @@ function _startH264(ws, inputUrl) {
       }
 
       if (nalType === 8) {
-        // PPS — start code olmadan raw NAL'ı sakla ve gönder
         ppsRaw = unit.slice(scLen);
-        // Mesaj: [0x08, ...raw_pps]
         const msg = Buffer.allocUnsafe(1 + ppsRaw.length);
         msg[0] = 0x08;
         ppsRaw.copy(msg, 1);
@@ -151,7 +215,6 @@ function _startH264(ws, inputUrl) {
         continue;
       }
 
-      // Frame: AVCC formatına çevir (4-byte big-endian length + raw NAL)
       const rawNal = unit.slice(scLen);
       const avcc   = Buffer.allocUnsafe(4 + rawNal.length);
       avcc.writeUInt32BE(rawNal.length, 0);
@@ -159,7 +222,6 @@ function _startH264(ws, inputUrl) {
 
       const tsUs  = BigInt(Date.now() - startMs) * 1000n;
       const isKey = nalType === 5;
-
       _sendFrame(ws, isKey, tsUs, avcc);
     }
   });
@@ -168,7 +230,7 @@ function _startH264(ws, inputUrl) {
   ff.stderr.on('data', (chunk) => {
     stderrBuf += chunk.toString();
     const lines = stderrBuf.split('\n');
-    stderrBuf = lines.pop(); // tamamlanmamış satırı beklet
+    stderrBuf = lines.pop();
     lines.forEach(l => { if (l.trim()) console.error('[ffmpeg/H264]', l); });
   });
 
@@ -189,21 +251,25 @@ function _startH264(ws, inputUrl) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// MJPEG stream (fallback — VideoDecoder desteklenmeyen araçlar için)
+// MJPEG stream
 // ─────────────────────────────────────────────────────────────────────────────
 
 function _startMjpeg(ws, inputUrl) {
+  const usePipe = _isGoogleVideoCdn(inputUrl);
+
   const ytHeaders =
     'User-Agent: Mozilla/5.0 (Linux; Android 11; Pixel 5) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/109.0.0.0 Mobile Safari/537.36\r\n' +
     'Referer: https://www.youtube.com/\r\n' +
     'Origin: https://www.youtube.com\r\n';
 
+  const inputArgs = usePipe
+    ? ['-i', 'pipe:0']
+    : ['-headers', ytHeaders, '-rtsp_transport', 'tcp', '-i', inputUrl];
+
   const args = [
-    '-headers', ytHeaders,
     '-fflags', 'nobuffer+discardcorrupt',
     '-flags', 'low_delay',
-    '-rtsp_transport', 'tcp',
-    '-i', inputUrl,
+    ...inputArgs,
     '-an',
     '-vf', 'scale=1280:720:force_original_aspect_ratio=decrease,' +
            'pad=1280:720:(ow-iw)/2:(oh-ih)/2:color=black,' +
@@ -214,8 +280,22 @@ function _startMjpeg(ws, inputUrl) {
     'pipe:1',
   ];
 
-  const ff = spawn(FFMPEG_PATH, args, { stdio: ['ignore', 'pipe', 'pipe'] });
-  ACTIVE.set(ws, ff);
+  const ff = spawn(FFMPEG_PATH, args, {
+    stdio: [usePipe ? 'pipe' : 'ignore', 'pipe', 'pipe'],
+  });
+
+  let fetchHandle = null;
+
+  if (usePipe) {
+    console.log('[Stream/MJPEG] googlevideo CDN → Node.js pipe modu');
+    fetchHandle = _fetchAndPipe(inputUrl, ff.stdin, (err) => {
+      console.error('[Stream/MJPEG] CDN fetch hatası:', err.message);
+      try { ff.kill('SIGKILL'); } catch {}
+    });
+    ff.stdin.on('error', () => {});
+  }
+
+  ACTIVE.set(ws, { proc: ff, fetch: fetchHandle });
 
   const SOI = Buffer.from([0xFF, 0xD8]);
   const EOI = Buffer.from([0xFF, 0xD9]);
@@ -230,15 +310,10 @@ function _startMjpeg(ws, inputUrl) {
       if (soiIdx === -1) { buffer = Buffer.alloc(0); break; }
 
       const eoiIdx = buffer.indexOf(EOI, soiIdx + 2);
-      if (eoiIdx === -1) {
-        // Frame henüz tamamlanmadı, SOI'den itibaren buffer'a al
-        buffer = buffer.slice(soiIdx);
-        break;
-      }
+      if (eoiIdx === -1) { buffer = buffer.slice(soiIdx); break; }
 
       const frame = buffer.slice(soiIdx, eoiIdx + 2);
       if (ws.readyState === 1) {
-        // Header: 1 byte MJPEG marker (0xFF)
         const msg = Buffer.allocUnsafe(1 + frame.length);
         msg[0] = 0xFF;
         frame.copy(msg, 1);
@@ -276,19 +351,12 @@ function _startMjpeg(ws, inputUrl) {
 // Yardımcı fonksiyonlar
 // ─────────────────────────────────────────────────────────────────────────────
 
-/**
- * Buffer'dan NAL unit'leri çıkar. Son tamamlanmamış unit remaining'e bırakılır.
- * Annex B start code: 00 00 00 01 (4 byte) veya 00 00 01 (3 byte)
- */
 function _splitNalUnits(buf) {
   const units = [];
   let unitStart = -1;
   let i = 0;
 
   while (i < buf.length - 2) {
-    const is3 = buf[i] === 0 && buf[i + 1] === 0 && buf[i + 2] === 1;
-    const is4 = is3 && i > 0 && buf[i - 1] === 0;
-
     let found = false;
     let scLen = 0;
 
@@ -299,9 +367,7 @@ function _splitNalUnits(buf) {
     }
 
     if (found) {
-      if (unitStart >= 0) {
-        units.push(buf.slice(unitStart, i));
-      }
+      if (unitStart >= 0) units.push(buf.slice(unitStart, i));
       unitStart = i;
       i += scLen;
     } else {
@@ -313,27 +379,20 @@ function _splitNalUnits(buf) {
   return { units, remaining };
 }
 
-/**
- * Binary WebSocket mesajı gönder.
- * Format: [1 byte isKey] [8 byte timestamp_us LE] [NAL data]
- */
 function _sendFrame(ws, isKey, tsUs, data) {
   const header = Buffer.allocUnsafe(9);
   header[0] = isKey ? 0x01 : 0x00;
   const view = new DataView(header.buffer, header.byteOffset, 8);
-  view.setBigUint64(0, tsUs, true); // Little-endian
+  view.setBigUint64(0, tsUs, true);
   const msg = Buffer.concat([header, data]);
-  try {
-    ws.send(msg, { binary: true });
-  } catch {
-    // ws kapatılmış olabilir
-  }
+  try { ws.send(msg, { binary: true }); } catch {}
 }
 
 function _killStream(ws) {
-  const proc = ACTIVE.get(ws);
-  if (proc) {
-    try { proc.kill('SIGKILL'); } catch {}
+  const entry = ACTIVE.get(ws);
+  if (entry) {
+    if (entry.fetch) entry.fetch.abort();
+    try { entry.proc.kill('SIGKILL'); } catch {}
     ACTIVE.delete(ws);
   }
 }
