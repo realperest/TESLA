@@ -128,17 +128,12 @@ class TeslaPlayer {
     this._worker = new Worker('/js/webcodecs-worker.js');
     this._workerActive = true;
 
-    // İlk frame için timeout — gelmezse MJPEG'e geç
-    let firstFrameTimer = null;
     let firstFrameReceived = false;
 
     const _onFrame = (msg) => {
       if (!this._wcMode || !msg.bitmap) return;
       if (!firstFrameReceived) {
         firstFrameReceived = true;
-        if (firstFrameTimer) { clearTimeout(firstFrameTimer); firstFrameTimer = null; }
-        // Ses, ilk video frame'i geldiğinde başlasın → ses-video senkronizasyonu
-        this._startAudio(channel);
       }
       if (this.canvas.width !== msg.bitmap.width || this.canvas.height !== msg.bitmap.height) {
         this.canvas.width  = msg.bitmap.width;
@@ -156,20 +151,7 @@ class TeslaPlayer {
 
       if (msg.type === 'ready') {
         this.isPlaying = true;
-        // Ses başlatma _onFrame'e taşındı — ilk frame gelince ses+video eş zamanlı başlar
-
-        // H.264 modunda 15 saniye içinde frame gelmezse MJPEG'e geç
-        // (DoH + HTTP bağlantı + ffmpeg probe süresi ~5-8s olabiliyor)
-        if (mode === 'h264') {
-          firstFrameTimer = setTimeout(() => {
-            if (!firstFrameReceived && this._wcMode) {
-              console.warn('[Player] H264 frame gelmedi, MJPEG fallback deneniyor...');
-              this._stopWorker();
-              this._stopAudio();
-              this._loadWebCodecs(channel, 'mjpeg').catch(() => {});
-            }
-          }, 15000);
-        }
+        this._startAudio(channel);
         return;
       }
 
