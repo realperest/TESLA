@@ -601,6 +601,33 @@
     let tvPreviewHls = null;
     let sourceModalChannelId = null;
 
+    function stopTvPreview() {
+      const video = document.getElementById('tv-preview');
+      const meta = document.getElementById('tv-preview-meta');
+      if (tvPreviewHls) {
+        try {
+          tvPreviewHls.destroy();
+        } catch (err) {
+          if (typeof console !== 'undefined' && console.warn) console.warn('[manage] tvPreviewHls destroy', err.message);
+        }
+        tvPreviewHls = null;
+      }
+      if (video) {
+        try {
+          video.pause();
+          video.removeAttribute('src');
+          video.load();
+        } catch (err) {
+          if (typeof console !== 'undefined' && console.warn) console.warn('[manage] tv preview video', err.message);
+        }
+      }
+      if (meta) {
+        meta.textContent = window.AppI18n
+          ? AppI18n.t('manageTvPreview')
+          : 'Ön izleme için bir kanal seçin.';
+      }
+    }
+
     function refreshManageI18n() {
       if (!window.AppI18n || !myData || !myData.user) return;
       AppI18n.setLanguage(String(myData.user.preferred_language || 'tr').toLowerCase());
@@ -674,6 +701,7 @@
         }
         return;
       }
+      stopTvPreview();
       location.href = '/';
     }
 
@@ -689,6 +717,7 @@
     });
 
     function setSettingsTab(tabId, btn) {
+      if (tabId !== 'tv') stopTvPreview();
       document.querySelectorAll('.settings-tab').forEach(el => {
         el.classList.toggle('active', el === btn || el.getAttribute('data-tab') === tabId);
       });
@@ -711,9 +740,13 @@
     }
 
     function goLogin() {
+      stopTvPreview();
       const topWin = window.top || window;
       topWin.location.href = '/login.html';
     }
+
+    window.addEventListener('pagehide', () => { stopTvPreview(); });
+    window.addEventListener('beforeunload', () => { stopTvPreview(); });
 
     function setXtreamTestFeedback(data) {
       const el = document.getElementById('iptv-xt-status');
