@@ -1,13 +1,13 @@
 @echo off
-title Tesla TV
+title Açıl Susam
 cd /d "%~dp0"
 
 echo.
-echo  Tesla TV Baslatici
+echo  Açıl Susam Başlatıcı
 echo.
 
 echo [1/5] Port temizleniyor...
-taskkill /F /FI "WINDOWTITLE eq Tesla TV - Node*" >nul 2>&1
+taskkill /F /FI "WINDOWTITLE eq Açıl Susam - Node*" >nul 2>&1
 for /f "tokens=5" %%a in ('netstat -ano 2^>nul ^| findstr ":3000 " ^| findstr "LISTENING"') do (
     if not "%%a"=="0" taskkill /F /PID %%a >nul 2>&1
 )
@@ -110,13 +110,13 @@ if not exist ".env" (
 echo.
 echo  Sunucu baslatiliyor...
 set "PATH=%~dp0venv\Scripts;%PATH%"
-start "Tesla TV - Node" cmd /k node server.js
+start "Açıl Susam - Node" cmd /k node server.js
 
 timeout /t 3 /nobreak >nul
 start "" "http://localhost:3000"
 
 echo.
-echo  Tesla TV CALISIYOR
+echo  Açıl Susam çalışıyor
 echo  Adres   : http://localhost:3000
 echo  Yonetim : http://localhost:3000/manage
 echo.

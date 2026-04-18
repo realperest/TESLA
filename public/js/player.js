@@ -1,15 +1,15 @@
 /**
- * Tesla TV — Canvas Bypass Player
+ * Açıl Susam — Canvas Bypass Player
  *
- * Tesla'nın sürüş kısıtlaması, Chromium'un donanım H.264/H.265 decoder'ını
- * araç hareket halindeyken devre dışı bırakır. Ama <canvas> çizimini engelleyemez.
+ * Bazı araç tarayıcılarında sürüş kısıtlaması, Chromium donanım H.264/H.265 decoder'ını
+ * hareket halindeyken devre dışı bırakır. Ama <canvas> çizimini engelleyemez.
  *
  * Çözüm:
  *   1. Gizli bir <video> elementi oluştur (DOM'a ekleme)
  *   2. hls.js ile HLS stream'i bu video'ya bağla
  *   3. requestAnimationFrame döngüsüyle her kareyi canvas'a çiz
  *
- * Sonuç: Tesla "video yok" sanıyor, oynatma devam ediyor.
+ * Sonuç: tarayıcı video yok sanıyor, oynatma canvas üzerinden devam ediyor.
  */
 
 class TeslaPlayer {
@@ -18,6 +18,7 @@ class TeslaPlayer {
     this.ctx = this.canvas.getContext('2d');
     this.spinnerId   = opts.spinnerId   || 'spinner';
     this.containerId = opts.containerId || 'player-area';
+    this.emptyStateId = opts.emptyStateId || 'empty-state';
 
     // Gizli video — DOM'da değil, sadece bellekte
     this.video = document.createElement('video');
@@ -101,7 +102,7 @@ class TeslaPlayer {
       this.isPlaying = true;
 
       if (spinner) spinner.classList.remove('active');
-      document.getElementById('empty-state')?.remove();
+      document.getElementById(this.emptyStateId)?.remove();
       this._clearError();
       return true;
 

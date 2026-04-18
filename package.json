@@ -1,7 +1,7 @@
 {
-  "name": "tesla-tv",
+  "name": "acil-susam",
   "version": "1.0.0",
-  "description": "Tesla in-car canvas-bypass video streaming app",
+  "description": "Açıl Susam — araç ve tarayıcı için canvas-bypass video yayın uygulaması",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",

@@ -1,42 +1,31 @@
 <!DOCTYPE html>
-<html lang="tr">
+<html lang="tr" id="html-root">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>Tesla TV</title>
+  <meta name="theme-color" content="#0a0a0a">
+  <meta name="application-name" content="Açıl Susam">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <title>Açıl Susam</title>
   <script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.7/dist/hls.min.js"></script>
   <link rel="stylesheet" href="/css/base.css">
   <link rel="stylesheet" href="/css/dock.css">
   <link rel="stylesheet" href="/css/home.css">
   <link rel="stylesheet" href="/css/tv.css">
-  <link rel="stylesheet" href="/css/youtube.css?v=2">
+  <link rel="stylesheet" href="/css/youtube.css?v=3">
+  <link rel="stylesheet" href="/css/navigation.css">
 </head>
 <body>
-
-  <!-- ── Header ──────────────────────────────────────── -->
-  <header id="header">
-    <div class="logo">Tesla<span>TV</span></div>
-    <div class="user-menu" id="user-menu">
-      <div class="user-pill" id="user-pill" onclick="toggleUserMenu(event)">
-        <img src="" alt="" id="user-avatar" referrerpolicy="no-referrer" style="display:none">
-        <span id="user-name">...</span>
-      </div>
-      <div class="user-menu-pop" id="user-menu-pop">
-        <button type="button" class="user-menu-btn" onclick="switchAccount()">Hesap Değiştir</button>
-        <button type="button" class="user-menu-btn danger" onclick="logout()">Hesaptan Çık</button>
-      </div>
-    </div>
-  </header>
 
   <!-- ── İçerik Alanı ────────────────────────────────── -->
   <div id="main-content">
 
     <!-- HOME -->
     <section class="section active" id="section-home">
-      <div class="home-logo">Tesla<span>TV</span></div>
+      <div class="home-logo">AÇIL<span>SUSAM</span></div>
       <div class="home-welcome">
-        <h1>Hoş Geldiniz</h1>
-        <p>Aşağıdan bir bölüm seçin</p>
+        <h1 data-i18n="homeWelcomeH1">Hoş Geldiniz</h1>
+        <p data-i18n="homeWelcomeP">Aşağıdan bir bölüm seçin</p>
       </div>
     </section>
 
@@ -48,31 +37,32 @@
         <div id="yt-search-row">
           <div id="yt-input-mode">
             <button class="yt-mode-btn active" id="yt-input-search" onclick="setYtInputMode('search')">
-              <span class="btn-ico">🔎</span><span>ARAMA</span>
+              <span class="btn-ico">🔎</span><span data-i18n="ytModeSearch">ARAMA</span>
             </button>
             <button class="yt-mode-btn" id="yt-input-link" onclick="setYtInputMode('link')">
-              <span class="btn-ico">🔗</span><span>LİNK</span>
+              <span class="btn-ico">🔗</span><span data-i18n="ytModeLink">LİNK</span>
             </button>
           </div>
           <input type="text" id="yt-main-input" class="yt-search-input"
+            data-i18n-placeholder="ytPhSearch"
             placeholder="Buraya aramak istediğiniz kelimeleri yazın..."
             onkeydown="if(event.key==='Enter') ytSubmitMainInput()">
           <button class="yt-btn" id="yt-action-search" onclick="ytSubmitMainInput()">
-            <span class="btn-ico">🔎</span><span>Ara</span>
+            <span class="btn-ico">🔎</span><span data-i18n="ytBtnSearch">Ara</span>
           </button>
           <button class="yt-btn" id="yt-action-link" onclick="ytSubmitMainInput()" style="display:none">
-            <span class="btn-ico">▶</span><span>Linki Aç</span>
+            <span class="btn-ico">▶</span><span data-i18n="ytBtnOpenLink">Linki Aç</span>
           </button>
           <div id="yt-feed-mode">
             <button class="yt-mode-btn active" id="yt-mode-smart" onclick="setYtFeedMode('smart')">
-              <span class="btn-ico">✨</span><span>SEZGİSEL SEÇİMLER</span>
+              <span class="btn-ico">✨</span><span data-i18n="ytFeedSmart">SEZGİSEL SEÇİMLER</span>
             </button>
             <button class="yt-mode-btn" id="yt-mode-history" onclick="setYtFeedMode('history')">
-              <span class="btn-ico">🕘</span><span>GEÇMİŞ</span>
+              <span class="btn-ico">🕘</span><span data-i18n="ytFeedHistory">GEÇMİŞ</span>
             </button>
           </div>
         </div>
-        <div class="yt-loading" id="yt-loading">Yükleniyor...</div>
+        <div class="yt-loading" id="yt-loading" data-i18n="ytLoading">Yükleniyor...</div>
         <div class="yt-error" id="yt-error"></div>
       </div>
 
@@ -114,10 +104,10 @@
                     <span id="yt-time">0:00 / 0:00</span>
                   </div>
                   <div id="yt-controls-right">
-                    <button class="yc-btn" onclick="ytBackToMain()" title="Geri">
+                    <button class="yc-btn" onclick="ytBackToMain()" data-i18n-title="ytBtnBack" title="Geri">
                       <svg viewBox="0 0 24 24"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z" fill="#fff"/></svg>
                     </button>
-                    <button class="yc-btn" onclick="toggleYtFullscreen()" title="Tam ekran">
+                    <button class="yc-btn" onclick="toggleYtFullscreen()" data-i18n-title="ytBtnFs" title="Tam ekran">
                       <svg viewBox="0 0 24 24"><path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/></svg>
                     </button>
                   </div>
@@ -140,8 +130,8 @@
         <canvas id="video-canvas"></canvas>
         <div id="empty-state">
           <div class="big-icon">📺</div>
-          <h2>Canlı TV</h2>
-          <p>Sağ listeden kanal seçin</p>
+          <h2 data-i18n="tvEmptyTitle">Canlı TV</h2>
+          <p data-i18n="tvEmptySubtitle">Sağ listeden kanal seçin</p>
         </div>
         <div class="spinner" id="spinner"><div class="spinner-ring"></div></div>
         <div id="player-overlay">
@@ -150,16 +140,16 @@
             <small id="now-playing-sub"></small>
           </div>
           <div class="tv-controls-bar">
-            <button class="ctrl-btn primary" id="btn-play" onclick="togglePlay()" title="Oynat / Duraklat">
+            <button class="ctrl-btn primary" id="btn-play" onclick="togglePlay()" data-i18n-title="tvBtnPlayPause" title="Oynat / Duraklat">
               <svg viewBox="0 0 24 24"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z" fill="#fff"/></svg>
             </button>
-            <button class="ctrl-btn" id="btn-mute" onclick="toggleMute()" title="Sesi Aç / Kapat">
+            <button class="ctrl-btn" id="btn-mute" onclick="toggleMute()" data-i18n-title="tvBtnMute" title="Sesi Aç / Kapat">
               <svg viewBox="0 0 24 24"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02z" fill="#fff"/></svg>
             </button>
             <div class="tv-volume-wrap">
               <input type="range" id="tv-volume" min="0" max="100" value="100" oninput="setTvVolume(this.value)">
             </div>
-            <button class="ctrl-btn" onclick="toggleFullscreen()" title="Tam ekran">
+            <button class="ctrl-btn" onclick="toggleFullscreen()" data-i18n-title="tvBtnFs" title="Tam ekran">
               <svg viewBox="0 0 24 24"><path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z" fill="#fff"/></svg>
             </button>
           </div>
@@ -167,7 +157,7 @@
       </main>
       <aside id="sidebar">
         <div class="tv-tools">
-          <input id="tv-search-input" type="search" placeholder="Kanal ara...">
+          <input id="tv-search-input" type="search" data-i18n-placeholder="tvSearchPh" placeholder="Kanal ara...">
           <select id="tv-category-select" onchange="setTvCategory(this.value)">
             <option value="all">Tümü</option>
             <option value="haber">Haber</option>
@@ -179,22 +169,92 @@
           </select>
         </div>
         <div id="channel-list" class="channel-list">
-          <div style="padding:20px;color:#555;font-size:13px;text-align:center">Yükleniyor...</div>
+          <div id="channel-list-loading" style="padding:20px;color:#555;font-size:13px;text-align:center" data-i18n="listLoading">Yükleniyor...</div>
         </div>
       </aside>
     </section>
 
     <!-- IPTV -->
     <section class="section" id="section-iptv">
-      <aside id="sidebar-iptv" style="width:280px;flex-shrink:0;background:var(--surface);border-right:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden;">
-        <div style="padding:20px;color:#555;font-size:13px;text-align:center;margin-top:20px">
-          IPTV listesi yakında
+      <main id="iptv-player-area">
+        <canvas id="iptv-video-canvas"></canvas>
+        <div id="iptv-empty-state">
+          <p class="iptv-empty-msg" data-i18n="iptvEmptyMsg">KURULUMU AYARLAR MENÜSÜNDEN IPTV BÖLÜMÜNDEN YAPMANIZ GEREKİYOR.</p>
+        </div>
+        <div class="spinner" id="iptv-spinner"><div class="spinner-ring"></div></div>
+        <div id="iptv-player-overlay">
+          <div class="now-playing">
+            <span id="iptv-now-playing-title">—</span>
+            <small id="iptv-now-playing-sub"></small>
+          </div>
+          <div class="tv-controls-bar">
+            <button class="ctrl-btn primary" id="iptv-btn-play" onclick="toggleIptvPlay()" data-i18n-title="tvBtnPlayPause" title="Oynat / Duraklat">
+              <svg viewBox="0 0 24 24"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z" fill="#fff"/></svg>
+            </button>
+            <button class="ctrl-btn" id="iptv-btn-mute" onclick="toggleIptvMute()" data-i18n-title="tvBtnMute" title="Sesi Aç / Kapat">
+              <svg viewBox="0 0 24 24"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02z" fill="#fff"/></svg>
+            </button>
+            <div class="tv-volume-wrap">
+              <input type="range" id="iptv-volume" min="0" max="100" value="100" oninput="setIptvVolume(this.value)">
+            </div>
+            <button class="ctrl-btn" onclick="toggleIptvFullscreen()" data-i18n-title="tvBtnFs" title="Tam ekran">
+              <svg viewBox="0 0 24 24"><path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z" fill="#fff"/></svg>
+            </button>
+          </div>
+        </div>
+      </main>
+      <aside id="sidebar-iptv">
+        <div class="tv-tools">
+          <input id="iptv-search-input" type="search" data-i18n-placeholder="tvSearchPh" placeholder="Kanal ara...">
+        </div>
+        <div id="iptv-channel-list" class="channel-list">
+          <div id="iptv-channel-list-loading" style="padding:20px;color:#555;font-size:13px;text-align:center" data-i18n="listLoading">Yükleniyor...</div>
         </div>
       </aside>
-      <main style="flex:1;display:flex;align-items:center;justify-content:center;background:#000;color:var(--text-muted);flex-direction:column;gap:12px;">
-        <div style="font-size:48px;opacity:0.3">🌐</div>
-        <p style="font-size:14px;color:#555">IPTV özelliği yakında eklenecek</p>
-      </main>
+    </section>
+
+    <!-- NAVİGASYON (Google Maps Embed — yol tarifi) -->
+    <section class="section" id="section-navigation">
+      <div class="nav-shell">
+        <div class="nav-toolbar">
+          <div class="nav-toolbar-inner">
+            <div class="nav-field nav-field-wide">
+              <label for="nav-origin" data-i18n="navLabelOrigin">Nereden</label>
+              <input type="text" id="nav-origin" data-i18n-placeholder="navOriginPh" placeholder="Adres veya enlem,boylam" autocomplete="off">
+            </div>
+            <div class="nav-field nav-field-wide">
+              <label for="nav-destination" data-i18n="navLabelDest">Nereye</label>
+              <input type="text" id="nav-destination" data-i18n-placeholder="navDestPh" placeholder="Hedef adres veya yer adı" autocomplete="off">
+            </div>
+            <div class="nav-field" style="flex:0 1 140px">
+              <label for="nav-mode" data-i18n="navLabelMode">Mod</label>
+              <select id="nav-mode">
+                <option value="driving">Araç</option>
+                <option value="walking">Yürüyüş</option>
+                <option value="bicycling">Bisiklet</option>
+                <option value="transit">Toplu taşıma</option>
+              </select>
+            </div>
+            <div class="nav-actions">
+              <button type="button" class="nav-btn" onclick="navUseCurrentLocation()" data-i18n-title="navGpsTitle" title="Nereden alanına GPS koordinatı yazar"><span data-i18n="navMyLocation">Konumum</span></button>
+              <button type="button" class="nav-btn nav-btn-accent" onclick="navApplyRoute()"><span data-i18n="navShowRoute">Rotayı göster</span></button>
+              <button type="button" class="nav-btn" onclick="navOpenInGoogleMapsTab()"><span data-i18n="navOpenMaps">Haritalarda aç</span></button>
+            </div>
+          </div>
+        </div>
+        <div class="nav-map-wrap">
+          <div class="nav-placeholder" id="nav-placeholder"></div>
+          <iframe
+            id="nav-map-frame"
+            class="nav-map-frame"
+            style="display:none"
+            data-i18n-title="mapFrameTitle"
+            title="Yol tarifi haritası"
+            referrerpolicy="no-referrer-when-downgrade"
+            allowfullscreen>
+          </iframe>
+        </div>
+      </div>
     </section>
 
     <!-- AYARLAR -->
@@ -204,9 +264,18 @@
 
   </div>
 
-  <!-- ── macOS Dock ────────────────────────────────────── -->
+  <!-- ── Alt şerit: logo | dock | kullanıcı ─────────────── -->
   <div id="dock-bar">
-    <nav id="dock">
+    <div class="dock-bar-brand">
+      <img class="dock-bar-brand-icon" src="/favicon.svg" width="44" height="44" alt="" aria-hidden="true">
+      <div class="logo dock-bar-logo">AÇIL<span>SUSAM</span></div>
+    </div>
+    <div class="dock-bar-center">
+    <div class="dock-cluster">
+      <button type="button" id="dock-section-back" class="dock-back-fab" onclick="dockSectionBack()" data-i18n-title="dockBackAria" data-i18n-aria="dockBackAria" title="Bölüm ana sayfasına dön" aria-label="Bölüm ana sayfasına dön">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z" fill="currentColor"/></svg>
+      </button>
+      <nav id="dock">
 
       <div class="dock-item active" data-id="home" onclick="dockNav('home')">
         <div class="dock-icon">
@@ -215,9 +284,8 @@
             <path d="M9 21V12h6v9"/>
           </svg>
         </div>
-        <div class="dock-label">Ana Sayfa</div>
+        <div class="dock-label" data-i18n="dockHome">Ana Sayfa</div>
         <div class="dock-dot"></div>
-        <div class="dock-tooltip">Ana Sayfa</div>
       </div>
 
       <div class="dock-item" data-id="youtube" onclick="dockNav('youtube')">
@@ -227,9 +295,8 @@
             <polygon class="yt-play" points="10,9 16,12 10,15"/>
           </svg>
         </div>
-        <div class="dock-label">YouTube</div>
+        <div class="dock-label" data-i18n="dockYoutube">YouTube</div>
         <div class="dock-dot"></div>
-        <div class="dock-tooltip">YouTube</div>
       </div>
 
       <div class="dock-item" data-id="tv" onclick="dockNav('tv')">
@@ -241,9 +308,8 @@
             <line x1="12" y1="20" x2="12" y2="21"/>
           </svg>
         </div>
-        <div class="dock-label">Canlı TV</div>
+        <div class="dock-label" data-i18n="dockTv">Canlı TV</div>
         <div class="dock-dot"></div>
-        <div class="dock-tooltip">Canlı TV</div>
       </div>
 
       <div class="dock-item" data-id="iptv" onclick="dockNav('iptv')">
@@ -255,9 +321,18 @@
             <path d="M12 3c3 4 3 14 0 18"/>
           </svg>
         </div>
-        <div class="dock-label">IPTV</div>
+        <div class="dock-label" data-i18n="dockIptv">IPTV</div>
         <div class="dock-dot"></div>
-        <div class="dock-tooltip">IPTV</div>
+      </div>
+
+      <div class="dock-item" data-id="navigation" onclick="dockNav('navigation')">
+        <div class="dock-icon">
+          <svg viewBox="0 0 24 24">
+            <path fill="currentColor" d="M12 2 4.5 20.29l.71.71L12 18l6.79 3 .71-.71L12 2zm0 3.83L17.74 18.5 12 16.12 6.26 18.5 12 5.83z"/>
+          </svg>
+        </div>
+        <div class="dock-label" data-i18n="dockNavigation">Navigasyon</div>
+        <div class="dock-dot"></div>
       </div>
 
       <div class="dock-sep"></div>
@@ -269,16 +344,37 @@
             <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
           </svg>
         </div>
-        <div class="dock-label">Ayarlar</div>
+        <div class="dock-label" data-i18n="dockSettings">Ayarlar</div>
         <div class="dock-dot"></div>
-        <div class="dock-tooltip">Ayarlar</div>
       </div>
 
-    </nav>
+      </nav>
+    </div>
+    </div>
+    <div class="dock-bar-user">
+      <div class="user-menu" id="user-menu">
+        <div class="user-pill" id="user-pill" onclick="toggleUserMenu(event)">
+          <img src="" alt="" id="user-avatar" referrerpolicy="no-referrer" style="display:none">
+          <span id="user-name">...</span>
+        </div>
+        <div class="user-menu-pop" id="user-menu-pop">
+          <div class="user-menu-head">
+            <div class="user-menu-title" id="user-menu-name">Kullanıcı</div>
+            <div class="user-menu-sub" id="user-menu-sub">Oturum açık</div>
+          </div>
+          <button type="button" class="user-menu-btn" onclick="openAccountSettings()" data-i18n="menuAccountSettings">Hesap Ayarları</button>
+          <button type="button" class="user-menu-btn" onclick="switchAccount()" data-i18n="menuSwitchUser">Kullanıcı Değiştir</button>
+          <button type="button" class="user-menu-btn" onclick="openGoogleAccountChooser()" data-i18n="menuGoogleAccount">Google Hesabı Seç</button>
+          <div class="user-menu-sep"></div>
+          <button type="button" class="user-menu-btn danger" onclick="logout()" data-i18n="menuLogout">Hesaptan Çık</button>
+        </div>
+      </div>
+    </div>
   </div>
 
+  <script src="/js/i18n.js"></script>
   <script src="/js/player.js"></script>
-  <script src="/js/app.js?v=2"></script>
+  <script src="/js/app.js?v=6"></script>
   <script src="/js/dock.js"></script>
 </body>
 </html>

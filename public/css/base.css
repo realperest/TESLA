@@ -13,8 +13,9 @@
   --text-dim:     #aaa;
   --text-muted:   #555;
   --radius:       14px;
-  --header-h:     52px;
-  --dock-h:       100px;
+  /* Alt şerit: logo + dock + kullanıcı; içerik bu alanın üstünde kalır */
+  --bottom-chrome-h: 132px;
+  --dock-h:          var(--bottom-chrome-h);
 }
 
 html, body {
@@ -28,24 +29,8 @@ html, body {
   user-select: none;
 }
 
-/* ── Header ───────────────────────────────────────────── */
-#header {
-  position: fixed;
-  top: 0; left: 0; right: 0;
-  height: var(--header-h);
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0 24px;
-  background: rgba(10,10,10,0.85);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
-  border-bottom: 1px solid var(--border);
-  z-index: 100;
-}
-
+/* Logo (üst header kaldırıldı; alt şeritte .dock-bar-logo ile kullanılıyor) */
 .logo {
-  font-size: 20px;
   font-weight: 700;
   letter-spacing: -0.5px;
 }
@@ -78,7 +63,7 @@ html, body {
   position: absolute;
   top: calc(100% + 8px);
   right: 0;
-  min-width: 180px;
+  width: 260px;
   background: #141414;
   border: 1px solid var(--border);
   border-radius: 12px;
@@ -86,6 +71,32 @@ html, body {
   display: none;
   z-index: 250;
   box-shadow: 0 12px 28px rgba(0, 0, 0, 0.45);
+}
+
+.user-menu-head {
+  border: 1px solid var(--border);
+  background: #111;
+  border-radius: 10px;
+  padding: 10px;
+  margin-bottom: 6px;
+}
+
+.user-menu-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.user-menu-sub {
+  font-size: 12px;
+  color: var(--text-dim);
+  margin-top: 2px;
+}
+
+.user-menu-sep {
+  height: 1px;
+  background: var(--border);
+  margin: 3px 0;
 }
 
 .user-menu.open .user-menu-pop {
@@ -100,7 +111,7 @@ html, body {
   background: var(--surface2);
   color: var(--text);
   border-radius: 10px;
-  min-height: 40px;
+  min-height: 38px;
   padding: 8px 10px;
   cursor: pointer;
   text-align: left;
@@ -120,10 +131,11 @@ html, body {
 /* ── Ana içerik alanı ─────────────────────────────────── */
 #main-content {
   position: fixed;
-  top: var(--header-h);
+  top: 0;
   left: 0; right: 0;
-  bottom: var(--dock-h);
+  bottom: 0;
   overflow: hidden;
+  z-index: 1;
 }
 
 .section {
@@ -138,9 +150,21 @@ html, body {
   opacity: 1;
 }
 
+/* Dock üstte yüzer; tüm ana bölümlerde içerik menü şeridinin altına taşmasın */
+#section-settings,
+#section-iptv,
+#section-youtube,
+#section-tv {
+  padding-bottom: var(--dock-h);
+}
+
 /* ── Modal ─────────────────────────────────────────────── */
 .modal-backdrop {
-  position: fixed; inset: 0;
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
   background: rgba(0,0,0,0.75);
   display: none;
   align-items: center;

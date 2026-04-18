@@ -257,6 +257,21 @@ async function initDB() {
     sqlDb.run(`ALTER TABLE users ADD COLUMN preferred_language TEXT NOT NULL DEFAULT 'tr'`);
   }
 
+  sqlDb.run(`
+    CREATE TABLE IF NOT EXISTS membership_iptv_settings (
+      membership_id       INTEGER PRIMARY KEY REFERENCES memberships(id),
+      m3u_content         TEXT,
+      m3u_updated_at      DATETIME,
+      xtream_base_url     TEXT,
+      xtream_username     TEXT,
+      xtream_password     TEXT,
+      epg_xmltv_url       TEXT,
+      epg_xmltv_content   TEXT,
+      epg_updated_at      DATETIME,
+      updated_at          DATETIME DEFAULT (datetime('now'))
+    );
+  `);
+
   // Kamuya açık Türkiye canlı TV listesi (kaynak: iptv-org/iptv streams/tr.m3u)
   const defaultPublicChannels = [
     { name: 'TRT 1', url: 'https://tv-trt1.medya.trt.com.tr/master.m3u8', category: 'ulusal' },

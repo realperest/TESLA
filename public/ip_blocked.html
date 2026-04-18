@@ -1,8 +1,10 @@
 <!DOCTYPE html>
-<html lang="tr">
+<html lang="tr" id="html-root">
 <head>
   <meta charset="UTF-8">
-  <title>Erişim Engellendi</title>
+  <meta name="theme-color" content="#0a0a0a">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <title>Açıl Susam — Erişim Engellendi</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
@@ -13,9 +15,13 @@
     .card {
       text-align: center; padding: 48px 36px; max-width: 400px;
     }
-    .icon { font-size: 64px; margin-bottom: 20px; }
+    .icon {
+      width: 56px; height: 56px; margin: 0 auto 20px;
+      border-radius: 14px; border: 2px solid #e82127;
+      background: linear-gradient(135deg, #1a0a0a 0%, #111 100%);
+    }
     h1 { color: #e82127; margin-bottom: 12px; font-size: 22px; }
-    p { color: #888; font-size: 14px; line-height: 1.7; }
+    p { color: #888; font-size: 14px; line-height: 1.7; white-space: pre-line; }
     .btn {
       display: inline-block; margin-top: 28px; padding: 14px 28px;
       background: #e82127; color: #fff; border-radius: 10px;
@@ -25,14 +31,28 @@
 </head>
 <body>
   <div class="card">
-    <div class="icon">🔒</div>
-    <h1>Erişim Engellendi</h1>
-    <p>
-      Bu hesap farklı bir konumdan veya cihazdan kullanılıyor.<br><br>
-      Her kullanıcı hesabı yalnızca tek bir lokasyondan kullanılabilir.
-      IP adresinizi sıfırlamak için üyelik sahibiyle iletişime geçin.
-    </p>
-    <a href="/login.html" class="btn">Giriş Sayfasına Dön</a>
+    <div class="icon" aria-hidden="true"></div>
+    <h1 data-i18n="ipBlockedTitle">Erişim Engellendi</h1>
+    <p data-i18n="ipBlockedBody">Bu hesap farklı bir konumdan veya cihazdan kullanılıyor.
+
+Her kullanıcı hesabı yalnızca tek bir lokasyondan kullanılabilir. IP adresinizi sıfırlamak için üyelik sahibiyle iletişime geçin.</p>
+    <a href="/login.html" class="btn" data-i18n="ipBlockedBtn">Giriş Sayfasına Dön</a>
   </div>
+  <script src="/js/i18n.js"></script>
+  <script>
+    (function () {
+      var lang = null;
+      try {
+        lang = localStorage.getItem('acil_susam_lang');
+      } catch (e) {
+        if (typeof console !== 'undefined' && console.warn) console.warn('[ip_blocked] localStorage', e.message);
+      }
+      if (window.AppI18n) {
+        AppI18n.setLanguage(lang || 'tr');
+        AppI18n.applyStatic(document);
+        document.title = 'Açıl Susam — ' + AppI18n.t('ipBlockedTitle');
+      }
+    })();
+  </script>
 </body>
 </html>

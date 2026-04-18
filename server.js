@@ -19,6 +19,11 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 app.use(cookieParser());
 
+// manage.html — statik klasörden değil, /manage ile aynı koruma (iframe dışı linkler için)
+app.get('/manage.html', authenticate, ipLock, (req, res) => {
+  res.redirect(302, '/manage');
+});
+
 // ── Statik dosyalar (login.html vs. herkese açık) ──────────────────────────
 app.use(express.static(path.join(__dirname, 'public')));
 
@@ -57,7 +62,7 @@ initDB().then(() => {
   app.listen(PORT, () => {
     const base = process.env.BASE_URL || `http://localhost:${PORT}`;
     console.log('\n========================================');
-    console.log(`  Tesla TV calisiyor`);
+    console.log(`  Açıl Susam çalışıyor`);
     console.log(`  Adres : ${base}`);
     console.log(`  Theater : youtube.com/redirect?q=${base}/theater`);
     console.log('========================================\n');

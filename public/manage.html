@@ -1,45 +1,48 @@
 <!DOCTYPE html>
-<html lang="tr">
+<html lang="tr" class="manage-page" id="html-root">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Tesla TV — Yönetim</title>
+  <meta name="theme-color" content="#242424">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <title>Açıl Susam — Yönetim</title>
+  <link rel="stylesheet" href="/css/base.css">
+  <link rel="stylesheet" href="/css/dock.css">
   <script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.7/dist/hls.min.js"></script>
   <style>
     *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
     :root {
-      --bg: #0a0a0a; --surface: #111; --surface2: #1a1a1a;
-      --border: #222; --accent: #e82127; --text: #fff;
-      --text-dim: #888; --text-muted: #444; --radius: 14px;
+      --bg: #242424;
+      --surface: #2f2f2f;
+      --surface2: #3c3c3c;
+      --border: #505050;
+      --accent: #e82127;
+      --text: #f2f2f2;
+      --text-dim: #b0b0b0;
+      --text-muted: #8a8a8a;
+      --radius: 14px;
+    }
+    html.manage-page, body.manage-page {
+      height: auto !important;
+      min-height: 100vh;
+      overflow-x: hidden;
+      overflow-y: auto !important;
     }
     html, body { background: var(--bg); color: var(--text); font-family: -apple-system,'Segoe UI',sans-serif; min-height: 100vh; }
 
-    header {
-      display: flex; align-items: center; justify-content: space-between;
-      padding: 0 24px; height: 60px;
-      background: var(--surface); border-bottom: 1px solid var(--border);
+    main { max-width: min(1680px, 98vw); margin: 0 auto; padding: 32px 24px; }
+    body.manage-standalone main {
+      padding-bottom: calc(24px + var(--dock-h, 132px));
     }
-    .logo { font-size: 20px; font-weight: 700; }
-    .logo span { color: var(--accent); }
-    .nav-links { display: flex; gap: 8px; }
-    .nav-link {
-      padding: 8px 16px; border-radius: 8px; text-decoration: none;
-      color: var(--text-dim); font-size: 14px; transition: background 0.15s;
-    }
-    .nav-link:hover { background: var(--surface2); color: var(--text); }
-    .nav-link.active { background: var(--surface2); color: var(--text); }
-
-    main { max-width: 1240px; margin: 0 auto; padding: 32px 24px; }
-
-    h1 { font-size: 22px; margin-bottom: 6px; }
-    .subtitle { color: var(--text-dim); font-size: 14px; margin-bottom: 32px; }
 
     .settings-tabs {
       display: flex;
       gap: 8px;
       overflow-x: auto;
       padding-bottom: 8px;
-      margin-bottom: 14px;
+      margin-bottom: 20px;
+      width: 100%;
+      min-width: 0;
     }
     .settings-tab {
       border: 1px solid var(--border);
@@ -106,12 +109,12 @@
       font-weight: 600; letter-spacing: 0.5px; text-transform: uppercase;
       color: var(--text-muted); border-bottom: 1px solid var(--border);
     }
-    .user-table td { padding: 14px 12px; border-bottom: 1px solid #1a1a1a; font-size: 14px; vertical-align: middle; }
+    .user-table td { padding: 14px 12px; border-bottom: 1px solid var(--border); font-size: 14px; vertical-align: middle; }
     .user-table tr:last-child td { border-bottom: none; }
     .user-table tr:hover td { background: var(--surface2); }
 
-    .avatar { width: 32px; height: 32px; border-radius: 50%; object-fit: cover; background: #333; }
-    .avatar-placeholder { width: 32px; height: 32px; border-radius: 50%; background: #333; display:flex; align-items:center; justify-content:center; font-size:14px; }
+    .avatar { width: 32px; height: 32px; border-radius: 50%; object-fit: cover; background: var(--surface2); }
+    .avatar-placeholder { width: 32px; height: 32px; border-radius: 50%; background: var(--surface2); display:flex; align-items:center; justify-content:center; font-size:14px; }
     .role-badge {
       display: inline-block; padding: 2px 10px; border-radius: 100px;
       font-size: 11px; font-weight: 600; letter-spacing: 0.3px;
@@ -144,6 +147,9 @@
     }
     .btn-primary:hover { background: #c01920; }
 
+    body.manage-standalone .toast {
+      bottom: calc(24px + var(--dock-h, 132px));
+    }
     .toast {
       position: fixed; bottom: 24px; right: 24px;
       background: #1a2a1a; border: 1px solid #2a4a2a; color: #6fbe6f;
@@ -154,14 +160,32 @@
     .toast.error { background: #2a1a1a; border-color: #4a2a2a; color: #e87474; }
     .toast.show { opacity: 1; transform: translateY(0); }
 
-    .tv-config-layout { display:flex; gap:14px; align-items:flex-start; }
-    .tv-config-left { flex: 1 1 70%; min-width: 0; }
-    .tv-config-right { flex: 0 0 30%; min-width: 320px; position: sticky; top: 12px; }
+    .iptv-xt-status-line {
+      font-size: 13px;
+      margin-top: 14px;
+      line-height: 1.45;
+      min-height: 1.35em;
+    }
+    .iptv-xt-status-line.ok { color: #6fbe6f; font-weight: 600; }
+    .iptv-xt-status-line.err { color: #e87474; font-weight: 600; }
+    .iptv-xt-status-line.skip { color: #9a9a9a; }
+
+    .tv-config-layout { display:flex; gap:18px; align-items:stretch; }
+    .tv-config-left { flex: 1 1 62%; min-width: 0; }
+    .tv-config-right {
+      flex: 0 0 34%;
+      min-width: 340px;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: stretch;
+      align-self: stretch;
+    }
     .tv-config-list { display:flex; flex-direction:column; gap:10px; max-height:460px; overflow:auto; padding-right:4px; }
-    .tv-row { border:1px solid var(--border); border-radius:10px; padding:8px; background: #101010; }
-    .tv-row-line { display:flex; align-items:center; gap:8px; min-width:0; }
-    .tv-row-namebox { display:flex; align-items:center; gap:8px; min-width:180px; max-width:240px; flex:0 0 auto; }
-    .tv-row-name { font-size:13px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .tv-row { border:1px solid var(--border); border-radius:10px; padding:12px; background: var(--surface2); }
+    .tv-row-line { display:flex; align-items:center; gap:10px; min-width:0; }
+    .tv-row-namebox { display:flex; align-items:center; gap:10px; min-width:220px; max-width:520px; flex:0 0 auto; }
+    .tv-row-name { font-size:26px; font-weight:600; line-height:1.2; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
     .tv-row-cat { font-size:11px; color:var(--text-muted); white-space:nowrap; }
     .tv-row-top-actions { display:flex; gap:6px; align-items:center; margin-left:auto; flex:0 0 auto; }
     .tv-mini-btn {
@@ -190,7 +214,7 @@
     }
     .tv-preview-wrap { border:1px solid var(--border); border-radius:10px; overflow:hidden; background:#000; }
     #tv-preview { width:100%; max-height:220px; background:#000; display:block; }
-    .tv-preview-meta { padding:8px 10px; font-size:12px; color:var(--text-dim); background:#0f0f0f; border-top:1px solid var(--border); }
+    .tv-preview-meta { padding:8px 10px; font-size:12px; color:var(--text-dim); background:var(--surface); border-top:1px solid var(--border); }
 
     .source-modal {
       position: fixed; inset: 0; background: rgba(0,0,0,0.65);
@@ -199,7 +223,7 @@
     .source-modal.open { display: flex; }
     .source-modal-card {
       width: min(840px, 92vw); max-height: 76vh; overflow: hidden;
-      border: 1px solid var(--border); border-radius: 12px; background: #111;
+      border: 1px solid var(--border); border-radius: 12px; background: var(--surface);
       display: flex; flex-direction: column;
     }
     .source-modal-head {
@@ -208,7 +232,7 @@
     }
     .source-modal-body { padding: 12px; overflow:auto; display:flex; flex-direction:column; gap:8px; }
     .source-option {
-      border:1px solid var(--border); border-radius:8px; padding:10px; background:#151515;
+      border:1px solid var(--border); border-radius:8px; padding:10px; background:var(--surface2);
       font-size:12px; color:#ddd; cursor:pointer; word-break:break-all;
     }
     .source-option:hover { border-color: var(--accent); }
@@ -221,8 +245,8 @@
     }
 
     .tv-row-top input[type="checkbox"] {
-      width: 22px;
-      height: 22px;
+      width: 28px;
+      height: 28px;
       accent-color: var(--accent);
       cursor: pointer;
       flex-shrink: 0;
@@ -237,11 +261,6 @@
     }
 
     @media (pointer: coarse) {
-      .nav-link {
-        min-height: 44px;
-        display: inline-flex;
-        align-items: center;
-      }
       .btn-primary {
         min-height: 52px;
         padding: 14px 24px;
@@ -260,12 +279,12 @@
         height: 26px;
       }
       .tv-row-line { gap:10px; }
-      .tv-row-namebox { min-width: 160px; }
+      .tv-row-namebox { min-width: 180px; }
     }
 
     @media (max-width: 980px) {
       .tv-config-layout { flex-direction: column; }
-      .tv-config-right { position: static; min-width: 0; width: 100%; }
+      .tv-config-right { min-width: 0; width: 100%; justify-content: center; }
       .tv-config-list { max-height: 320px; }
       .tv-row-line { flex-wrap: wrap; }
       .tv-row-namebox { max-width:100%; min-width:140px; }
@@ -273,31 +292,19 @@
     }
   </style>
 </head>
-<body>
-  <header>
-    <div class="logo">Tesla<span>TV</span></div>
-    <nav class="nav-links">
-      <a href="/" class="nav-link">Oynatıcı</a>
-      <a href="/manage.html" class="nav-link active">Yönetim</a>
-      <a href="#" class="nav-link" onclick="logout()">Çıkış</a>
-    </nav>
-  </header>
-
+<body class="manage-page">
   <main>
-    <h1 id="membership-name">Üyelik Paketi</h1>
-    <p class="subtitle" id="membership-sub">Yükleniyor...</p>
-
     <div class="settings-tabs" id="settings-tabs">
-      <button class="settings-tab active" onclick="setSettingsTab('account', this)">Hesap ve Kullanıcılar</button>
-      <button class="settings-tab" onclick="setSettingsTab('youtube', this)">YouTube</button>
-      <button class="settings-tab" onclick="setSettingsTab('tv', this)">TV</button>
-      <button class="settings-tab" onclick="setSettingsTab('iptv', this)">IPTV</button>
-      <button class="settings-tab" onclick="setSettingsTab('other', this)">Diğer Ayarlar</button>
+      <button type="button" class="settings-tab active" data-tab="account" onclick="setSettingsTab('account', this)" data-i18n="manageTabAccount">Hesap ve Kullanıcılar</button>
+      <button type="button" class="settings-tab" data-tab="youtube" onclick="setSettingsTab('youtube', this)" data-i18n="manageTabYoutube">YouTube</button>
+      <button type="button" class="settings-tab" data-tab="tv" onclick="setSettingsTab('tv', this)" data-i18n="manageTabTv">TV</button>
+      <button type="button" class="settings-tab" data-tab="iptv" onclick="setSettingsTab('iptv', this)" data-i18n="manageTabIptv">IPTV</button>
+      <button type="button" class="settings-tab" data-tab="other" onclick="setSettingsTab('other', this)" data-i18n="manageTabOther">Diğer Ayarlar</button>
     </div>
 
     <!-- Paket bilgisi -->
     <div class="card settings-panel active" data-settings-panel="account">
-      <div class="card-title">Paket Bilgisi</div>
+      <div class="card-title" data-i18n="manageCardPlan">Paket Bilgisi</div>
       <div class="plan-row">
         <span class="plan-badge" id="plan-badge">—</span>
         <span class="plan-name" id="plan-display-name">—</span>
@@ -306,31 +313,31 @@
     </div>
 
     <div class="card settings-panel active" data-settings-panel="account">
-      <div class="card-title">Oturum İşlemleri</div>
-      <p style="font-size:14px;color:var(--text-dim);margin-bottom:12px">
+      <div class="card-title" data-i18n="manageCardSession">Oturum İşlemleri</div>
+      <p style="font-size:14px;color:var(--text-dim);margin-bottom:12px" data-i18n="manageSessionP">
         Aynı araçta farklı kullanıcıların giriş yapabilmesi için hesap değiştirebilirsiniz.
       </p>
       <div class="account-actions">
-        <button class="account-btn" onclick="switchAccount()">Hesap Değiştir</button>
-        <button class="account-btn danger" onclick="logout()">Hesaptan Çık</button>
+        <button class="account-btn" onclick="switchAccount()" data-i18n="manageBtnSwitchAccount">Hesap Değiştir</button>
+        <button class="account-btn danger" onclick="logout()" data-i18n="menuLogout">Hesaptan Çık</button>
       </div>
     </div>
 
     <div class="card settings-panel" id="interests-card" data-settings-panel="youtube">
-      <div class="card-title">YouTube İlgi Etiketleri</div>
-      <p style="font-size:14px;color:var(--text-dim);margin-bottom:12px">
+      <div class="card-title" data-i18n="manageCardInterests">YouTube İlgi Etiketleri</div>
+      <p style="font-size:14px;color:var(--text-dim);margin-bottom:12px" data-i18n="manageInterestsP">
         Virgülle ayırın. Sağ panel önerileri bu etiketlere göre ağırlıklandırılır.
       </p>
       <div class="invite-row">
-        <input type="text" id="interest-tags" class="invite-input" placeholder="tesla, teknoloji, otomobil, yapay zeka">
-        <button class="btn-primary" onclick="saveInterests()">Kaydet</button>
+        <input type="text" id="interest-tags" class="invite-input" data-i18n-placeholder="manageInterestsPh" placeholder="dizi, film, haber, spor, müzik">
+        <button class="btn-primary" onclick="saveInterests()" data-i18n="manageBtnSave">Kaydet</button>
       </div>
     </div>
 
     <div class="card settings-panel" id="language-card" data-settings-panel="other">
-      <div class="card-title">Dil Tercihi</div>
-      <p style="font-size:14px;color:var(--text-dim);margin-bottom:12px">
-        Sağ panel önerilerinde bu dil önceliklendirilir.
+      <div class="card-title" data-i18n="manageCardLanguage">Dil Tercihi</div>
+      <p style="font-size:14px;color:var(--text-dim);margin-bottom:12px" data-i18n="manageLanguageP">
+        Arayüz ve sağ panel önerileri bu dile göre ayarlanır.
       </p>
       <div class="invite-row">
         <select id="preferred-language" class="invite-input">
@@ -345,42 +352,42 @@
           <option value="ru">Русский</option>
           <option value="ar">العربية</option>
         </select>
-        <button class="btn-primary" onclick="saveLanguage()">Dili Kaydet</button>
+        <button class="btn-primary" onclick="saveLanguage()" data-i18n="manageBtnSaveLanguage">Dili Kaydet</button>
       </div>
     </div>
 
     <div class="card settings-panel" id="tv-settings-card" data-settings-panel="tv">
-      <div class="card-title">TV Kanalları Ayarla</div>
-      <p style="font-size:14px;color:var(--text-dim);margin-bottom:12px">
+      <div class="card-title" data-i18n="manageCardTv">TV Kanalları Ayarla</div>
+      <p style="font-size:14px;color:var(--text-dim);margin-bottom:12px" data-i18n="manageTvP">
         Tik kaldırırsanız kanal TV ekranında görünmez. İsterseniz kendi güvenilir bağlantınızı girebilirsiniz.
       </p>
       <div class="tv-config-layout">
         <div class="tv-config-left">
           <div class="tv-config-list" id="tv-config-list">
-            <div style="color:#666;font-size:13px">Yükleniyor...</div>
+            <div style="color:#666;font-size:13px" data-i18n="listLoading">Yükleniyor...</div>
           </div>
         </div>
         <div class="tv-config-right">
           <div class="tv-preview-wrap">
             <video id="tv-preview" controls playsinline></video>
-            <div class="tv-preview-meta" id="tv-preview-meta">Ön izleme için bir kanal seçin.</div>
+            <div class="tv-preview-meta" id="tv-preview-meta" data-i18n="manageTvPreview">Ön izleme için bir kanal seçin.</div>
           </div>
         </div>
       </div>
     </div>
 
-    <!-- Kullanıcılar (sadece owner görür) -->
-    <div class="card settings-panel" id="users-card" data-settings-panel="account">
-      <div class="card-title">Kullanıcılar</div>
+    <!-- Kullanıcılar (hesap sekmesi; davet sadece owner) -->
+    <div class="card settings-panel active" id="users-card" data-settings-panel="account">
+      <div class="card-title" data-i18n="manageUsers">Kullanıcılar</div>
       <table class="user-table">
         <thead>
           <tr>
             <th></th>
-            <th>Ad / E-posta</th>
-            <th>Rol</th>
-            <th>IP Kilidi</th>
-            <th>Durum</th>
-            <th>İşlem</th>
+            <th data-i18n="manageThName">Ad / E-posta</th>
+            <th data-i18n="manageThRole">Rol</th>
+            <th data-i18n="manageThIp">IP Kilidi</th>
+            <th data-i18n="manageThStatus">Durum</th>
+            <th data-i18n="manageThAction">İşlem</th>
           </tr>
         </thead>
         <tbody id="user-tbody">
@@ -390,35 +397,200 @@
     </div>
 
     <!-- Davet -->
-    <div class="card settings-panel" id="invite-card" data-settings-panel="account">
-      <div class="card-title">Kullanıcı Davet Et</div>
-      <p style="font-size:14px;color:var(--text-dim);margin-bottom:16px">
+    <div class="card settings-panel active" id="invite-card" data-settings-panel="account">
+      <div class="card-title" data-i18n="manageInviteTitle">Kullanıcı Davet Et</div>
+      <p style="font-size:14px;color:var(--text-dim);margin-bottom:16px" data-i18n="manageInviteP">
         Davet ettiğiniz kişi Google hesabıyla ilk giriş yaptığında otomatik olarak paketinize eklenir.
       </p>
       <div class="invite-row">
-        <input type="email" id="invite-email" class="invite-input" placeholder="ornek@gmail.com">
-        <button class="btn-primary" onclick="sendInvite()">Davet Gönder</button>
+        <input type="email" id="invite-email" class="invite-input" data-i18n-placeholder="manageInvitePh" placeholder="ornek@gmail.com">
+        <button class="btn-primary" onclick="sendInvite()" data-i18n="manageInviteSend">Davet Gönder</button>
       </div>
     </div>
 
     <div class="card settings-panel" id="iptv-settings-card" data-settings-panel="iptv">
-      <div class="card-title">IPTV Ayarları</div>
-      <p style="font-size:14px;color:var(--text-dim)">
-        IPTV bölümü için kanal kaynak yönetimi yakında bu sekmeye taşınacaktır.
+      <div class="card-title" data-i18n="manageIptvM3uTitle">IPTV — M3U (sunucu)</div>
+      <p style="font-size:14px;color:var(--text-dim);margin-bottom:12px" data-i18n="manageIptvM3uP">
+        Liste metni veritabanında saklanır; tüm paket kullanıcıları aynı kanalları görür. Yalnızca paket sahibi yükleyebilir veya silebilir.
+      </p>
+      <div id="iptv-m3u-owner" style="display:none">
+        <div class="invite-row" style="flex-wrap:wrap">
+          <input type="file" id="iptv-m3u-file" accept=".m3u,.m3u8,text/*" class="invite-input" style="padding:10px">
+          <button type="button" class="btn-primary" onclick="uploadIptvM3u()" data-i18n="manageIptvM3uUpload">M3U Yükle</button>
+          <button type="button" class="account-btn danger" onclick="deleteIptvM3u()" data-i18n="manageIptvM3uRemove">M3U Kaldır</button>
+        </div>
+        <p id="iptv-m3u-status" style="font-size:13px;color:var(--text-muted);margin-top:10px">—</p>
+      </div>
+      <p id="iptv-m3u-member" style="font-size:13px;color:var(--text-muted);display:none" data-i18n="manageIptvM3uMember">
+        M3U yönetimi için paket sahibi olmalısınız. Oynatıcıda IPTV sekmesi paket listesini kullanır.
       </p>
     </div>
+
+    <div class="card settings-panel" data-settings-panel="iptv">
+      <div class="card-title" data-i18n="manageIptvXtTitle">IPTV — Xtream (panel API)</div>
+      <p style="font-size:14px;color:var(--text-dim);margin-bottom:12px" data-i18n="manageIptvXtP">
+        Sunucu kök adresi (ör. https://ornek.com:8080), kullanıcı adı ve şifre. Kanallar player_api ile birleştirilir.
+      </p>
+      <div id="iptv-xt-owner" style="display:none">
+        <div class="invite-row" style="flex-wrap:wrap;margin-bottom:10px">
+          <input type="url" id="iptv-xt-base" class="invite-input" placeholder="https://sunucu:port">
+        </div>
+        <div class="invite-row" style="flex-wrap:wrap;margin-bottom:10px">
+          <input type="text" id="iptv-xt-user" class="invite-input" data-i18n-placeholder="manageIptvXtUserPh" placeholder="Kullanıcı adı" autocomplete="off">
+          <input type="text" id="iptv-xt-pass" class="invite-input" data-i18n-placeholder="manageIptvXtPassPh" placeholder="Şifre (değiştirmek için yazın)" autocomplete="off" spellcheck="false">
+        </div>
+        <button type="button" class="btn-primary" id="iptv-xt-save-btn" onclick="saveIptvXtream()" data-i18n="manageIptvXtSave">Xtream Ayarlarını Kaydet</button>
+        <p id="iptv-xt-status" class="iptv-xt-status-line" aria-live="polite"></p>
+      </div>
+      <p id="iptv-xt-member" style="font-size:13px;color:var(--text-muted);display:none" data-i18n="manageIptvXtMember">Xtream ayarlarını yalnızca paket sahibi değiştirebilir.</p>
+    </div>
+
+    <div class="card settings-panel" data-settings-panel="iptv">
+      <div class="card-title" data-i18n="manageIptvEpgTitle">IPTV — EPG (XMLTV)</div>
+      <p style="font-size:14px;color:var(--text-dim);margin-bottom:12px" data-i18n="manageIptvEpgP">
+        Program rehberi için XMLTV adresi veya dosya. API: GET /api/iptv/epg?channelId=… (tvg-id veya Xtream epg kanal kimliği ile eşleşir).
+      </p>
+      <div id="iptv-epg-owner" style="display:none">
+        <div class="invite-row" style="flex-wrap:wrap;margin-bottom:10px">
+          <input type="url" id="iptv-epg-url" class="invite-input" placeholder="https://…/epg.xml">
+          <button type="button" class="btn-primary" onclick="saveIptvEpgUrl()" data-i18n="manageIptvEpgUrlSave">EPG URL Kaydet</button>
+        </div>
+        <div class="invite-row" style="flex-wrap:wrap">
+          <input type="file" id="iptv-epg-file" accept=".xml,text/xml,application/xml" class="invite-input" style="padding:10px">
+          <button type="button" class="btn-primary" onclick="uploadIptvEpgFile()" data-i18n="manageIptvEpgUpload">XMLTV Dosyası Yükle</button>
+          <button type="button" class="account-btn danger" onclick="deleteIptvEpgContent()" data-i18n="manageIptvEpgDelete">Yüklenen XML Sil</button>
+        </div>
+        <p id="iptv-epg-status" style="font-size:13px;color:var(--text-muted);margin-top:10px">—</p>
+      </div>
+      <p id="iptv-epg-member" style="font-size:13px;color:var(--text-muted);display:none" data-i18n="manageIptvEpgMember">EPG ayarlarını yalnızca paket sahibi değiştirebilir.</p>
+    </div>
   </main>
+
+  <div id="dock-bar">
+    <div class="dock-bar-brand">
+      <img class="dock-bar-brand-icon" src="/favicon.svg" width="44" height="44" alt="" aria-hidden="true">
+      <div class="logo dock-bar-logo">AÇIL<span>SUSAM</span></div>
+    </div>
+    <div class="dock-bar-center">
+    <div class="dock-cluster">
+      <button type="button" id="dock-section-back" class="dock-back-fab" onclick="dockSectionBack()" data-i18n-title="dockBackAria" data-i18n-aria="dockBackAria" title="Bölüm ana sayfasına dön" aria-label="Bölüm ana sayfasına dön">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z" fill="currentColor"/></svg>
+      </button>
+      <nav id="dock">
+
+      <div class="dock-item" data-id="home" onclick="dockNav('home')">
+        <div class="dock-icon">
+          <svg viewBox="0 0 24 24">
+            <path d="M3 9.5L12 3l9 6.5V20a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V9.5z"/>
+            <path d="M9 21V12h6v9"/>
+          </svg>
+        </div>
+        <div class="dock-label" data-i18n="dockHome">Ana Sayfa</div>
+        <div class="dock-dot"></div>
+      </div>
+
+      <div class="dock-item" data-id="youtube" onclick="dockNav('youtube')">
+        <div class="dock-icon">
+          <svg viewBox="0 0 24 24">
+            <rect x="2" y="5" width="20" height="14" rx="4"/>
+            <polygon class="yt-play" points="10,9 16,12 10,15"/>
+          </svg>
+        </div>
+        <div class="dock-label" data-i18n="dockYoutube">YouTube</div>
+        <div class="dock-dot"></div>
+      </div>
+
+      <div class="dock-item" data-id="tv" onclick="dockNav('tv')">
+        <div class="dock-icon">
+          <svg viewBox="0 0 24 24">
+            <rect x="2" y="7" width="20" height="13" rx="3"/>
+            <path d="M8 7L12 3l4 4"/>
+            <line x1="8" y1="21" x2="16" y2="21"/>
+            <line x1="12" y1="20" x2="12" y2="21"/>
+          </svg>
+        </div>
+        <div class="dock-label" data-i18n="dockTv">Canlı TV</div>
+        <div class="dock-dot"></div>
+      </div>
+
+      <div class="dock-item" data-id="iptv" onclick="dockNav('iptv')">
+        <div class="dock-icon">
+          <svg viewBox="0 0 24 24">
+            <circle cx="12" cy="12" r="9"/>
+            <line x1="3" y1="12" x2="21" y2="12"/>
+            <path d="M12 3c-3 4-3 14 0 18"/>
+            <path d="M12 3c3 4 3 14 0 18"/>
+          </svg>
+        </div>
+        <div class="dock-label" data-i18n="dockIptv">IPTV</div>
+        <div class="dock-dot"></div>
+      </div>
+
+      <div class="dock-sep"></div>
+
+      <div class="dock-item active" data-id="settings" onclick="dockNav('settings')">
+        <div class="dock-icon">
+          <svg viewBox="0 0 24 24">
+            <circle cx="12" cy="12" r="3"/>
+            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+          </svg>
+        </div>
+        <div class="dock-label" data-i18n="dockSettings">Ayarlar</div>
+        <div class="dock-dot"></div>
+      </div>
+
+      </nav>
+    </div>
+    </div>
+    <div class="dock-bar-user">
+      <div class="user-menu" id="user-menu">
+        <div class="user-pill" id="user-pill" onclick="toggleUserMenu(event)">
+          <img src="" alt="" id="user-avatar" referrerpolicy="no-referrer" style="display:none">
+          <span id="user-name">...</span>
+        </div>
+        <div class="user-menu-pop" id="user-menu-pop">
+          <div class="user-menu-head">
+            <div class="user-menu-title" id="user-menu-name">Kullanıcı</div>
+            <div class="user-menu-sub" id="user-menu-sub">Oturum açık</div>
+          </div>
+          <button type="button" class="user-menu-btn" onclick="openAccountSettings()" data-i18n="menuAccountSettings">Hesap Ayarları</button>
+          <button type="button" class="user-menu-btn" onclick="switchAccount()" data-i18n="menuSwitchUser">Kullanıcı Değiştir</button>
+          <button type="button" class="user-menu-btn" onclick="openGoogleAccountChooser()" data-i18n="menuGoogleAccount">Google Hesabı Seç</button>
+          <div class="user-menu-sep"></div>
+          <button type="button" class="user-menu-btn danger" onclick="logout()" data-i18n="menuLogout">Hesaptan Çık</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <script>
+    (function () {
+      try {
+        if (window.self !== window.top) {
+          var d = document.getElementById('dock-bar');
+          if (d) d.remove();
+        } else {
+          document.body.classList.add('manage-standalone');
+        }
+      } catch (e) {
+        if (typeof console !== 'undefined' && console.warn) {
+          console.warn('[manage] dock iframe kontrolü', e);
+        }
+      }
+    })();
+  </script>
+
+  <script src="/js/i18n.js"></script>
 
   <div class="toast" id="toast"></div>
   <div class="source-modal" id="source-modal">
     <div class="source-modal-card">
       <div class="source-modal-head">
         <div style="font-weight:600" id="source-modal-title">Kaynak seç</div>
-        <button class="tv-mini-btn" onclick="closeSourceModal()">Kapat</button>
+        <button class="tv-mini-btn" onclick="closeSourceModal()" data-i18n="manageBtnClose">Kapat</button>
       </div>
       <div class="source-modal-body" id="source-modal-body"></div>
       <div class="source-modal-foot">
-        <button class="tv-mini-btn" onclick="closeSourceModal()">Tamam</button>
+        <button class="tv-mini-btn" onclick="closeSourceModal()" data-i18n="manageBtnOk">Tamam</button>
       </div>
     </div>
   </div>
@@ -429,6 +601,93 @@
     let tvPreviewHls = null;
     let sourceModalChannelId = null;
 
+    function refreshManageI18n() {
+      if (!window.AppI18n || !myData || !myData.user) return;
+      AppI18n.setLanguage(String(myData.user.preferred_language || 'tr').toLowerCase());
+      AppI18n.applyStatic(document);
+      const userCount = Array.isArray(myData.users) ? myData.users.length : 0;
+      const rawSt = String(myData.membership && myData.membership.status ? myData.membership.status : '').toLowerCase();
+      const stLabel = rawSt === 'active'
+        ? AppI18n.t('manageMshipActive')
+        : rawSt === 'inactive'
+          ? AppI18n.t('manageMshipInactive')
+          : (myData.membership && myData.membership.status) ? String(myData.membership.status) : '';
+      const ps = document.getElementById('plan-stat');
+      if (ps && myData.membership) {
+        ps.textContent = AppI18n.t('managePlanStat', {
+          n: userCount,
+          max: myData.membership.max_users,
+          status: stLabel,
+        });
+      }
+      renderUsers(Array.isArray(myData.users) ? myData.users : []);
+      if (Array.isArray(tvSettings) && tvSettings.length) renderTvSettings();
+      const iptvTabActive = document.querySelector('.settings-tab[data-tab="iptv"].active');
+      if (iptvTabActive) loadIptvSettings();
+    }
+
+    function renderUserDock(user) {
+      const avatar = document.getElementById('user-avatar');
+      const name = document.getElementById('user-name');
+      const menuName = document.getElementById('user-menu-name');
+      const menuSub = document.getElementById('user-menu-sub');
+      if (!name && !avatar) return;
+      if (avatar && user && user.avatar) {
+        avatar.src = user.avatar;
+        avatar.style.display = 'block';
+      }
+      if (name && user) name.textContent = user.name || user.email;
+      if (menuName && user) {
+        menuName.textContent = user.name || user.email || (window.AppI18n ? AppI18n.t('menuUserDefault') : 'Kullanıcı');
+      }
+      if (menuSub && user) {
+        menuSub.textContent = user.email || (window.AppI18n ? AppI18n.t('menuSessionOpen') : 'Oturum açık');
+      }
+    }
+
+    function toggleUserMenu(e) {
+      if (e) e.stopPropagation();
+      const menu = document.getElementById('user-menu');
+      if (!menu) return;
+      menu.classList.toggle('open');
+    }
+
+    function closeUserMenu() {
+      const menu = document.getElementById('user-menu');
+      if (!menu) return;
+      menu.classList.remove('open');
+    }
+
+    function openAccountSettings() {
+      closeUserMenu();
+    }
+
+    function openGoogleAccountChooser() {
+      closeUserMenu();
+      window.open('/auth/google', '_blank', 'noopener,noreferrer,width=560,height=740');
+    }
+
+    function dockNav(section) {
+      if (section === 'settings') {
+        if (String(location.pathname || '').indexOf('/manage') === -1) {
+          location.href = '/manage';
+        }
+        return;
+      }
+      location.href = '/';
+    }
+
+    function dockSectionBack() {}
+
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') closeUserMenu();
+    });
+    document.addEventListener('click', (e) => {
+      const menu = document.getElementById('user-menu');
+      if (!menu) return;
+      if (!menu.contains(e.target)) closeUserMenu();
+    });
+
     function setSettingsTab(tabId, btn) {
       document.querySelectorAll('.settings-tab').forEach(el => {
         el.classList.toggle('active', el === btn || el.getAttribute('data-tab') === tabId);
@@ -436,34 +695,337 @@
       document.querySelectorAll('.settings-panel').forEach(el => {
         el.classList.toggle('active', el.getAttribute('data-settings-panel') === tabId);
       });
+      if (tabId === 'iptv') loadIptvSettings();
+    }
+
+    /** Hesap sekmesindeki tüm kartların görünür + sekme vurgusu (iframe / hata sonrası da tutarlı) */
+    function syncAccountTabPanels() {
+      const accountTabBtn = document.querySelector('.settings-tab[data-tab="account"]');
+      if (accountTabBtn) {
+        setSettingsTab('account', accountTabBtn);
+      }
+      requestAnimationFrame(() => {
+        const b = document.querySelector('.settings-tab[data-tab="account"]');
+        if (b) setSettingsTab('account', b);
+      });
+    }
+
+    function goLogin() {
+      const topWin = window.top || window;
+      topWin.location.href = '/login.html';
+    }
+
+    function setXtreamTestFeedback(data) {
+      const el = document.getElementById('iptv-xt-status');
+      if (!el) return;
+      el.className = 'iptv-xt-status-line';
+      el.textContent = '';
+      if (!data || data.xtreamTest == null) return;
+      const t = data.xtreamTest;
+      if (t.skipped) {
+        el.classList.add('skip');
+        el.textContent = t.message || '';
+        return;
+      }
+      if (t.ok) {
+        el.classList.add('ok');
+        el.textContent = t.message || (window.AppI18n ? AppI18n.t('manageXtreamOk') : 'Bağlantı başarılı.');
+      } else {
+        el.classList.add('err');
+        el.textContent = t.message || (window.AppI18n ? AppI18n.t('manageXtreamFail') : 'Bağlantı kurulamadı.');
+      }
+    }
+
+    function collectIptvPostBody() {
+      const passEl = document.getElementById('iptv-xt-pass');
+      const pass = passEl ? passEl.value : '';
+      const body = {
+        xtreamBaseUrl: (document.getElementById('iptv-xt-base') || {}).value != null
+          ? String(document.getElementById('iptv-xt-base').value).trim() : '',
+        xtreamUsername: (document.getElementById('iptv-xt-user') || {}).value != null
+          ? String(document.getElementById('iptv-xt-user').value).trim() : '',
+        epgXmltvUrl: (document.getElementById('iptv-epg-url') || {}).value != null
+          ? String(document.getElementById('iptv-epg-url').value).trim() : '',
+      };
+      if (pass !== '') body.xtreamPassword = pass;
+      return body;
+    }
+
+    async function loadIptvSettings() {
+      try {
+        const r = await fetch('/api/iptv/settings');
+        if (r.status === 401) return;
+        const s = await r.json();
+        const owner = myData && myData.user.role === 'owner';
+
+        const m3uO = document.getElementById('iptv-m3u-owner');
+        const m3uM = document.getElementById('iptv-m3u-member');
+        const xtO = document.getElementById('iptv-xt-owner');
+        const xtM = document.getElementById('iptv-xt-member');
+        const epgO = document.getElementById('iptv-epg-owner');
+        const epgM = document.getElementById('iptv-epg-member');
+        if (m3uO) m3uO.style.display = owner ? '' : 'none';
+        if (m3uM) m3uM.style.display = owner ? 'none' : 'block';
+        if (xtO) xtO.style.display = owner ? '' : 'none';
+        if (xtM) xtM.style.display = owner ? 'none' : 'block';
+        if (epgO) epgO.style.display = owner ? '' : 'none';
+        if (epgM) epgM.style.display = owner ? 'none' : 'block';
+
+        const st = document.getElementById('iptv-m3u-status');
+        if (st) {
+          if (s.m3u && s.m3u.hasFile) {
+            const dash = window.AppI18n ? AppI18n.t('manageDash') : '—';
+            st.textContent = (window.AppI18n ? AppI18n.t('iptvStatusM3uPrefix') : 'Kayıtlı liste:') + ' ' + s.m3u.sizeBytes + ' ' +
+              (window.AppI18n ? AppI18n.t('iptvStatusM3uBytes') : 'bayt · Güncelleme:') + ' ' + (s.m3u.updatedAt || dash);
+          } else {
+            st.textContent = window.AppI18n ? AppI18n.t('iptvStatusM3uNone') : 'Kayıtlı M3U yok.';
+          }
+        }
+        const xtBase = document.getElementById('iptv-xt-base');
+        const xtUser = document.getElementById('iptv-xt-user');
+        const xtPass = document.getElementById('iptv-xt-pass');
+        if (xtBase) xtBase.value = (s.xtream && s.xtream.baseUrl) ? s.xtream.baseUrl : '';
+        if (xtUser) xtUser.value = (s.xtream && s.xtream.username) ? s.xtream.username : '';
+        if (xtPass) {
+          if (s.xtream && Object.prototype.hasOwnProperty.call(s.xtream, 'password')) {
+            xtPass.value = String(s.xtream.password != null ? s.xtream.password : '');
+            xtPass.placeholder = window.AppI18n ? AppI18n.t('iptvPassPh') : 'Şifre';
+          } else {
+            xtPass.value = '';
+            xtPass.placeholder = (s.xtream && s.xtream.passwordSet)
+              ? (window.AppI18n ? AppI18n.t('iptvPassSavedPh') : 'Şifre kayıtlı (sadece sahip görebilir)')
+              : (window.AppI18n ? AppI18n.t('iptvPassPh') : 'Şifre');
+          }
+        }
+        const epgUrl = document.getElementById('iptv-epg-url');
+        if (epgUrl) epgUrl.value = (s.epg && s.epg.url) ? s.epg.url : '';
+        const epgSt = document.getElementById('iptv-epg-status');
+        if (epgSt) {
+          const dash = window.AppI18n ? AppI18n.t('manageDash') : '—';
+          if (s.epg && s.epg.hasContent) {
+            epgSt.textContent = (window.AppI18n ? AppI18n.t('iptvEpgLocal') : 'Yerel XMLTV yüklü ·') + ' ' + (s.epg.updatedAt || dash);
+          } else if (s.epg && s.epg.url) {
+            epgSt.textContent = (window.AppI18n ? AppI18n.t('iptvEpgUrlPrefix') : 'EPG URL:') + ' ' + s.epg.url;
+          } else {
+            epgSt.textContent = window.AppI18n ? AppI18n.t('iptvEpgNone') : 'EPG tanımlı değil.';
+          }
+        }
+      } catch (e) {
+        console.error('[manage] IPTV ayarları:', e);
+      }
+    }
+
+    async function uploadIptvM3u() {
+      const input = document.getElementById('iptv-m3u-file');
+      const f = input && input.files && input.files[0];
+      if (!f) {
+        showToast(window.AppI18n ? AppI18n.t('toastSelectM3u') : 'Önce bir .m3u dosyası seçin.', true);
+        return;
+      }
+      try {
+        const text = await f.text();
+        const r = await fetch('/api/iptv/m3u', {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain; charset=utf-8' },
+          body: text,
+        });
+        const data = await r.json();
+        if (!r.ok) {
+          showToast(data.error || (window.AppI18n ? AppI18n.t('toastOpFail') : 'Yükleme başarısız.'), true);
+          return;
+        }
+        showToast(window.AppI18n ? AppI18n.t('toastM3uSaved') : 'M3U kaydedildi.', false);
+        loadIptvSettings();
+      } catch (e) {
+        console.error('[manage] M3U yükleme:', e);
+        showToast(window.AppI18n ? AppI18n.t('toastM3uUploadErr') : 'Yükleme sırasında hata oluştu.', true);
+      }
+    }
+
+    async function deleteIptvM3u() {
+      const ok = window.confirm(window.AppI18n ? AppI18n.t('confirmDeleteM3u') : 'Kayıtlı M3U listesini silmek istediğinize emin misiniz?');
+      if (!ok) return;
+      try {
+        const r = await fetch('/api/iptv/m3u', { method: 'DELETE' });
+        const data = await r.json();
+        if (!r.ok) {
+          showToast(data.error || (window.AppI18n ? AppI18n.t('toastOpFail') : 'Silinemedi.'), true);
+          return;
+        }
+        showToast(window.AppI18n ? AppI18n.t('toastM3uRemoved') : 'M3U kaldırıldı.', false);
+        loadIptvSettings();
+      } catch (e) {
+        console.error('[manage] M3U sil:', e);
+        showToast(window.AppI18n ? AppI18n.t('toastOpFail') : 'İşlem başarısız.', true);
+      }
+    }
+
+    async function saveIptvXtream() {
+      const btn = document.getElementById('iptv-xt-save-btn');
+      const statusEl = document.getElementById('iptv-xt-status');
+      if (statusEl) {
+        statusEl.className = 'iptv-xt-status-line';
+        statusEl.textContent = window.AppI18n ? AppI18n.t('manageXtreamTesting') : 'Bağlantı deneniyor…';
+      }
+      if (btn) {
+        btn.disabled = true;
+        btn.textContent = window.AppI18n ? AppI18n.t('manageXtreamSaving') : 'Kaydediliyor…';
+      }
+      try {
+        const r = await fetch('/api/iptv/settings', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(collectIptvPostBody()),
+        });
+        const data = await r.json();
+        if (!r.ok) {
+          setXtreamTestFeedback({ xtreamTest: { ok: false, message: data.error || (window.AppI18n ? AppI18n.t('toastOpFail') : 'Kaydedilemedi.') } });
+          showToast(data.error || (window.AppI18n ? AppI18n.t('toastOpFail') : 'Kaydedilemedi.'), true);
+          return;
+        }
+        setXtreamTestFeedback(data);
+        if (data.xtreamTest && data.xtreamTest.ok) {
+          showToast(window.AppI18n ? AppI18n.t('toastXtreamSavedOk') : 'Ayarlar kaydedildi; Xtream sunucusu doğrulandı.', false);
+        } else if (data.xtreamTest && data.xtreamTest.skipped) {
+          showToast(window.AppI18n ? AppI18n.t('toastXtreamSaved') : 'Ayarlar kaydedildi.', false);
+        } else if (data.xtreamTest && data.xtreamTest.ok === false) {
+          showToast(window.AppI18n ? AppI18n.t('toastXtreamSavedWarn') : 'Ayarlar kaydedildi; Xtream bağlantısı doğrulanamadı.', true);
+        } else {
+          showToast(window.AppI18n ? AppI18n.t('toastXtreamSaved') : 'Ayarlar kaydedildi.', false);
+        }
+        await loadIptvSettings();
+      } catch (e) {
+        console.error('[manage] Xtream kaydet:', e);
+        if (statusEl) {
+          statusEl.className = 'iptv-xt-status-line err';
+          statusEl.textContent = window.AppI18n ? AppI18n.t('manageXtreamRequestFail') : 'İstek gönderilemedi. Ağı kontrol edin.';
+        }
+        showToast(window.AppI18n ? AppI18n.t('toastXtreamSaveErr') : 'Kayıt sırasında hata oluştu.', true);
+      } finally {
+        if (btn) {
+          btn.disabled = false;
+          btn.textContent = window.AppI18n ? AppI18n.t('manageIptvXtSave') : 'Xtream Ayarlarını Kaydet';
+        }
+      }
+    }
+
+    async function saveIptvEpgUrl() {
+      try {
+        const r = await fetch('/api/iptv/settings', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(collectIptvPostBody()),
+        });
+        const data = await r.json();
+        if (!r.ok) {
+          showToast(data.error || (window.AppI18n ? AppI18n.t('toastOpFail') : 'Kaydedilemedi.'), true);
+          return;
+        }
+        setXtreamTestFeedback(data);
+        showToast(window.AppI18n ? AppI18n.t('toastEpgSaved') : 'EPG ve diğer alanlar kaydedildi.', false);
+        await loadIptvSettings();
+      } catch (e) {
+        console.error('[manage] EPG URL kaydet:', e);
+        showToast(window.AppI18n ? AppI18n.t('toastXtreamSaveErr') : 'Kayıt sırasında hata oluştu.', true);
+      }
+    }
+
+    async function uploadIptvEpgFile() {
+      const input = document.getElementById('iptv-epg-file');
+      const f = input && input.files && input.files[0];
+      if (!f) {
+        showToast(window.AppI18n ? AppI18n.t('toastSelectXml') : 'XML dosyası seçin.', true);
+        return;
+      }
+      try {
+        const text = await f.text();
+        const r = await fetch('/api/iptv/epg-content', {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain; charset=utf-8' },
+          body: text,
+        });
+        const data = await r.json();
+        if (!r.ok) {
+          showToast(data.error || (window.AppI18n ? AppI18n.t('toastOpFail') : 'Yüklenemedi.'), true);
+          return;
+        }
+        showToast(window.AppI18n ? AppI18n.t('toastXmlSaved') : 'XMLTV kaydedildi.', false);
+        loadIptvSettings();
+      } catch (e) {
+        console.error('[manage] EPG yükleme:', e);
+        showToast(window.AppI18n ? AppI18n.t('toastM3uUploadErr') : 'Yükleme sırasında hata oluştu.', true);
+      }
+    }
+
+    async function deleteIptvEpgContent() {
+      const ok = window.confirm(window.AppI18n ? AppI18n.t('confirmDeleteEpg') : 'Sunucuya yüklenen XMLTV dosyasını silmek istiyor musunuz?');
+      if (!ok) return;
+      try {
+        const r = await fetch('/api/iptv/epg-content', { method: 'DELETE' });
+        const data = await r.json();
+        if (!r.ok) {
+          showToast(data.error || (window.AppI18n ? AppI18n.t('toastOpFail') : 'Silinemedi.'), true);
+          return;
+        }
+        showToast(window.AppI18n ? AppI18n.t('toastEpgXmlRemoved') : 'Yerel XMLTV silindi.', false);
+        loadIptvSettings();
+      } catch (e) {
+        console.error('[manage] EPG sil:', e);
+        showToast(window.AppI18n ? AppI18n.t('toastOpFail') : 'İşlem başarısız.', true);
+      }
     }
 
     async function init() {
-      const res = await fetch('/api/me');
-      if (res.status === 401) { location.href = '/login.html'; return; }
-      myData = await res.json();
+      try {
+        const res = await fetch('/api/me');
+        if (res.status === 401) { goLogin(); return; }
+        myData = await res.json();
 
-      document.getElementById('membership-name').textContent = myData.membership.name + ' Paketi';
-      document.getElementById('membership-sub').textContent = myData.user.email;
-      document.getElementById('plan-badge').textContent = myData.membership.plan.toUpperCase();
-      document.getElementById('plan-display-name').textContent = myData.membership.name;
-      document.getElementById('plan-stat').textContent =
-        `${myData.users.length} / ${myData.membership.max_users} kullanıcı  •  Durum: ${myData.membership.status}`;
+        const inviteCard = document.getElementById('invite-card');
+        const interestsCard = document.getElementById('interests-card');
+        if (myData.user.role === 'owner') {
+          inviteCard.style.removeProperty('display');
+          interestsCard.style.removeProperty('display');
+        } else {
+          inviteCard.style.display = 'none';
+          interestsCard.style.display = 'none';
+        }
 
-      if (myData.user.role !== 'owner') {
-        document.getElementById('invite-card').style.display = 'none';
-        document.getElementById('interests-card').style.display = 'none';
+        renderUserDock(myData.user);
+        document.getElementById('plan-badge').textContent = myData.membership.plan.toUpperCase();
+        document.getElementById('plan-display-name').textContent = myData.membership.name;
+        const userCount = Array.isArray(myData.users) ? myData.users.length : 0;
+        document.getElementById('interest-tags').value = myData.membership.interest_tags || '';
+        document.getElementById('preferred-language').value = myData.user.preferred_language || 'tr';
+
+        renderUsers(Array.isArray(myData.users) ? myData.users : []);
+
+        try {
+          await loadTvSettings();
+        } catch (tvErr) {
+          console.error('[manage] TV ayarları yüklenemedi:', tvErr);
+        }
+
+        if (String(myData.user.role || '').toLowerCase() === 'owner') {
+          try {
+            await loadIptvSettings();
+          } catch (iptvPre) {
+            console.error('[manage] IPTV ayarları yüklenemedi:', iptvPre);
+          }
+        }
+      } catch (e) {
+        console.error('[manage] init:', e);
+        showToast(window.AppI18n ? AppI18n.t('toastPageLoadErr') : 'Sayfa tam yüklenemedi. Sayfayı yenileyin.', true);
+      } finally {
+        syncAccountTabPanels();
+        refreshManageI18n();
       }
-      document.getElementById('interest-tags').value = myData.membership.interest_tags || '';
-      document.getElementById('preferred-language').value = myData.user.preferred_language || 'tr';
-
-      renderUsers(myData.users);
-      await loadTvSettings();
     }
 
     function renderUsers(users) {
       const tbody = document.getElementById('user-tbody');
-      tbody.innerHTML = users.map(u => `
+      const list = Array.isArray(users) ? users : [];
+      tbody.innerHTML = list.map(u => `
         <tr>
           <td>
             ${u.avatar
@@ -474,21 +1036,21 @@
             <div style="font-weight:500">${esc(u.name || '—')}</div>
             <div style="font-size:12px;color:#555;margin-top:2px">${esc(u.email)}</div>
           </td>
-          <td><span class="role-badge role-${u.role}">${u.role === 'owner' ? 'Sahip' : 'Üye'}</span></td>
+          <td><span class="role-badge role-${u.role}">${u.role === 'owner' ? (window.AppI18n ? AppI18n.t('manageRoleOwner') : 'Sahip') : (window.AppI18n ? AppI18n.t('manageRoleMember') : 'Üye')}</span></td>
           <td class="ip-cell ${u.locked_ip ? 'ip-locked' : ''}">
-            ${u.locked_ip || '<span style="color:#444">Henüz kilitlenmedi</span>'}
+            ${u.locked_ip || `<span style="color:#444">${window.AppI18n ? AppI18n.t('manageIpNone') : 'Henüz kilitlenmedi'}</span>`}
           </td>
           <td>
             <span style="color:${u.is_active ? '#6fbe6f' : '#e87474'};font-size:13px">
-              ${u.is_active ? '✓ Aktif' : '✗ Pasif'}
+              ${u.is_active ? ('✓ ' + (window.AppI18n ? AppI18n.t('manageStatusActive') : 'Aktif')) : ('✗ ' + (window.AppI18n ? AppI18n.t('manageStatusInactive') : 'Pasif'))}
             </span>
           </td>
           <td>
             ${myData.user.role === 'owner' && u.id !== myData.user.id ? `
               <button class="action-btn danger" onclick="resetIp(${u.id}, '${esc(u.name || u.email)}')">
-                IP Sıfırla
+                ${window.AppI18n ? AppI18n.t('manageResetIp') : 'IP Sıfırla'}
               </button>
-            ` : '—'}
+            ` : (window.AppI18n ? AppI18n.t('manageDash') : '—')}
           </td>
         </tr>
       `).join('');
@@ -515,7 +1077,7 @@
       const res = await fetch(`/api/reset-ip/${userId}`, { method: 'POST' });
       const data = await res.json();
       if (res.ok) {
-        showToast(`${name} için IP kilidi sıfırlandı.`, false);
+        showToast(window.AppI18n ? AppI18n.t('toastIpResetNamed', { name }) : `${name} için IP kilidi sıfırlandı.`, false);
         init();
       } else {
         showToast(data.error, true);
@@ -523,13 +1085,21 @@
     }
 
     async function logout() {
+      closeUserMenu();
+      const ok = window.confirm(window.AppI18n ? AppI18n.t('confirmLogout') : 'Hesaptan çıkmak istediğinize emin misiniz?');
+      if (!ok) return;
       await fetch('/auth/logout', { method: 'POST' });
-      location.href = '/login.html';
+      goLogin();
     }
 
     async function switchAccount() {
-      await fetch('/auth/logout', { method: 'POST' });
-      location.href = '/login.html';
+      closeUserMenu();
+      const popup = window.open('/auth/google', '_blank', 'noopener,noreferrer,width=560,height=740');
+      if (!popup) {
+        showToast(window.AppI18n ? AppI18n.t('toastPopupBlockedManage') : 'Yeni hesap penceresi açılamadı. Açılır pencereye izin verin.', true);
+        return;
+      }
+      showToast(window.AppI18n ? AppI18n.t('toastSwitchUserManage') : 'Yeni kullanıcı girişi için pencere açıldı. Girişten sonra sayfayı yenileyin.', false);
     }
 
     async function saveInterests() {
@@ -541,9 +1111,9 @@
       });
       const data = await res.json();
       if (res.ok) {
-        showToast('İlgi etiketleri güncellendi.', false);
+        showToast(window.AppI18n ? AppI18n.t('toastInterestsOk') : 'İlgi etiketleri güncellendi.', false);
       } else {
-        showToast(data.error || 'Güncellenemedi.', true);
+        showToast(data.error || (window.AppI18n ? AppI18n.t('toastOpFail') : 'Güncellenemedi.'), true);
       }
     }
 
@@ -556,9 +1126,21 @@
       });
       const data = await res.json();
       if (res.ok) {
-        showToast('Dil tercihi güncellendi.', false);
+        myData.user.preferred_language = language;
+        try {
+          localStorage.setItem('acil_susam_lang', language);
+        } catch (e) {
+          if (typeof console !== 'undefined' && console.warn) console.warn('[manage] localStorage', e.message);
+        }
+        refreshManageI18n();
+        try {
+          window.parent.postMessage({ type: 'acil-susam-locale', language }, location.origin);
+        } catch (e) {
+          if (typeof console !== 'undefined' && console.warn) console.warn('[manage] postMessage', e.message);
+        }
+        showToast(window.AppI18n ? AppI18n.t('toastLangOk') : 'Dil tercihi güncellendi.', false);
       } else {
-        showToast(data.error || 'Güncellenemedi.', true);
+        showToast(data.error || (window.AppI18n ? AppI18n.t('toastOpFail') : 'Güncellenemedi.'), true);
       }
     }
 
@@ -572,9 +1154,13 @@
     function renderTvSettings() {
       const wrap = document.getElementById('tv-config-list');
       if (!Array.isArray(tvSettings) || !tvSettings.length) {
-        wrap.innerHTML = '<div style="color:#666;font-size:13px">Kanal bulunamadı.</div>';
+        const t = window.AppI18n ? AppI18n.t('manageTvNoChannels') : 'Kanal bulunamadı.';
+        wrap.innerHTML = '<div style="color:#666;font-size:13px">' + esc(t) + '</div>';
         return;
       }
+      const labResearch = window.AppI18n ? AppI18n.t('manageTvResearch') : 'Araştır/Tazele';
+      const labPreview = window.AppI18n ? AppI18n.t('manageTvPreviewBtn') : 'Önizle';
+      const labSave = window.AppI18n ? AppI18n.t('manageTvSaveRow') : 'Kaydet';
       wrap.innerHTML = tvSettings.map(ch => `
         <div class="tv-row">
           <div class="tv-row-line">
@@ -587,9 +1173,9 @@
             </div>
             <input class="tv-mini-input" id="tv-custom-${ch.id}" value="${esc(ch.custom_url || '')}" placeholder="${esc(ch.default_url || '')}">
             <div class="tv-row-top-actions">
-              <button class="tv-mini-btn" onclick="refreshChannelSources(${ch.id})">Araştır/Tazele</button>
-              <button class="tv-mini-btn" onclick="previewTv(${ch.id})">Önizle</button>
-              <button class="tv-mini-btn" onclick="saveTvCustomUrl(${ch.id})">Kaydet</button>
+              <button class="tv-mini-btn" onclick="refreshChannelSources(${ch.id})">${esc(labResearch)}</button>
+              <button class="tv-mini-btn" onclick="previewTv(${ch.id})">${esc(labPreview)}</button>
+              <button class="tv-mini-btn" onclick="saveTvCustomUrl(${ch.id})">${esc(labSave)}</button>
             </div>
           </div>
         </div>
@@ -606,11 +1192,11 @@
       });
       const data = await res.json();
       if (!res.ok) {
-        showToast(data.error || 'Güncellenemedi.', true);
+        showToast(data.error || (window.AppI18n ? AppI18n.t('toastOpFail') : 'Güncellenemedi.'), true);
         return;
       }
       row.enabled = enabled ? 1 : 0;
-      showToast('Kanal görünürlüğü güncellendi.', false);
+      showToast(window.AppI18n ? AppI18n.t('toastTvVisibility') : 'Kanal görünürlüğü güncellendi.', false);
     }
 
     async function saveTvCustomUrl(channelId) {
@@ -625,11 +1211,11 @@
       });
       const data = await res.json();
       if (!res.ok) {
-        showToast(data.error || 'Kaydedilemedi.', true);
+        showToast(data.error || (window.AppI18n ? AppI18n.t('toastOpFail') : 'Kaydedilemedi.'), true);
         return;
       }
       row.custom_url = customUrl;
-      showToast('Özel bağlantı kaydedildi.', false);
+      showToast(window.AppI18n ? AppI18n.t('toastTvUrlSaved') : 'Özel bağlantı kaydedildi.', false);
     }
 
     function previewTv(channelId) {
@@ -642,7 +1228,9 @@
 
       const video = document.getElementById('tv-preview');
       const meta = document.getElementById('tv-preview-meta');
-      const sourceLabel = draftUrl ? 'Taslak URL (kaydedilmedi)' : 'Kayıtlı URL';
+      const sourceLabel = draftUrl
+        ? (window.AppI18n ? AppI18n.t('managePreviewDraft') : 'Taslak URL (kaydedilmedi)')
+        : (window.AppI18n ? AppI18n.t('managePreviewSaved') : 'Kayıtlı URL');
       meta.textContent = `${row.name} • ${sourceLabel} • ${url}`;
 
       if (tvPreviewHls) {
@@ -669,8 +1257,11 @@
       if (!row) return;
 
       const body = document.getElementById('source-modal-body');
-      document.getElementById('source-modal-title').textContent = `${row.name} kaynakları`;
-      body.innerHTML = '<div style="color:#888;font-size:13px">Kaynaklar araştırılıyor...</div>';
+      document.getElementById('source-modal-title').textContent = window.AppI18n
+        ? AppI18n.t('manageSourceTitleNamed', { name: row.name })
+        : `${row.name} kaynakları`;
+      body.innerHTML = '<div style="color:#888;font-size:13px">' +
+        esc(window.AppI18n ? AppI18n.t('manageSourceSearching') : 'Kaynaklar araştırılıyor...') + '</div>';
       sourceModalChannelId = channelId;
       document.getElementById('source-modal').classList.add('open');
 
@@ -681,30 +1272,36 @@
         try {
           data = JSON.parse(rawText);
         } catch {
-          body.innerHTML = `<div style="color:#d77;font-size:13px">Sunucu JSON yerine farklı bir yanıt döndürdü. Lütfen sunucuyu yeniden başlatıp tekrar deneyin.</div>`;
+          const bj = window.AppI18n ? AppI18n.t('manageSourceBadJson') : 'Sunucu JSON yerine farklı bir yanıt döndürdü. Lütfen sunucuyu yeniden başlatıp tekrar deneyin.';
+          body.innerHTML = `<div style="color:#d77;font-size:13px">${esc(bj)}</div>`;
           return;
         }
         if (!res.ok) {
-          body.innerHTML = `<div style="color:#d77;font-size:13px">${esc(data.error || 'Araştırma başarısız.')}</div>`;
+          body.innerHTML = `<div style="color:#d77;font-size:13px">${esc(data.error || (window.AppI18n ? AppI18n.t('toastOpFail') : 'Araştırma başarısız.'))}</div>`;
           return;
         }
         if (!Array.isArray(data.sources) || !data.sources.length) {
-          body.innerHTML = '<div style="color:#888;font-size:13px">Kaynak bulunamadı.</div>';
+          const nf = window.AppI18n ? AppI18n.t('manageSourceNone') : 'Kaynak bulunamadı.';
+          body.innerHTML = '<div style="color:#888;font-size:13px">' + esc(nf) + '</div>';
           return;
         }
 
+        const okL = window.AppI18n ? AppI18n.t('manageSourceHealthy') : 'doğrulandı';
+        const badL = window.AppI18n ? AppI18n.t('manageSourceWeak') : 'zayıf';
         body.innerHTML = data.sources.map((item, idx) => `
           <div class="source-option" onclick="pickSourceUrl(${idx})" data-url="${encodeURIComponent(item.url)}">
             ${esc(item.url)}
             <div class="meta">
               <span>${esc(item.source || 'unknown')}</span>
-              <span class="source-badge ${item.healthy ? 'ok' : 'fail'}">${item.healthy ? 'doğrulandı' : 'zayıf'}</span>
+              <span class="source-badge ${item.healthy ? 'ok' : 'fail'}">${item.healthy ? okL : badL}</span>
               <span>${esc(item.reason || '')}</span>
             </div>
           </div>
         `).join('');
       } catch (err) {
-        body.innerHTML = `<div style="color:#d77;font-size:13px">Araştırma sırasında bağlantı hatası oluştu: ${esc(err.message || 'Bilinmeyen hata')}</div>`;
+        const pfx = window.AppI18n ? AppI18n.t('manageSourceConnErr') : 'Araştırma sırasında bağlantı hatası oluştu';
+        const unk = window.AppI18n ? AppI18n.t('errUnknown') : 'Bilinmeyen hata';
+        body.innerHTML = `<div style="color:#d77;font-size:13px">${esc(pfx)}: ${esc(err.message || unk)}</div>`;
       }
     }
 
@@ -716,7 +1313,7 @@
       if (!url || !sourceModalChannelId) return;
       const input = document.getElementById(`tv-custom-${sourceModalChannelId}`);
       if (input) input.value = url;
-      showToast('Kaynak adres satırına aktarıldı. Kaydet ile onaylayın.', false);
+      showToast(window.AppI18n ? AppI18n.t('manageSourcePicked') : 'Kaynak adres satırına aktarıldı. Kaydet ile onaylayın.', false);
       closeSourceModal();
     }
 
@@ -736,6 +1333,12 @@
       return String(s).replace(/[&<>"']/g, c =>
         ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
     }
+
+    window.addEventListener('pageshow', (ev) => {
+      if (ev.persisted) {
+        syncAccountTabPanels();
+      }
+    });
 
     init();
   </script>

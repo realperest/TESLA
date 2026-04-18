@@ -9,7 +9,7 @@
   flex-direction: column;
   overflow: hidden;
   background: var(--bg);
-  --yt-top-btn-w: 132px;
+  --yt-top-btn-w: 168px;
 }
 
 /* ── Üst bar (her iki view'de sabit) ─────────────────────── */
@@ -401,6 +401,10 @@
   width: 100%;
   height: 100%;
   border-radius: 0;
+}
+#yt-player-area:fullscreen #yt-controls,
+#yt-player-area:-webkit-full-screen #yt-controls {
+  padding-bottom: 10px;
 }
 
 /* ── Sağ: İlgili videolar sidebar ────────────────────────── */

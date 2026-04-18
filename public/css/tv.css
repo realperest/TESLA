@@ -8,7 +8,8 @@
 }
 
 /* Sidebar */
-#sidebar {
+#sidebar,
+#sidebar-iptv {
   width: 280px;
   flex-shrink: 0;
   background: var(--surface);
@@ -72,7 +73,8 @@
   scrollbar-color: #333 transparent;
 }
 
-.channel-item {
+.channel-item,
+.iptv-channel-item {
   display: flex;
   align-items: center;
   gap: 12px;
@@ -82,8 +84,10 @@
   transition: background 0.12s;
   min-height: 54px;
 }
-.channel-item:hover  { background: var(--surface2); }
-.channel-item.active { background: #1e0507; border-left: 3px solid var(--accent); padding-left: 7px; }
+.channel-item:hover,
+.iptv-channel-item:hover  { background: var(--surface2); }
+.channel-item.active,
+.iptv-channel-item.active { background: #1e0507; border-left: 3px solid var(--accent); padding-left: 7px; }
 
 .channel-logo {
   width: 34px; height: 34px;
@@ -132,14 +136,16 @@
 .btn-add:hover { border-color: var(--accent); color: var(--accent); }
 
 /* Player alanı */
-#player-area {
+#player-area,
+#iptv-player-area {
   flex: 1;
   position: relative;
   background: #000;
   overflow: hidden;
 }
 
-#video-canvas {
+#video-canvas,
+#iptv-video-canvas {
   position: absolute;
   inset: 0;
   max-width: 100%;
@@ -149,7 +155,8 @@
   object-fit: contain;
 }
 
-#empty-state {
+#empty-state,
+#iptv-empty-state {
   position: absolute;
   inset: 0;
   display: flex;
@@ -161,24 +168,48 @@
   text-align: center;
   padding: 40px;
 }
-#empty-state .big-icon { font-size: 56px; opacity: 0.4; }
+#empty-state .big-icon { font-size: 56px; opacity: 0.4; font-weight: 700; letter-spacing: 0.05em; }
 #empty-state h2 { font-size: 18px; color: rgba(255,255,255,0.3); font-weight: 500; }
 #empty-state p { font-size: 13px; color: var(--text-muted); }
 
+#iptv-empty-state .iptv-empty-msg {
+  font-size: clamp(13px, 1.9vw, 16px);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  line-height: 1.5;
+  color: rgba(255, 255, 255, 0.42);
+  max-width: min(560px, 90vw);
+  text-align: center;
+  margin: 0;
+}
+
+.iptv-list-empty {
+  padding: 20px 14px;
+  color: rgba(255, 255, 255, 0.42);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  line-height: 1.45;
+  text-align: center;
+}
+
 /* Player overlay */
-#player-overlay {
+#player-overlay,
+#iptv-player-overlay {
   position: absolute;
   inset: 0;
   display: flex;
   flex-direction: column;
   justify-content: flex-end;
   padding: 24px;
+  padding-bottom: 24px;
   background: linear-gradient(to top, rgba(0,0,0,0.75) 0%, transparent 45%);
   opacity: 0;
   transition: opacity 0.3s;
   pointer-events: none;
 }
-#player-overlay.visible { opacity: 1; pointer-events: all; }
+#player-overlay.visible,
+#iptv-player-overlay.visible { opacity: 1; pointer-events: all; }
 
 .tv-controls-bar {
   display: flex;
@@ -234,7 +265,13 @@
 }
 
 /* Tam ekran */
-:fullscreen #header,
 :fullscreen #dock-bar { display: none; }
 :fullscreen #main-content { top: 0; bottom: 0; }
-:fullscreen #player-area { height: 100vh; }
+:fullscreen #player-area,
+:fullscreen #iptv-player-area { height: 100vh; }
+#player-area:fullscreen #player-overlay,
+#player-area:-webkit-full-screen #player-overlay,
+#iptv-player-area:fullscreen #iptv-player-overlay,
+#iptv-player-area:-webkit-full-screen #iptv-player-overlay {
+  padding: 24px;
+}

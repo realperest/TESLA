@@ -5,12 +5,13 @@
   justify-content: center;
   background: radial-gradient(ellipse at 50% 60%, #1a0a0a 0%, #0a0a0a 70%);
   gap: 32px;
+  padding-bottom: var(--dock-h);
 }
 
 .home-logo {
-  font-size: 56px;
+  font-size: clamp(32px, 9vw, 52px);
   font-weight: 800;
-  letter-spacing: -2px;
+  letter-spacing: -0.04em;
   opacity: 0.12;
 }
 .home-logo span { color: var(--accent); }

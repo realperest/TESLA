@@ -2,10 +2,22 @@ const express = require('express');
 const database = require('../database');
 const { authenticate } = require('../middleware/authenticate');
 const { ipLock } = require('../middleware/ipLock');
+const iptvService = require('../services/iptvService');
 
 const router = express.Router();
 
 router.use(authenticate, ipLock);
+
+/**
+ * Maps Embed API anahtarı (sunucu ortamından).
+ * Tarayıcıda iframe src içinde kullanılacak; Google Cloud’da HTTP referrer kısıtı şart.
+ */
+router.get('/maps/embed-config', (req, res) => {
+  const key = String(process.env.GOOGLE_MAPS_EMBED_API_KEY || '').trim();
+  res.setHeader('Cache-Control', 'no-store');
+  res.json({ key });
+});
+
 const IPTV_SOURCE_LISTS = [
   { key: 'iptv-org', url: 'https://raw.githubusercontent.com/iptv-org/iptv/master/streams/tr.m3u' },
   { key: 'free-tv', url: 'https://raw.githubusercontent.com/free-tv/iptv/master/playlists/playlist_turkey.m3u8' },
@@ -494,6 +506,207 @@ router.delete('/channels/:id', (req, res) => {
 
   db.prepare('UPDATE channels SET is_active = 0 WHERE id = ?').run(req.params.id);
   res.json({ success: true });
+});
+
+// ──────────────────────────────────────────────
+// IPTV (M3U DB, Xtream, EPG XMLTV)
+// ──────────────────────────────────────────────
+
+router.get('/iptv/settings', (req, res) => {
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+  const db = database.db;
+  const row = iptvService.getIptvSettingsRow(db, req.user.membership_id);
+  const m3uText = row?.m3u_content ? String(row.m3u_content) : '';
+  const isOwner = String(req.user.role || '').toLowerCase() === 'owner';
+  const xtream = {
+    baseUrl: row?.xtream_base_url || '',
+    username: row?.xtream_username || '',
+    passwordSet: !!(row?.xtream_password),
+  };
+  if (isOwner) {
+    xtream.password = row != null && row.xtream_password != null ? String(row.xtream_password) : '';
+  }
+
+  const out = {
+    m3u: {
+      hasFile: m3uText.length > 0,
+      updatedAt: row?.m3u_updated_at || null,
+      sizeBytes: Buffer.byteLength(m3uText, 'utf8'),
+    },
+    xtream,
+    epg: {
+      url: row?.epg_xmltv_url || '',
+      hasContent: !!(row?.epg_xmltv_content && String(row.epg_xmltv_content).trim()),
+      updatedAt: row?.epg_updated_at || null,
+    },
+  };
+  res.json(out);
+});
+
+router.post('/iptv/settings', async (req, res) => {
+  if (req.user.role !== 'owner') {
+    return res.status(403).json({ error: 'Sadece paket sahibi IPTV ayarlarını değiştirebilir.' });
+  }
+
+  const body = req.body || {};
+  const xtreamBaseUrl = String(body.xtreamBaseUrl ?? '').trim();
+  const xtreamUsername = String(body.xtreamUsername ?? '').trim();
+  const epgXmltvUrl = String(body.epgXmltvUrl ?? '').trim();
+
+  const db = database.db;
+  const row = iptvService.ensureIptvRow(db, req.user.membership_id);
+
+  let xtreamPassword = row?.xtream_password || '';
+  if (Object.prototype.hasOwnProperty.call(body, 'xtreamPassword')) {
+    xtreamPassword = String(body.xtreamPassword ?? '');
+  }
+
+  db.prepare(`
+    UPDATE membership_iptv_settings SET
+      xtream_base_url = ?,
+      xtream_username = ?,
+      xtream_password = ?,
+      epg_xmltv_url = ?,
+      epg_updated_at = datetime('now'),
+      updated_at = datetime('now')
+    WHERE membership_id = ?
+  `).run(
+    xtreamBaseUrl || null,
+    xtreamUsername || null,
+    xtreamPassword || null,
+    epgXmltvUrl || null,
+    req.user.membership_id
+  );
+
+  let xtreamTest = null;
+  try {
+    if (xtreamBaseUrl && xtreamUsername && xtreamPassword) {
+      xtreamTest = await iptvService.testXtreamConnection(xtreamBaseUrl, xtreamUsername, xtreamPassword);
+    } else if (xtreamBaseUrl || xtreamUsername) {
+      xtreamTest = {
+        skipped: true,
+        message: 'Xtream doğrulaması için sunucu, kullanıcı adı ve şifre birlikte gerekir. Şifre daha önce kaydedildiyse tekrar yazın veya alanı doldurun.',
+      };
+    }
+  } catch (e) {
+    console.error('[IPTV] Xtream test:', e.message);
+    xtreamTest = { ok: false, message: 'Kayıt yapıldı ancak bağlantı testi sırasında hata oluştu.' };
+  }
+
+  res.json({ success: true, xtreamTest });
+});
+
+router.post('/iptv/m3u', express.text({ limit: '15mb' }), (req, res) => {
+  if (req.user.role !== 'owner') {
+    return res.status(403).json({ error: 'Sadece paket sahibi M3U yükleyebilir.' });
+  }
+  const text = String(req.body || '');
+  if (!text.trim()) {
+    return res.status(400).json({ error: 'Dosya içeriği boş.' });
+  }
+  const db = database.db;
+  iptvService.ensureIptvRow(db, req.user.membership_id);
+  db.prepare(`
+    UPDATE membership_iptv_settings SET
+      m3u_content = ?,
+      m3u_updated_at = datetime('now'),
+      updated_at = datetime('now')
+    WHERE membership_id = ?
+  `).run(text, req.user.membership_id);
+
+  res.json({ success: true, sizeBytes: Buffer.byteLength(text, 'utf8') });
+});
+
+router.delete('/iptv/m3u', (req, res) => {
+  if (req.user.role !== 'owner') {
+    return res.status(403).json({ error: 'Sadece paket sahibi kaldırabilir.' });
+  }
+  const db = database.db;
+  iptvService.ensureIptvRow(db, req.user.membership_id);
+  db.prepare(`
+    UPDATE membership_iptv_settings SET
+      m3u_content = NULL,
+      m3u_updated_at = NULL,
+      updated_at = datetime('now')
+    WHERE membership_id = ?
+  `).run(req.user.membership_id);
+  res.json({ success: true });
+});
+
+router.post('/iptv/epg-content', express.text({ limit: '15mb' }), (req, res) => {
+  if (req.user.role !== 'owner') {
+    return res.status(403).json({ error: 'Sadece paket sahibi yükleyebilir.' });
+  }
+  const text = String(req.body || '');
+  if (!text.trim()) {
+    return res.status(400).json({ error: 'EPG içeriği boş.' });
+  }
+  const db = database.db;
+  iptvService.ensureIptvRow(db, req.user.membership_id);
+  db.prepare(`
+    UPDATE membership_iptv_settings SET
+      epg_xmltv_content = ?,
+      epg_updated_at = datetime('now'),
+      updated_at = datetime('now')
+    WHERE membership_id = ?
+  `).run(text, req.user.membership_id);
+
+  res.json({ success: true, sizeBytes: Buffer.byteLength(text, 'utf8') });
+});
+
+router.delete('/iptv/epg-content', (req, res) => {
+  if (req.user.role !== 'owner') {
+    return res.status(403).json({ error: 'Sadece paket sahibi kaldırabilir.' });
+  }
+  const db = database.db;
+  iptvService.ensureIptvRow(db, req.user.membership_id);
+  db.prepare(`
+    UPDATE membership_iptv_settings SET
+      epg_xmltv_content = NULL,
+      epg_updated_at = datetime('now'),
+      updated_at = datetime('now')
+    WHERE membership_id = ?
+  `).run(req.user.membership_id);
+  res.json({ success: true });
+});
+
+router.get('/iptv/channels', async (req, res) => {
+  const db = database.db;
+  const row = iptvService.getIptvSettingsRow(db, req.user.membership_id);
+  if (!row) {
+    return res.json([]);
+  }
+  try {
+    const list = await iptvService.buildMergedChannelList(row);
+    res.json(list);
+  } catch (e) {
+    console.error('[IPTV] Kanal listesi:', e.message);
+    res.status(502).json({ error: 'Kanal listesi oluşturulamadı.' });
+  }
+});
+
+router.get('/iptv/epg', async (req, res) => {
+  const channelId = String(req.query.channelId || '').trim();
+  if (!channelId) {
+    return res.status(400).json({ error: 'channelId gerekli.' });
+  }
+  const db = database.db;
+  const row = iptvService.getIptvSettingsRow(db, req.user.membership_id);
+  if (!row) {
+    return res.json({ programmes: [] });
+  }
+  const hasEpg = (row.epg_xmltv_url && String(row.epg_xmltv_url).trim()) ||
+    (row.epg_xmltv_content && String(row.epg_xmltv_content).trim());
+  if (!hasEpg) {
+    return res.json({ programmes: [] });
+  }
+  try {
+    const data = await iptvService.getProgrammesForChannel(req.user.membership_id, row, channelId);
+    res.json(data);
+  } catch (e) {
+    console.error('[IPTV] EPG:', e.message);
+    res.status(502).json({ error: 'EPG verisi alınamadı.' });
+  }
 });
 
 module.exports = router;

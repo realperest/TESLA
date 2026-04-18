@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Aç?l Susam">
+  <defs>
+    <linearGradient id="arch" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#f0c14d"/>
+      <stop offset="55%" stop-color="#c9a227"/>
+      <stop offset="100%" stop-color="#8b6914"/>
+    </linearGradient>
+    <linearGradient id="seed" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#ffeaa7"/>
+      <stop offset="100%" stop-color="#d4a84b"/>
+    </linearGradient>
+  </defs>
+  <rect width="64" height="64" rx="15" fill="#0a0809"/>
+  <rect width="64" height="64" rx="15" fill="none" stroke="rgba(232,33,39,0.35)" stroke-width="1"/>
+  <path fill="none" stroke="url(#arch)" stroke-width="2.25" stroke-linecap="round"
+    d="M18 50V28c0-7.7 6.3-14 14-14s14 6.3 14 14v22"/>
+  <ellipse cx="32" cy="36" rx="2.8" ry="4" fill="url(#seed)"/>
+  <ellipse cx="25" cy="42" rx="2.2" ry="3.4" fill="url(#seed)" transform="rotate(-22 25 42)"/>
+  <ellipse cx="39" cy="42" rx="2.2" ry="3.4" fill="url(#seed)" transform="rotate(22 39 42)"/>
+  <circle cx="32" cy="26" r="2" fill="rgba(232,33,39,0.9)"/>
+</svg>

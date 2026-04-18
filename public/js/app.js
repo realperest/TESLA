@@ -1,5 +1,5 @@
 /**
- * Tesla TV — Ana uygulama
+ * Açıl Susam — Ana uygulama
  */
 
 const API = {
@@ -29,6 +29,11 @@ let channels = [];
 let allChannels = [];
 let tvCategoryFilter = 'all';
 let tvSearchTerm = '';
+let iptvPlayer;
+let allIptvChannels = [];
+let iptvChannels = [];
+let iptvSearchTerm = '';
+let _iptvOverlayTimer = null;
 let resolvedVideo = null;
 let _ytResolving = false;
 let _ytLastVideoId = '';
@@ -43,6 +48,26 @@ const TV_OVERLAY_HIDE_MS = 3500;
 
 const YT_PROFILE_KEYWORDS_KEY = 'yt-profile-keywords';
 const YT_SEARCH_HISTORY_KEY = 'yt-search-history';
+
+function applyPlayerLocale() {
+  if (typeof AppI18n === 'undefined') return;
+  AppI18n.setLanguage(_userLanguage);
+  AppI18n.applyStatic(document);
+  AppI18n.applyYtModeButtons();
+  AppI18n.applyTvCategorySelect();
+  AppI18n.applyNavModeSelect();
+  if (typeof setYtInputMode === 'function') setYtInputMode(_ytInputMode);
+  if (typeof navUpdatePlaceholderMessage === 'function') navUpdatePlaceholderMessage();
+}
+
+window.addEventListener('message', (e) => {
+  if (e.origin !== location.origin) return;
+  if (e.data && e.data.type === 'acil-susam-locale' && e.data.language) {
+    _userLanguage = String(e.data.language).toLowerCase();
+    applyPlayerLocale();
+    if (typeof loadIptvChannels === 'function' && _activeSection === 'iptv') loadIptvChannels();
+  }
+});
 
 function showTvOverlay() {
   const overlay = document.getElementById('player-overlay');
@@ -71,6 +96,11 @@ function hideTvOverlay() {
 async function init() {
   player   = new TeslaPlayer('video-canvas');
   ytPlayer = new TeslaPlayer('yt-canvas', { spinnerId: 'yt-spinner', containerId: 'yt-player-area' });
+  iptvPlayer = new TeslaPlayer('iptv-video-canvas', {
+    spinnerId: 'iptv-spinner',
+    containerId: 'iptv-player-area',
+    emptyStateId: 'iptv-empty-state',
+  });
 
   try {
     const [meData, chData] = await Promise.all([API.get('/me'), API.get('/channels')]);
@@ -85,6 +115,8 @@ async function init() {
     allChannels = Array.isArray(chData) ? chData : [];
     channels = [...allChannels];
     renderChannels(channels);
+    updateDockBackButton();
+    applyPlayerLocale();
   } catch {
     return;
   }
@@ -95,6 +127,20 @@ async function init() {
       tvSearchTerm = String(e.target.value || '').trim().toLowerCase();
       applyTvFilters();
     });
+  }
+
+  const iptvSearch = document.getElementById('iptv-search-input');
+  if (iptvSearch) {
+    iptvSearch.addEventListener('input', (e) => {
+      iptvSearchTerm = String(e.target.value || '').trim().toLowerCase();
+      iptvApplyFilters();
+    });
+  }
+
+  const iptvPlayerArea = document.getElementById('iptv-player-area');
+  if (iptvPlayerArea) {
+    iptvPlayerArea.addEventListener('click', () => showIptvOverlay());
+    iptvPlayerArea.addEventListener('touchstart', () => showIptvOverlay(), { passive: true });
   }
 
   // Theater Mode ipucu
@@ -153,18 +199,43 @@ async function init() {
 function renderUser(user) {
   const avatar = document.getElementById('user-avatar');
   const name = document.getElementById('user-name');
+  const menuName = document.getElementById('user-menu-name');
+  const menuSub = document.getElementById('user-menu-sub');
   if (avatar && user.avatar) { avatar.src = user.avatar; avatar.style.display = 'block'; }
   if (name) name.textContent = user.name || user.email;
+  if (menuName) {
+    menuName.textContent = user.name || user.email || (typeof AppI18n !== 'undefined' ? AppI18n.t('menuUserDefault') : 'Kullanıcı');
+  }
+  if (menuSub) {
+    menuSub.textContent = user.email || (typeof AppI18n !== 'undefined' ? AppI18n.t('menuSessionOpen') : 'Oturum açık');
+  }
 }
 
 async function logout() {
+  const ok = window.confirm(typeof AppI18n !== 'undefined' ? AppI18n.t('confirmLogout') : 'Hesaptan çıkmak istediğinize emin misiniz?');
+  if (!ok) return;
   await fetch('/auth/logout', { method: 'POST' });
   location.href = '/login.html';
 }
 
 async function switchAccount() {
-  await fetch('/auth/logout', { method: 'POST' });
-  location.href = '/login.html';
+  closeUserMenu();
+  const popup = window.open('/auth/google', '_blank', 'noopener,noreferrer,width=560,height=740');
+  if (!popup) {
+    alert(typeof AppI18n !== 'undefined' ? AppI18n.t('alertPopupBlocked') : 'Yeni hesap penceresi açılamadı. Tarayıcı açılır pencereyi engelliyor olabilir.');
+    return;
+  }
+  alert(typeof AppI18n !== 'undefined' ? AppI18n.t('alertSwitchUser') : 'Yeni kullanıcı girişini açtık. Giriş tamamlandıktan sonra bu sayfayı yenileyebilirsiniz.');
+}
+
+function openGoogleAccountChooser() {
+  closeUserMenu();
+  window.open('/auth/google', '_blank', 'noopener,noreferrer,width=560,height=740');
+}
+
+function openAccountSettings() {
+  closeUserMenu();
+  dockNav('settings');
 }
 
 function toggleUserMenu(e) {
@@ -189,9 +260,9 @@ function renderChannels(list) {
   container.innerHTML = '';
 
   if (!list.length) {
-    container.innerHTML = `<div style="padding:20px;color:#555;font-size:13px;text-align:center">
-      Kanal yok.<br>Kanal ekleme ve düzenleme için Ayarlar > TV bölümünü kullanın.
-    </div>`;
+    const t1 = typeof AppI18n !== 'undefined' ? AppI18n.t('channelsNoneTitle') : 'Kanal yok.';
+    const t2 = typeof AppI18n !== 'undefined' ? AppI18n.t('channelsNoneBody') : 'Kanal ekleme ve düzenleme için Ayarlar menüsündeki TV bölümünü kullanın.';
+    container.innerHTML = `<div style="padding:20px;color:#555;font-size:13px;text-align:center">${esc(t1)}<br>${esc(t2)}</div>`;
     return;
   }
 
@@ -207,7 +278,7 @@ function renderChannels(list) {
 
     items.forEach(ch => {
       const el = document.createElement('div');
-      el.className = 'channel-item';
+      el.className = 'channel-item tv-channel-item';
       el.dataset.id = ch.id;
       el.innerHTML = `
         <div class="channel-logo">
@@ -257,7 +328,7 @@ function applyTvFilters() {
 // ─────────────────────────────────────────────
 
 async function playChannel(ch) {
-  document.querySelectorAll('.channel-item').forEach(el =>
+  document.querySelectorAll('#channel-list .channel-item').forEach((el) =>
     el.classList.toggle('active', el.dataset.id === String(ch.id))
   );
   setNowPlaying(ch.name, ch.category || '');
@@ -274,6 +345,7 @@ async function playChannel(ch) {
         : cand.url;
       await player.load({ url, name: ch.name }, { silentError: !isLast, throwOnError: true });
       showTvOverlay();
+      updateDockBackButton();
       return;
     } catch (err) {
       lastErr = err;
@@ -288,6 +360,248 @@ async function playChannel(ch) {
         : 'Yayın açılamadı. TV Ayarları bölümünde yayın kaynağını güncellemeyi deneyebilirsiniz.';
       player._showError(userMsg);
     }
+  }
+  updateDockBackButton();
+}
+
+function tvEnsureEmptyState() {
+  const area = document.getElementById('player-area');
+  if (!area || document.getElementById('empty-state')) return;
+  const el = document.createElement('div');
+  el.id = 'empty-state';
+  const h2 = typeof AppI18n !== 'undefined' ? AppI18n.t('tvEmptyTitle') : 'Canlı TV';
+  const p = typeof AppI18n !== 'undefined' ? AppI18n.t('tvEmptySubtitle') : 'Sağ listeden kanal seçin';
+  el.innerHTML = `
+    <div class="big-icon">📺</div>
+    <h2>${esc(h2)}</h2>
+    <p>${esc(p)}</p>
+  `;
+  const spinner = document.getElementById('spinner');
+  if (spinner) area.insertBefore(el, spinner);
+  else area.appendChild(el);
+}
+
+function updateDockBackButton() {
+  const btn = document.getElementById('dock-section-back');
+  if (!btn) return;
+  let show = false;
+  if (_activeSection === 'youtube' && _ytCurrentView === 'player') show = true;
+  else if (_activeSection === 'iptv' && iptvPlayer && (!!(iptvPlayer.video && iptvPlayer.video.src) || !!iptvPlayer.hls)) {
+    show = true;
+  }
+  else if (_activeSection === 'tv' && player && (!!(player.video && player.video.src) || !!player.hls)) {
+    show = true;
+  }
+  btn.style.display = show ? 'flex' : 'none';
+}
+
+function dockSectionBack() {
+  if (_activeSection === 'youtube' && _ytCurrentView === 'player') {
+    ytGoSectionHome();
+    return;
+  }
+  if (_activeSection === 'iptv' && iptvPlayer && (!!(iptvPlayer.video && iptvPlayer.video.src) || !!iptvPlayer.hls)) {
+    iptvGoSectionHome();
+    return;
+  }
+  if (_activeSection === 'tv' && player && (!!(player.video && player.video.src) || !!player.hls)) {
+    tvGoSectionHome();
+  }
+}
+
+function tvGoSectionHome() {
+  hideTvOverlay();
+  try { player.stop({ suppressErrorsMs: 800 }); } catch {}
+  document.querySelectorAll('#channel-list .channel-item').forEach((el) => el.classList.remove('active'));
+  setNowPlaying('—', '');
+  tvEnsureEmptyState();
+  updateDockBackButton();
+}
+
+function showIptvOverlay() {
+  const overlay = document.getElementById('iptv-player-overlay');
+  if (!overlay) return;
+  overlay.classList.add('visible');
+  if (_iptvOverlayTimer) clearTimeout(_iptvOverlayTimer);
+  _iptvOverlayTimer = setTimeout(() => {
+    overlay.classList.remove('visible');
+    _iptvOverlayTimer = null;
+  }, TV_OVERLAY_HIDE_MS);
+}
+
+function hideIptvOverlay() {
+  const overlay = document.getElementById('iptv-player-overlay');
+  if (!overlay) return;
+  overlay.classList.remove('visible');
+  if (_iptvOverlayTimer) {
+    clearTimeout(_iptvOverlayTimer);
+    _iptvOverlayTimer = null;
+  }
+}
+
+function iptvEnsureEmptyState() {
+  const area = document.getElementById('iptv-player-area');
+  if (!area || document.getElementById('iptv-empty-state')) return;
+  const el = document.createElement('div');
+  el.id = 'iptv-empty-state';
+  const msg = typeof AppI18n !== 'undefined' ? AppI18n.t('iptvEmptyMsg') : 'KURULUMU AYARLAR MENÜSÜNDEN IPTV BÖLÜMÜNDEN YAPMANIZ GEREKİYOR.';
+  el.innerHTML = `
+    <p class="iptv-empty-msg">${esc(msg)}</p>
+  `;
+  const spinner = document.getElementById('iptv-spinner');
+  if (spinner) area.insertBefore(el, spinner);
+  else area.appendChild(el);
+}
+
+function iptvApplyFilters() {
+  const filtered = allIptvChannels.filter((ch) => {
+    const name = String(ch.name || '').toLowerCase();
+    const cat = String(ch.category || '').toLowerCase();
+    const q = iptvSearchTerm;
+    return !q || name.includes(q) || cat.includes(q);
+  });
+  iptvChannels = filtered;
+  renderIptvChannels(filtered);
+}
+
+function renderIptvChannels(list) {
+  const container = document.getElementById('iptv-channel-list');
+  if (!container) return;
+  container.innerHTML = '';
+
+  if (!list.length) {
+    const msg = typeof AppI18n !== 'undefined' ? AppI18n.t('iptvEmptyMsg') : 'KURULUMU AYARLAR MENÜSÜNDEN IPTV BÖLÜMÜNDEN YAPMANIZ GEREKİYOR.';
+    container.innerHTML = `<div class="iptv-list-empty">${esc(msg)}</div>`;
+    return;
+  }
+
+  const cats = {};
+  list.forEach((ch) => {
+    const c = ch.category || 'genel';
+    (cats[c] = cats[c] || []).push(ch);
+  });
+
+  Object.entries(cats).forEach(([cat, items]) => {
+    const hdr = document.createElement('div');
+    hdr.className = 'sidebar-section';
+    hdr.textContent = String(cat).toUpperCase();
+    container.appendChild(hdr);
+
+    items.forEach((ch) => {
+      const el = document.createElement('div');
+      el.className = 'iptv-channel-item';
+      el.dataset.iptvId = String(ch.id);
+      el.innerHTML = `
+        <div class="channel-logo">
+          ${ch.logo ? `<img src="${esc(ch.logo)}" alt="" onerror="this.style.display='none'">` : catEmoji(cat)}
+        </div>
+        <div style="flex:1;overflow:hidden">
+          <div class="channel-name">${esc(ch.name)}</div>
+          <div class="channel-cat">${esc(ch.source || '')} · ${esc(cat)}</div>
+        </div>
+      `;
+      el.addEventListener('click', () => playIptvChannel(ch));
+      container.appendChild(el);
+    });
+  });
+}
+
+function buildIptvPlayUrl(raw) {
+  const u = String(raw || '').trim();
+  if (!u) return u;
+  if (u.includes('/proxy/hls')) return u;
+  if (u.includes('.m3u8') || u.includes('.smil') || /\.m3u8(\?|$)/i.test(u)) {
+    return `/proxy/hls?url=${encodeURIComponent(u)}`;
+  }
+  return u;
+}
+
+async function loadIptvChannels() {
+  const container = document.getElementById('iptv-channel-list');
+  try {
+    const list = await API.get('/iptv/channels');
+    allIptvChannels = Array.isArray(list) ? list : [];
+    iptvApplyFilters();
+  } catch (e) {
+    console.error('[IPTV] Liste yüklenemedi:', e.message);
+    if (container) {
+      const t = typeof AppI18n !== 'undefined' ? AppI18n.t('iptvListEmpty') : 'Liste alınamadı.';
+      container.innerHTML = `<div style="padding:20px;color:#888;font-size:13px;text-align:center">${esc(t)}</div>`;
+    }
+  }
+}
+
+async function playIptvChannel(ch) {
+  document.querySelectorAll('.iptv-channel-item').forEach((el) =>
+    el.classList.toggle('active', el.dataset.iptvId === String(ch.id))
+  );
+  const subEl = document.getElementById('iptv-now-playing-sub');
+  const titleEl = document.getElementById('iptv-now-playing-title');
+  if (titleEl) titleEl.textContent = ch.name || '—';
+  if (subEl) subEl.textContent = [ch.category, ch.source].filter(Boolean).join(' · ');
+
+  const raw = ch.url;
+  const url = buildIptvPlayUrl(raw);
+  const isHls = !!(raw && (raw.includes('.m3u8') || raw.includes('.smil') || url.includes('proxy/hls')));
+
+  try {
+    await iptvPlayer.load(
+      { url, name: ch.name, isHls },
+      { silentError: false, throwOnError: true }
+    );
+    showIptvOverlay();
+    updateDockBackButton();
+  } catch (err) {
+    console.warn('[IPTV] Oynatma hatası:', ch.name, err.message);
+    if (typeof iptvPlayer._showError === 'function') {
+      const userMsg = typeof iptvPlayer._toUserError === 'function'
+        ? iptvPlayer._toUserError(err.message || '', ch)
+        : 'Yayın açılamadı. Kaynak veya bağlantıyı kontrol edin.';
+      iptvPlayer._showError(userMsg);
+    }
+  }
+  updateDockBackButton();
+}
+
+function iptvGoSectionHome() {
+  hideIptvOverlay();
+  try { iptvPlayer.stop({ suppressErrorsMs: 800 }); } catch (e) {
+    console.warn('[IPTV] stop:', e.message);
+  }
+  document.querySelectorAll('.iptv-channel-item').forEach((el) => el.classList.remove('active'));
+  const t = document.getElementById('iptv-now-playing-title');
+  const s = document.getElementById('iptv-now-playing-sub');
+  if (t) t.textContent = '—';
+  if (s) s.textContent = '';
+  iptvEnsureEmptyState();
+  updateDockBackButton();
+}
+
+function toggleIptvPlay() {
+  iptvPlayer.togglePlay();
+  const btn = document.getElementById('iptv-btn-play');
+  if (btn) btn.innerHTML = iptvPlayer.video.paused ? TV_ICONS.play : TV_ICONS.pause;
+}
+
+function toggleIptvMute() {
+  const m = iptvPlayer.toggleMute();
+  document.getElementById('iptv-btn-mute').innerHTML = m ? TV_ICONS.mute : TV_ICONS.vol;
+}
+
+function setIptvVolume(val) {
+  iptvPlayer.setVolume(val / 100);
+  const muted = Number(val) === 0;
+  iptvPlayer.video.muted = muted;
+  document.getElementById('iptv-btn-mute').innerHTML = muted ? TV_ICONS.mute : TV_ICONS.vol;
+}
+
+function toggleIptvFullscreen() {
+  const el = document.getElementById('iptv-player-area');
+  if (!el) return;
+  if (!document.fullscreenElement) {
+    (el.requestFullscreen || el.webkitRequestFullscreen).call(el);
+  } else {
+    (document.exitFullscreen || document.webkitExitFullscreen).call(document);
   }
 }
 
@@ -355,10 +669,21 @@ function ytShowView(view) {
   _ytCurrentView = view;
   document.getElementById('yt-view-main').style.display   = view === 'main'   ? '' : 'none';
   document.getElementById('yt-view-player').style.display = view === 'player' ? '' : 'none';
+  updateDockBackButton();
+}
+
+function ytGoSectionHome() {
+  ytError('');
+  try { ytPlayer.stop({ suppressErrorsMs: 1200 }); } catch {}
+  try { cancelAnimationFrame(_ytProgressRaf); } catch {}
+  resolvedVideo = null;
+  ytLoading(false);
+  ytShowView('main');
+  ytLoadTrending();
 }
 
 function ytBackToMain() {
-  ytShowView('main');
+  ytGoSectionHome();
 }
 
 // ── VIEW 1: Ana grid (arama / trending) ───────────────────
@@ -368,7 +693,8 @@ function renderMainGrid(videos) {
   _ytMainVideos = videos;
   const grid = document.getElementById('yt-main-grid');
   if (!videos.length) {
-    grid.innerHTML = `<div class="yt-grid-empty"><div class="icon">🔍</div><div>Sonuç bulunamadı</div></div>`;
+    const t = typeof AppI18n !== 'undefined' ? AppI18n.t('ytNoResults') : 'Sonuç bulunamadı';
+    grid.innerHTML = `<div class="yt-grid-empty"><div class="icon">🔍</div><div>${esc(t)}</div></div>`;
     return;
   }
   grid.innerHTML = videos.map((v, i) => `
@@ -392,7 +718,8 @@ function renderSidebarGrid(videos) {
   _ytSidebarVideos = videos;
   const grid = document.getElementById('yt-sidebar-grid');
   if (!videos.length) {
-    grid.innerHTML = `<div class="yt-grid-empty" style="padding:30px 10px"><div>İlgili video bulunamadı</div></div>`;
+    const t = typeof AppI18n !== 'undefined' ? AppI18n.t('ytNoRelated') : 'İlgili video bulunamadı';
+    grid.innerHTML = `<div class="yt-grid-empty" style="padding:30px 10px"><div>${esc(t)}</div></div>`;
     return;
   }
   grid.innerHTML = videos.map((v, i) => `
@@ -428,7 +755,7 @@ async function _ytResolveAndPlay(v) {
 
   // Player view'e geç, spinner göster
   ytShowView('player');
-  document.getElementById('yt-now-playing-title').textContent = v.title || 'Yükleniyor...';
+  document.getElementById('yt-now-playing-title').textContent = v.title || (typeof AppI18n !== 'undefined' ? AppI18n.t('ytLoadingTitle') : 'Yükleniyor...');
   document.getElementById('yt-btn-play').innerHTML = YC_ICONS.pause;
   document.getElementById('yt-btn-mute').innerHTML = YC_ICONS.vol;
   document.getElementById('yt-spinner').classList.add('active');
@@ -444,7 +771,7 @@ async function _ytResolveAndPlay(v) {
     if (!data.videoId && _ytLastVideoId) data.videoId = _ytLastVideoId;
     await ytStartPlay(data);
   } catch {
-    ytError('Stream alınamadı.');
+    ytError(typeof AppI18n !== 'undefined' ? AppI18n.t('ytStreamFail') : 'Stream alınamadı.');
   } finally {
     document.getElementById('yt-spinner').classList.remove('active');
     _ytResolving = false;
@@ -454,7 +781,7 @@ async function _ytResolveAndPlay(v) {
 async function ytStartPlay(data) {
   resolvedVideo = data;
   _ytLastVideoId = String(data?.videoId || _ytLastVideoId || '').trim();
-  document.getElementById('yt-now-playing-title').textContent = data.title || 'Video';
+  document.getElementById('yt-now-playing-title').textContent = data.title || (typeof AppI18n !== 'undefined' ? AppI18n.t('ytVideoTitle') : 'Video');
   document.getElementById('yt-btn-play').innerHTML = YC_ICONS.pause;
   document.getElementById('yt-btn-mute').innerHTML = YC_ICONS.vol;
 
@@ -462,9 +789,13 @@ async function ytStartPlay(data) {
     ? `/proxy/hls?url=${encodeURIComponent(data.streamUrl)}`
     : data.streamUrl;
 
-  const ok = await ytPlayer.load({ url: streamUrl, name: data.title || 'Video', isHls: data.isHls });
+  const ok = await ytPlayer.load({
+    url: streamUrl,
+    name: data.title || (typeof AppI18n !== 'undefined' ? AppI18n.t('ytVideoTitle') : 'Video'),
+    isHls: data.isHls,
+  });
   if (!ok) {
-    ytError('Stream alınamadı.');
+    ytError(typeof AppI18n !== 'undefined' ? AppI18n.t('ytStreamFail') : 'Stream alınamadı.');
     return;
   }
   _startYtProgress();
@@ -483,6 +814,7 @@ async function _ytFetchSidebar(data) {
           : [];
         _userLanguage = String(profile?.language || _userLanguage || 'tr').toLowerCase();
         _interestTagsFetchedAt = now;
+        applyPlayerLocale();
       } catch {}
     }
 
@@ -557,23 +889,31 @@ async function ytSearch(q) {
   rememberSearchTerm(q);
   try { await API.post('/profile/search', { query: q }); } catch {}
   ytShowView('main');
-  ytLoading(true, 'Aranıyor...');
+  ytLoading(true, typeof AppI18n !== 'undefined' ? AppI18n.t('ytSearching') : 'Aranıyor...');
   ytError('');
   try {
     const r = await fetch(`/api/youtube/search?q=${encodeURIComponent(q)}&lang=${encodeURIComponent(_userLanguage)}`);
     const data = await r.json();
     ytLoading(false);
-    if (!r.ok || data.error) { ytError(data.error || 'Arama başarısız.'); return; }
-    if (!Array.isArray(data)) { ytError('Geçersiz yanıt.'); return; }
+    if (!r.ok || data.error) {
+      ytError(data.error || (typeof AppI18n !== 'undefined' ? AppI18n.t('ytSearchFailApi') : 'Arama başarısız.'));
+      return;
+    }
+    if (!Array.isArray(data)) {
+      ytError(typeof AppI18n !== 'undefined' ? AppI18n.t('ytInvalidResponse') : 'Geçersiz yanıt.');
+      return;
+    }
     renderMainGrid(data);
   } catch {
     ytLoading(false);
-    ytError('Arama başarısız.');
+    ytError(typeof AppI18n !== 'undefined' ? AppI18n.t('ytSearchFail') : 'Arama başarısız.');
   }
 }
 
 function setYtInputMode(mode) {
-  _ytInputMode = mode === 'link' ? 'link' : 'search';
+  const nextMode = mode === 'link' ? 'link' : 'search';
+  const changed = _ytInputMode !== nextMode;
+  _ytInputMode = nextMode;
   const searchBtn = document.getElementById('yt-input-search');
   const linkBtn = document.getElementById('yt-input-link');
   const input = document.getElementById('yt-main-input');
@@ -584,9 +924,16 @@ function setYtInputMode(mode) {
     linkBtn.classList.toggle('active', _ytInputMode === 'link');
   }
   if (input) {
-    input.placeholder = _ytInputMode === 'search'
-      ? 'Buraya aramak istediğiniz kelimeleri yazın...'
-      : 'Buraya açmak istediğiniz videonun linkini yapıştırın...';
+    if (changed) input.value = '';
+    if (typeof AppI18n !== 'undefined') {
+      input.placeholder = _ytInputMode === 'search'
+        ? AppI18n.t('ytPhSearch')
+        : AppI18n.t('ytPhLink');
+    } else {
+      input.placeholder = _ytInputMode === 'search'
+        ? 'Buraya aramak istediğiniz kelimeleri yazın...'
+        : 'Buraya açmak istediğiniz videonun linkini yapıştırın...';
+    }
     input.focus();
   }
   if (searchAction) searchAction.style.display = _ytInputMode === 'search' ? '' : 'none';
@@ -621,7 +968,7 @@ async function resolveUrl(rawUrl) {
     await ytStartPlay(data);
   } catch {
     ytLoading(false);
-    ytError('Sunucuya bağlanılamadı.');
+    ytError(typeof AppI18n !== 'undefined' ? AppI18n.t('ytConnectFail') : 'Sunucuya bağlanılamadı.');
   }
 }
 
@@ -705,7 +1052,7 @@ async function ytLoadTrending() {
   }
 
   if (_ytMainFeedMode === 'history') {
-    ytLoading(true, 'Geçmiş videolar hazırlanıyor...');
+    ytLoading(true, typeof AppI18n !== 'undefined' ? AppI18n.t('ytHistoryLoading') : 'Geçmiş videolar hazırlanıyor...');
     ytError('');
     const history = ytGetHistory();
     ytLoading(false);
@@ -713,15 +1060,16 @@ async function ytLoadTrending() {
       renderMainGrid(history);
       return;
     }
+    const hEmpty = typeof AppI18n !== 'undefined' ? AppI18n.t('ytHistoryEmpty') : 'Henüz izleme geçmişi bulunamadı';
     document.getElementById('yt-main-grid').innerHTML = `
       <div class="yt-grid-empty">
         <div class="icon" style="font-size:44px;opacity:0.35">•</div>
-        <div>Henüz izleme geçmişi bulunamadı</div>
+        <div>${esc(hEmpty)}</div>
       </div>`;
     return;
   }
 
-  ytLoading(true, 'Sana uygun videolar hazırlanıyor...');
+  ytLoading(true, typeof AppI18n !== 'undefined' ? AppI18n.t('ytSmartLoading') : 'Sana uygun videolar hazırlanıyor...');
   ytError('');
 
   try {
@@ -733,6 +1081,7 @@ async function ytLoadTrending() {
         : [];
       _userLanguage = String(profile?.language || _userLanguage || 'tr').toLowerCase();
       _interestTagsFetchedAt = Date.now();
+      applyPlayerLocale();
       queries = _membershipInterestTags.slice(0, 6);
     } catch {}
 
@@ -760,16 +1109,18 @@ async function ytLoadTrending() {
     if (Array.isArray(data) && data.length) {
       renderMainGrid(data);
     } else {
+      const hint = typeof AppI18n !== 'undefined' ? AppI18n.t('ytHintSearchYoutube') : 'YouTube\'da bir şeyler ara';
       document.getElementById('yt-main-grid').innerHTML = `
         <div class="yt-grid-empty">
           <div class="icon" style="font-size:48px;opacity:0.3">▶️</div>
-          <div>YouTube'da bir şeyler ara</div>
+          <div>${esc(hint)}</div>
         </div>`;
     }
   } catch {
     ytLoading(false);
+    const hint = typeof AppI18n !== 'undefined' ? AppI18n.t('ytHintStartSearch') : 'Aramaya başla';
     document.getElementById('yt-main-grid').innerHTML = `
-      <div class="yt-grid-empty"><div class="icon">🔍</div><div>Aramaya başla</div></div>`;
+      <div class="yt-grid-empty"><div class="icon">🔍</div><div>${esc(hint)}</div></div>`;
   }
 }
 
@@ -797,7 +1148,8 @@ function fmtViews(n) {
 
 function ytLoading(on, msg) {
   const el = document.getElementById('yt-loading');
-  el.textContent = msg || 'Yükleniyor...';
+  const def = typeof AppI18n !== 'undefined' ? AppI18n.t('ytLoading') : 'Yükleniyor...';
+  el.textContent = msg || def;
   el.classList.toggle('show', on);
 }
 
@@ -812,13 +1164,13 @@ async function playResolved() {
   const vid = String(resolvedVideo?.videoId || _ytLastVideoId || '').trim();
   if (vid) {
     try {
-      ytLoading(true, 'Video tekrar hazırlanıyor...');
+      ytLoading(true, typeof AppI18n !== 'undefined' ? AppI18n.t('ytReprepareVideo') : 'Video tekrar hazırlanıyor...');
       const url = `https://www.youtube.com/watch?v=${vid}`;
       const r = await fetch(`/proxy/resolve?url=${encodeURIComponent(url)}`);
       const data = await r.json();
       ytLoading(false);
       if (!r.ok) {
-        ytError(data.message || data.error || 'Stream alınamadı.');
+        ytError(data.message || data.error || (typeof AppI18n !== 'undefined' ? AppI18n.t('ytStreamFail') : 'Stream alınamadı.'));
         return;
       }
       if (!data.videoId) data.videoId = vid;
@@ -826,7 +1178,7 @@ async function playResolved() {
       return;
     } catch {
       ytLoading(false);
-      ytError('Video tekrar başlatılamadı.');
+      ytError(typeof AppI18n !== 'undefined' ? AppI18n.t('ytRestartFailVideo') : 'Video tekrar başlatılamadı.');
       return;
     }
   }
@@ -969,6 +1321,125 @@ function esc(s) {
 }
 
 // ─────────────────────────────────────────────
+// Navigasyon (Google Maps Embed API — directions)
+// ─────────────────────────────────────────────
+
+let _navEmbedKey = '';
+let _navEmbedConfigLoaded = false;
+
+async function navEnsureEmbedConfig() {
+  if (_navEmbedConfigLoaded) return;
+  try {
+    const data = await API.get('/maps/embed-config');
+    _navEmbedKey = String(data.key || '').trim();
+  } catch (e) {
+    console.warn('[Nav] embed config', e.message);
+    _navEmbedKey = '';
+  }
+  _navEmbedConfigLoaded = true;
+}
+
+function navUpdatePlaceholderMessage() {
+  const ph = document.getElementById('nav-placeholder');
+  if (!ph || typeof AppI18n === 'undefined') return;
+  const t = (k) => AppI18n.t(k);
+  if (_navEmbedKey) {
+    ph.innerHTML = '<h2>' + esc(t('navPlaceholderTitle')) + '</h2><p>' + esc(t('navPlaceholderP')) + '</p>';
+  } else {
+    ph.innerHTML = '<h2>' + esc(t('navPlaceholderKeyTitle')) + '</h2><p>' + esc(t('navPlaceholderKeyP')) + '</p>';
+  }
+}
+
+function navUseCurrentLocation() {
+  if (!navigator.geolocation) {
+    window.alert(typeof AppI18n !== 'undefined' ? AppI18n.t('navAlertNoBrowserGeo') : 'Tarayıcı konum desteği vermiyor.');
+    return;
+  }
+  navigator.geolocation.getCurrentPosition(
+    (pos) => {
+      const o = document.getElementById('nav-origin');
+      if (o) {
+        o.value = `${pos.coords.latitude},${pos.coords.longitude}`;
+      }
+    },
+    (err) => {
+      console.warn('[Nav] geolocation', err);
+      window.alert(typeof AppI18n !== 'undefined' ? AppI18n.t('navAlertGeoFail') : 'Konum alınamadı. İzin ve HTTPS (veya localhost) ayarlarını kontrol edin.');
+    },
+    { enableHighAccuracy: true, timeout: 20000, maximumAge: 60000 }
+  );
+}
+
+function navTravelModeForMapsUrl(mode) {
+  const m = String(mode || 'driving').toLowerCase();
+  if (m === 'walking') return 'walking';
+  if (m === 'bicycling') return 'bicycling';
+  if (m === 'transit') return 'transit';
+  return 'driving';
+}
+
+function navOpenInGoogleMapsTab() {
+  const destEl = document.getElementById('nav-destination');
+  const originEl = document.getElementById('nav-origin');
+  const modeEl = document.getElementById('nav-mode');
+  const dest = String(destEl?.value || '').trim();
+  const origin = String(originEl?.value || '').trim();
+  const travelmode = navTravelModeForMapsUrl(modeEl?.value);
+  if (!dest) {
+    window.alert(typeof AppI18n !== 'undefined' ? AppI18n.t('navAlertDest') : 'Nereye alanını doldurun.');
+    return;
+  }
+  const u = new URL('https://www.google.com/maps/dir/');
+  u.searchParams.set('api', '1');
+  u.searchParams.set('destination', dest);
+  if (origin) u.searchParams.set('origin', origin);
+  u.searchParams.set('travelmode', travelmode);
+  window.open(u.toString(), '_blank', 'noopener,noreferrer');
+}
+
+function navApplyRoute() {
+  const originEl = document.getElementById('nav-origin');
+  const destEl = document.getElementById('nav-destination');
+  const modeEl = document.getElementById('nav-mode');
+  const frame = document.getElementById('nav-map-frame');
+  const ph = document.getElementById('nav-placeholder');
+  const origin = String(originEl?.value || '').trim();
+  const dest = String(destEl?.value || '').trim();
+  const mode = String(modeEl?.value || 'driving');
+
+  if (!dest) {
+    window.alert(typeof AppI18n !== 'undefined' ? AppI18n.t('navAlertDest') : 'Nereye alanını doldurun.');
+    return;
+  }
+  if (!origin) {
+    window.alert(typeof AppI18n !== 'undefined' ? AppI18n.t('navAlertOrigin') : 'Nereden alanını doldurun veya Konumum ile koordinat yazdırın.');
+    return;
+  }
+  if (!_navEmbedKey) {
+    window.alert(typeof AppI18n !== 'undefined' ? AppI18n.t('navAlertNoKey') : 'Gömülü harita için GOOGLE_MAPS_EMBED_API_KEY gerekli. Tam navigasyon için Haritalarda aç düğmesini kullanın.');
+    return;
+  }
+
+  const lang = String(_userLanguage || 'tr').toLowerCase();
+  const url =
+    'https://www.google.com/maps/embed/v1/directions?' +
+    new URLSearchParams({
+      key: _navEmbedKey,
+      origin,
+      destination: dest,
+      mode,
+      language: lang.length === 2 ? lang : 'tr',
+      region: lang === 'tr' ? 'tr' : lang,
+    }).toString();
+
+  if (frame) {
+    frame.src = url;
+    frame.style.display = 'block';
+  }
+  if (ph) ph.style.display = 'none';
+}
+
+// ─────────────────────────────────────────────
 // Dock navigasyon
 // ─────────────────────────────────────────────
 
@@ -980,10 +1451,24 @@ function stopInactiveSectionPlayback(nextSection) {
     try {
       player.video.pause();
       player.isPlaying = false;
-    } catch {}
+    } catch (e) {
+      console.warn('[TV] duraklatma', e.message);
+    }
     hideTvOverlay();
     const btn = document.getElementById('btn-play');
     if (btn) btn.innerHTML = TV_ICONS.play;
+  }
+
+  if (_activeSection === 'iptv' && nextSection !== 'iptv' && iptvPlayer) {
+    try {
+      iptvPlayer.video.pause();
+      iptvPlayer.isPlaying = false;
+    } catch (e) {
+      console.warn('[IPTV] duraklatma', e.message);
+    }
+    hideIptvOverlay();
+    const ib = document.getElementById('iptv-btn-play');
+    if (ib) ib.innerHTML = TV_ICONS.play;
   }
 
   // YouTube sekmesinden çıkınca stream'i düşürme: sadece duraklat (geri dönüşte tek tuşla devam etsin)
@@ -991,14 +1476,31 @@ function stopInactiveSectionPlayback(nextSection) {
     try {
       ytPlayer.video.pause();
       ytPlayer.isPlaying = false;
-    } catch {}
-    try { cancelAnimationFrame(_ytProgressRaf); } catch {}
+    } catch (e) {
+      console.warn('[YouTube] duraklatma', e.message);
+    }
+    try { cancelAnimationFrame(_ytProgressRaf); } catch (e2) {
+      console.warn('[YouTube] raf', e2.message);
+    }
     const btn = document.getElementById('yt-btn-play');
     if (btn) btn.innerHTML = YC_ICONS.play;
   }
 }
 
 function dockNav(section) {
+  if (_activeSection === section && section === 'youtube') {
+    ytGoSectionHome();
+    return;
+  }
+  if (_activeSection === section && section === 'tv') {
+    tvGoSectionHome();
+    return;
+  }
+  if (_activeSection === section && section === 'iptv') {
+    iptvGoSectionHome();
+    return;
+  }
+
   stopInactiveSectionPlayback(section);
 
   document.querySelectorAll('.dock-item').forEach(el => {
@@ -1019,6 +1521,18 @@ function dockNav(section) {
     _ytTrendingLoaded = true;
     ytLoadTrending();
   }
+
+  if (section === 'iptv') {
+    loadIptvChannels();
+  }
+
+  if (section === 'navigation') {
+    navEnsureEmbedConfig().then(() => {
+      navUpdatePlaceholderMessage();
+    });
+  }
+
+  updateDockBackButton();
 }
 
 document.addEventListener('DOMContentLoaded', init);
