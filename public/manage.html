@@ -1038,7 +1038,7 @@
           </td>
           <td><span class="role-badge role-${u.role}">${u.role === 'owner' ? (window.AppI18n ? AppI18n.t('manageRoleOwner') : 'Sahip') : (window.AppI18n ? AppI18n.t('manageRoleMember') : 'Üye')}</span></td>
           <td class="ip-cell ${u.locked_ip ? 'ip-locked' : ''}">
-            ${u.locked_ip || `<span style="color:#444">${window.AppI18n ? AppI18n.t('manageIpNone') : 'Henüz kilitlenmedi'}</span>`}
+            ${u.locked_ip ? esc(String(u.locked_ip).split('|').join(' · ')) : `<span style="color:#444">${window.AppI18n ? AppI18n.t('manageIpNone') : 'Henüz kilitlenmedi'}</span>`}
           </td>
           <td>
             <span style="color:${u.is_active ? '#6fbe6f' : '#e87474'};font-size:13px">
