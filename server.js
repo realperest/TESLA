@@ -3,6 +3,9 @@ const express = require('express');
 const cookieParser = require('cookie-parser');
 const path = require('path');
 
+const { materializeCookiesFromB64 } = require('./lib/ytDlpCookies');
+materializeCookiesFromB64();
+
 const { initDB } = require('./database');
 const authRoutes = require('./routes/auth');
 const apiRoutes = require('./routes/api');
