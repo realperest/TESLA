@@ -121,7 +121,8 @@ class TeslaPlayer {
     this._wcMode = true;
     this._stopWorker();
 
-    const rawUrl  = this._extractOriginalUrl(channel.url);
+    // ytUrl varsa (YouTube videosu) → sunucu yt-dlp pipeline kullanır, CDN sorunları yok
+    const rawUrl  = channel.ytUrl || this._extractOriginalUrl(channel.url);
     const wsProto = location.protocol === 'https:' ? 'wss:' : 'ws:';
     const wsUrl   = `${wsProto}//${location.host}/stream/ws?url=${encodeURIComponent(rawUrl)}`;
 

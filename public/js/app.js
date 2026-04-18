@@ -793,6 +793,7 @@ async function ytStartPlay(data) {
     url: streamUrl,
     name: data.title || (typeof AppI18n !== 'undefined' ? AppI18n.t('ytVideoTitle') : 'Video'),
     isHls: data.isHls,
+    ytUrl: data.videoId ? `https://www.youtube.com/watch?v=${data.videoId}` : null,
   });
   if (!ok) {
     ytError(typeof AppI18n !== 'undefined' ? AppI18n.t('ytStreamFail') : 'Stream alınamadı.');
