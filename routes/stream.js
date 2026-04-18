@@ -194,8 +194,10 @@ async function _startH264Async(ws, inputUrl) {
     'Referer: https://www.youtube.com/\r\n' +
     'Origin: https://www.youtube.com\r\n';
 
+  // Pipe modunda -re: MP4'ü gerçek zamanlı okur, 15x hız sorununu önler
+  // RTSP/HLS (canlı) için -re gereksiz ve zararlı
   const inputArgs = usePipe
-    ? ['-i', 'pipe:0']
+    ? ['-re', '-i', 'pipe:0']
     : ['-headers', ytHeaders, '-rtsp_transport', 'tcp', '-i', inputUrl];
 
   const args = [
@@ -324,7 +326,7 @@ async function _startMjpegAsync(ws, inputUrl) {
     'Origin: https://www.youtube.com\r\n';
 
   const inputArgs = usePipe
-    ? ['-i', 'pipe:0']
+    ? ['-re', '-i', 'pipe:0']
     : ['-headers', ytHeaders, '-rtsp_transport', 'tcp', '-i', inputUrl];
 
   const args = [

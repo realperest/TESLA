@@ -137,6 +137,8 @@ class TeslaPlayer {
       if (!firstFrameReceived) {
         firstFrameReceived = true;
         if (firstFrameTimer) { clearTimeout(firstFrameTimer); firstFrameTimer = null; }
+        // Ses, ilk video frame'i geldiğinde başlasın → ses-video senkronizasyonu
+        this._startAudio(channel);
       }
       if (this.canvas.width !== msg.bitmap.width || this.canvas.height !== msg.bitmap.height) {
         this.canvas.width  = msg.bitmap.width;
@@ -154,9 +156,10 @@ class TeslaPlayer {
 
       if (msg.type === 'ready') {
         this.isPlaying = true;
-        this._startAudio(channel);
+        // Ses başlatma _onFrame'e taşındı — ilk frame gelince ses+video eş zamanlı başlar
 
-        // H.264 modunda 6 saniye içinde frame gelmezse MJPEG'e geç
+        // H.264 modunda 15 saniye içinde frame gelmezse MJPEG'e geç
+        // (DoH + HTTP bağlantı + ffmpeg probe süresi ~5-8s olabiliyor)
         if (mode === 'h264') {
           firstFrameTimer = setTimeout(() => {
             if (!firstFrameReceived && this._wcMode) {
@@ -165,7 +168,7 @@ class TeslaPlayer {
               this._stopAudio();
               this._loadWebCodecs(channel, 'mjpeg').catch(() => {});
             }
-          }, 6000);
+          }, 15000);
         }
         return;
       }
