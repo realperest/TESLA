@@ -116,82 +116,86 @@ class TeslaPlayer {
   // WebCodecs modu
   // ─────────────────────────────────────────────────────────────────────────
 
-  async _loadWebCodecs(channel) {
+  async _loadWebCodecs(channel, mode) {
+    mode = mode || 'h264';
     this._wcMode = true;
     this._stopWorker();
 
-    // WebSocket URL'sini oluştur
-    // Kaynak URL: channel.url (HLS .m3u8 veya MP4)
-    // Eğer proxy URL'si geliyorsa (/proxy/hls?url=...) orijinal URL'yi çıkar
-    const rawUrl   = this._extractOriginalUrl(channel.url);
-    const wsProto  = location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const wsUrl    = `${wsProto}//${location.host}/stream/ws?url=${encodeURIComponent(rawUrl)}`;
+    const rawUrl  = this._extractOriginalUrl(channel.url);
+    const wsProto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const wsUrl   = `${wsProto}//${location.host}/stream/ws?url=${encodeURIComponent(rawUrl)}`;
 
-    // Worker oluştur
     this._worker = new Worker('/js/webcodecs-worker.js');
     this._workerActive = true;
 
-    // Worker'dan frame al ve canvas'a çiz
+    // İlk frame için timeout — gelmezse MJPEG'e geç
+    let firstFrameTimer = null;
+    let firstFrameReceived = false;
+
+    const _onFrame = (msg) => {
+      if (!this._wcMode || !msg.bitmap) return;
+      if (!firstFrameReceived) {
+        firstFrameReceived = true;
+        if (firstFrameTimer) { clearTimeout(firstFrameTimer); firstFrameTimer = null; }
+      }
+      if (this.canvas.width !== msg.bitmap.width || this.canvas.height !== msg.bitmap.height) {
+        this.canvas.width  = msg.bitmap.width;
+        this.canvas.height = msg.bitmap.height;
+      }
+      this.ctx.drawImage(msg.bitmap, 0, 0, this.canvas.width, this.canvas.height);
+      msg.bitmap.close();
+    };
+
     this._worker.onmessage = (e) => {
       const msg = e.data;
       if (!msg) return;
 
-      if (msg.type === 'frame') {
-        if (msg.bitmap && this._wcMode) {
-          // Canvas boyutunu ilk frame'de ayarla
-          if (this.canvas.width !== msg.bitmap.width || this.canvas.height !== msg.bitmap.height) {
-            this.canvas.width  = msg.bitmap.width;
-            this.canvas.height = msg.bitmap.height;
-          }
-          this.ctx.drawImage(msg.bitmap, 0, 0, this.canvas.width, this.canvas.height);
-          msg.bitmap.close();
-        }
-      }
+      if (msg.type === 'frame')  { _onFrame(msg); return; }
 
       if (msg.type === 'ready') {
         this.isPlaying = true;
-        // Ses akışını başlat (HLS URL ile <audio>)
         this._startAudio(channel);
+
+        // H.264 modunda 6 saniye içinde frame gelmezse MJPEG'e geç
+        if (mode === 'h264') {
+          firstFrameTimer = setTimeout(() => {
+            if (!firstFrameReceived && this._wcMode) {
+              console.warn('[Player] H264 frame gelmedi, MJPEG fallback deneniyor...');
+              this._stopWorker();
+              this._stopAudio();
+              this._loadWebCodecs(channel, 'mjpeg').catch(() => {});
+            }
+          }, 6000);
+        }
+        return;
       }
 
-      if (msg.type === 'closed' || msg.type === 'error') {
+      if (msg.type === 'error') {
+        console.error('[Player/WC] Worker hata:', msg.message);
+      }
+
+      if (msg.type === 'closed') {
         this.isPlaying = false;
-        if (msg.type === 'error') {
-          console.error('[Player/WC] Worker hata:', msg.message);
-        }
       }
     };
 
     this._worker.onerror = (e) => {
       console.error('[Player/WC] Worker uncaught:', e.message);
-      // Klasik moda düş
       this._wcMode = false;
       this._stopWorker();
       this._loadClassic(channel).catch(() => {});
     };
 
-    // Worker'ı başlat
-    this._worker.postMessage({
-      type  : 'start',
-      wsUrl : wsUrl,
-      mode  : 'h264',
-    });
+    this._worker.postMessage({ type: 'start', wsUrl, mode });
 
-    // Worker bağlantı kurulana kadar kısa bekle (spinner aktif kalır)
+    // WebSocket bağlantısı için kısa bekle
     await new Promise((resolve, reject) => {
-      const timeout = setTimeout(() => reject(new Error('Zaman aşımı')), 12000);
-      const origOnMessage = this._worker.onmessage;
-
+      const timeout = setTimeout(() => reject(new Error('Bağlantı zaman aşımı')), 10000);
+      const prev = this._worker.onmessage;
       this._worker.onmessage = (e) => {
-        origOnMessage(e);
-        if (e.data?.type === 'ready') {
-          clearTimeout(timeout);
-          resolve();
-        }
-        if (e.data?.type === 'error') {
-          clearTimeout(timeout);
-          reject(new Error(e.data.message));
-        }
+        prev(e);
+        if (e.data?.type === 'ready') { clearTimeout(timeout); resolve(); }
+        if (e.data?.type === 'error') { clearTimeout(timeout); reject(new Error(e.data.message)); }
       };
     });
   }

@@ -65,10 +65,16 @@ function handleStreamConnection(ws, req) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 function _startH264(ws, inputUrl) {
+  // YouTube CDN ve diğer kaynaklara erişmek için HTTP header'ları
+  const ytHeaders =
+    'User-Agent: Mozilla/5.0 (Linux; Android 11; Pixel 5) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/109.0.0.0 Mobile Safari/537.36\r\n' +
+    'Referer: https://www.youtube.com/\r\n' +
+    'Origin: https://www.youtube.com\r\n';
+
   const args = [
+    '-headers', ytHeaders,
     '-fflags', 'nobuffer+discardcorrupt',
     '-flags', 'low_delay',
-    '-avioflags', 'direct',
     '-rtsp_transport', 'tcp',
     '-i', inputUrl,
 
@@ -158,9 +164,16 @@ function _startH264(ws, inputUrl) {
     }
   });
 
-  ff.stderr.on('data', () => {}); // ffmpeg log'u sessizce yut
+  let stderrBuf = '';
+  ff.stderr.on('data', (chunk) => {
+    stderrBuf += chunk.toString();
+    const lines = stderrBuf.split('\n');
+    stderrBuf = lines.pop(); // tamamlanmamış satırı beklet
+    lines.forEach(l => { if (l.trim()) console.error('[ffmpeg/H264]', l); });
+  });
 
-  ff.on('close', () => {
+  ff.on('close', (code) => {
+    if (stderrBuf.trim()) console.error('[ffmpeg/H264]', stderrBuf);
     ACTIVE.delete(ws);
     if (ws.readyState <= 1) ws.close(1001, 'stream sona erdi');
   });
@@ -180,7 +193,13 @@ function _startH264(ws, inputUrl) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 function _startMjpeg(ws, inputUrl) {
+  const ytHeaders =
+    'User-Agent: Mozilla/5.0 (Linux; Android 11; Pixel 5) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/109.0.0.0 Mobile Safari/537.36\r\n' +
+    'Referer: https://www.youtube.com/\r\n' +
+    'Origin: https://www.youtube.com\r\n';
+
   const args = [
+    '-headers', ytHeaders,
     '-fflags', 'nobuffer+discardcorrupt',
     '-flags', 'low_delay',
     '-rtsp_transport', 'tcp',
@@ -229,9 +248,16 @@ function _startMjpeg(ws, inputUrl) {
     }
   });
 
-  ff.stderr.on('data', () => {});
+  let stderrBufM = '';
+  ff.stderr.on('data', (chunk) => {
+    stderrBufM += chunk.toString();
+    const lines = stderrBufM.split('\n');
+    stderrBufM = lines.pop();
+    lines.forEach(l => { if (l.trim()) console.error('[ffmpeg/MJPEG]', l); });
+  });
 
   ff.on('close', () => {
+    if (stderrBufM.trim()) console.error('[ffmpeg/MJPEG]', stderrBufM);
     ACTIVE.delete(ws);
     if (ws.readyState <= 1) ws.close(1001, 'stream sona erdi');
   });
