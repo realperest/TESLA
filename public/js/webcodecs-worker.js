@@ -146,12 +146,16 @@ function _configureDecoder(sps, pps) {
 
   decoder = new VideoDecoder({
     output: function (frame) {
-      createImageBitmap(frame).then(function (bitmap) {
+      try {
+        const ofc = new OffscreenCanvas(frame.displayWidth, frame.displayHeight);
+        ofc.getContext('2d').drawImage(frame, 0, 0);
         frame.close();
+        const bitmap = ofc.transferToImageBitmap();
         self.postMessage({ type: 'frame', bitmap }, [bitmap]);
-      }).catch(function () {
-        frame.close();
-      });
+      } catch (err) {
+        try { frame.close(); } catch {}
+        self.postMessage({ type: 'error', message: 'Frame render: ' + err.message });
+      }
     },
     error: function (err) {
       self.postMessage({ type: 'error', message: 'VideoDecoder: ' + err.message });
