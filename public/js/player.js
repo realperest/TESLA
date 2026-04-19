@@ -247,6 +247,7 @@ class TeslaPlayer {
 
   _stopWorker() {
     if (this._worker) {
+      this._worker.onmessage = null;
       try { this._worker.postMessage({ type: 'stop' }); } catch {}
       try { this._worker.terminate(); } catch {}
       this._worker = null;
