@@ -78,7 +78,18 @@ async function handleStreamConnection(ws, req) {
   try {
     if (_isYouTubeUrl(targetUrl)) {
       console.log('[Stream] yt-dlp:', targetUrl);
-      const ytArgs = [_ytCookieArgs(), '--no-playlist', '--no-warnings', '--force-ipv4', '--geo-bypass', '-f', '18/92/22/best', '-o', '-', targetUrl].flat().filter(Boolean);
+      const ytArgs = [
+        _ytCookieArgs(), 
+        '--no-playlist', 
+        '--no-warnings', 
+        '--force-ipv4', 
+        '--geo-bypass', 
+        '--user-agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+        '--extractor-args', 'youtube:player_client=ios,web',
+        '-f', '18/22/best', 
+        '-o', '-', 
+        targetUrl
+      ].flat().filter(Boolean);
       const yt = spawn(YT_DLP, ytArgs, { stdio: ['ignore', 'pipe', 'pipe'] });
       
       // thread_queue_size MUST be an INPUT option (before -i)
