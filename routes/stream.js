@@ -84,8 +84,7 @@ async function handleStreamConnection(ws, req) {
         '--no-warnings', 
         '--force-ipv4', 
         '--geo-bypass', 
-        '--user-agent', 'com.google.android.youtube/19.05.36 (Linux; U; Android 14; tr_TR; Pixel 8 Pro Build/UQ1A.240205.004) gzip',
-        '--extractor-args', 'youtube:player_client=android,ios',
+        '--extractor-args', 'youtube:player_client=tv,android',
         '-f', '18/22/best', 
         '-o', '-', 
         targetUrl
@@ -117,9 +116,8 @@ async function handleStreamConnection(ws, req) {
       _setupOutputs(ws, ff);
     } else {
       console.log('[Stream] Direct:', targetUrl);
-      // Removed -re for direct HLS/Stream inputs as it can cause stalls. Added identity headers and faster analysis.
       const args = [
-        '-user_agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        '-user-agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
         '-headers', 'Referer: https://www.trtizle.com/\r\n',
         '-probesize', '500000',
         '-analyzeduration', '500000',
