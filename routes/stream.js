@@ -16,13 +16,11 @@ try {
   FFMPEG_PATH = process.env.FFMPEG_PATH || 'ffmpeg';
 }
 
-// yt-dlp binary
 const YT_DLP = (() => {
   const venv = path.join(__dirname, '..', 'venv', 'Scripts', 'yt-dlp.exe');
   try { fs.accessSync(venv); return venv; } catch { return 'yt-dlp'; }
 })();
 
-// Cookie argümanları
 function _ytCookieArgs() {
   const candidates = [
     process.env.YOUTUBE_COOKIES_FILE,
@@ -36,12 +34,7 @@ function _ytCookieArgs() {
   return [];
 }
 
-// Aktif stream'ler: ws → { proc, yt?, fetch?, ffAudio? }
 const ACTIVE = new Map();
-
-// ─────────────────────────────────────────────────────────────────────────────
-// URL tipi tespiti
-// ─────────────────────────────────────────────────────────────────────────────
 
 function _isYouTubeUrl(url) {
   return /youtube\.com\/watch|youtu\.be\/|youtube\.com\/shorts\//.test(url);
@@ -51,10 +44,6 @@ function _isGoogleVideoCdn(url) {
   try { return new URL(url).hostname.endsWith('.googlevideo.com'); }
   catch { return false; }
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
-// DNS-over-HTTPS
-// ─────────────────────────────────────────────────────────────────────────────
 
 async function _dohResolve(hostname) {
   const endpoints = [
@@ -71,8 +60,8 @@ async function _dohResolve(hostname) {
       if (!res.ok) continue;
       const json   = await res.json();
       const record = (json.Answer || []).find(r => r.type === 1);
-      if (record?.data) { console.log(`[DoH] ${hostname} → ${record.data}`); return record.data; }
-    } catch (e) { console.warn(`[DoH] ${url} başarısız:`, e.message); }
+      if (record?.data) return record.data;
+    } catch {}
   }
   return null;
 }
@@ -80,7 +69,6 @@ async function _dohResolve(hostname) {
 async function _fetchAndPipe(inputUrl, writable, onError) {
   let parsed;
   try { parsed = new URL(inputUrl); } catch(e) { onError(e); return { abort: () => {} }; }
-
   const ip = await _dohResolve(parsed.hostname);
   if (!ip) { onError(new Error(`DoH DNS çözümü başarısız: ${parsed.hostname}`)); return { abort: () => {} }; }
 
@@ -88,7 +76,6 @@ async function _fetchAndPipe(inputUrl, writable, onError) {
     async function doRequest(url, depth) {
       if (depth > 5) { onError(new Error('Çok fazla yönlendirme')); resolve({ abort: () => {} }); return; }
       let p; try { p = new URL(url); } catch(e) { onError(e); resolve({ abort: () => {} }); return; }
-
       let targetIp = depth === 0 ? ip : await _dohResolve(p.hostname);
       if (!targetIp) { onError(new Error(`Redirect DoH başarısız: ${p.hostname}`)); resolve({ abort: () => {} }); return; }
 
@@ -99,7 +86,7 @@ async function _fetchAndPipe(inputUrl, writable, onError) {
         port: Number(p.port) || (isHttps ? 443 : 80),
         path: p.pathname + p.search, method: 'GET',
         rejectUnauthorized: false,
-        headers: { 'Host': p.hostname, 'User-Agent': 'Mozilla/5.0 (Linux; Android 11; Pixel 5) AppleWebKit/537.36', 'Referer': 'https://www.youtube.com/', 'Origin': 'https://www.youtube.com' },
+        headers: { 'Host': p.hostname, 'User-Agent': 'Mozilla/5.0', 'Referer': 'https://www.youtube.com/', 'Origin': 'https://www.youtube.com' },
       }, (res) => {
         if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
           res.resume(); doRequest(res.headers.location, depth + 1); return;
@@ -116,10 +103,6 @@ async function _fetchAndPipe(inputUrl, writable, onError) {
   });
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// FFmpeg H.264 Argümanları
-// ─────────────────────────────────────────────────────────────────────────────
-
 function _h264Args() {
   return [
     '-re', '-i', 'pipe:0',
@@ -132,27 +115,7 @@ function _h264Args() {
   ];
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// WebSocket Mesaj Tipleri
-// ─────────────────────────────────────────────────────────────────────────────
-
 const TYPE_VIDEO = 0x01;
-const TYPE_AUDIO = 0x02;
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Ses ve Video Çıktılarını WebSocket'e Bağlama
-// ─────────────────────────────────────────────────────────────────────────────
-
-function _attachAudioOutput(ws, ffAudio) {
-  ffAudio.stdout.on('data', (chunk) => {
-    if (ws.readyState === 1) {
-      const header = Buffer.allocUnsafe(1);
-      header[0] = TYPE_AUDIO;
-      try { ws.send(Buffer.concat([header, chunk]), { binary: true }); } catch {}
-    }
-  });
-  ffAudio.stderr.on('data', () => {});
-}
 
 function _attachH264Output(ws, ff, label) {
   let buffer  = Buffer.alloc(0);
@@ -164,43 +127,22 @@ function _attachH264Output(ws, ff, label) {
     buffer = remaining;
 
     for (const unit of units) {
-      if (!unit.length) continue;
-      
+      if (unit.length < 5) continue;
       const scLen = (unit[0] === 0 && unit[1] === 0 && unit[2] === 0 && unit[3] === 1) ? 4 : 3;
-      if (unit.length <= scLen) continue;
-      
       const nalType = unit[scLen] & 0x1F;
       if (nalType === 9 || nalType === 12) continue;
       if (ws.readyState !== 1) return;
 
-      // PTS (Presentation Timestamp) ekleme - milisaniye cinsinden
       const pts = BigInt(Date.now() - startMs);
       const header = Buffer.allocUnsafe(9);
       header[0] = TYPE_VIDEO; 
       header.writeBigUInt64LE(pts, 1);
 
-      ws.send(Buffer.concat([header, unit]), { binary: true });
+      try { ws.send(Buffer.concat([header, unit]), { binary: true }); } catch {}
     }
   });
 
-  let stderrBuf = '';
-  ff.stderr.on('data', (chunk) => {
-    stderrBuf += chunk.toString();
-    const lines = stderrBuf.split('\n'); stderrBuf = lines.pop();
-    lines.forEach(l => { if (l.trim()) console.error(`[ffmpeg/${label}]`, l); });
-  });
-
-  ff.on('close', () => {
-    if (stderrBuf.trim()) console.error(`[ffmpeg/${label}]`, stderrBuf);
-    ACTIVE.delete(ws);
-    if (ws.readyState <= 1) ws.close(1001, 'stream sona erdi');
-  });
-
-  ff.on('error', (err) => {
-    console.error(`[Stream/${label}] ffmpeg hata:`, err.message);
-    ACTIVE.delete(ws);
-    if (ws.readyState <= 1) ws.close(1011, 'ffmpeg hatası');
-  });
+  ff.on('close', () => { ACTIVE.delete(ws); if (ws.readyState <= 1) ws.close(1001); });
 }
 
 function _splitNalUnits(buf) {
@@ -216,182 +158,71 @@ function _splitNalUnits(buf) {
   return { units, remaining: unitStart >= 0 ? buf.slice(unitStart) : buf };
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// WebSocket Bağlantı Yönetimi
-// ─────────────────────────────────────────────────────────────────────────────
-
 function handleStreamConnection(ws, req) {
   const search = new URL('http://x' + (req.url || '')).searchParams;
   const rawUrl = search.get('url');
-  if (!rawUrl) { ws.close(1008, 'url gerekli'); return; }
-
+  if (!rawUrl) { ws.close(1008); return; }
   let inputUrl;
-  try { inputUrl = decodeURIComponent(rawUrl); }
-  catch { ws.close(1008, 'geçersiz url'); return; }
-
+  try { inputUrl = decodeURIComponent(rawUrl); } catch { ws.close(1008); return; }
   _startStream(ws, inputUrl);
 }
 
 function _startStream(ws, inputUrl) {
-  _startStreamAsync(ws, inputUrl).catch(err => {
-    console.error('[Stream/H264] Başlatma hatası:', err.message);
-    if (ws.readyState <= 1) ws.close(1011, 'stream hatası');
-  });
+  _startStreamAsync(ws, inputUrl).catch(() => { if (ws.readyState <= 1) ws.close(1011); });
 }
 
 async function _startStreamAsync(ws, inputUrl) {
   if (_isYouTubeUrl(inputUrl)) {
-    console.log('[Stream/H264] YouTube→yt-dlp modu');
-
-    const cookieArgs = _ytCookieArgs();
-    const ytArgs = [
-      ...cookieArgs,
-      '--no-playlist', '--no-warnings', '--geo-bypass',
-      '--extractor-args', 'youtube:player_client=web,web_safari,android',
-      '-f', '18/best[ext=mp4][vcodec!=none][acodec!=none][height<=480]/best[vcodec!=none][acodec!=none][height<=480]',
-      '-o', '-',
-      inputUrl,
-    ];
-
-    const ffAudioArgs = [
-      '-i', 'pipe:0',
-      '-vn',
-      '-acodec', 'libmp3lame', '-q:a', '5',
-      '-f', 'mp3',
-      'pipe:1',
-    ];
-
-    const yt      = spawn(YT_DLP,    ytArgs,       { stdio: ['ignore', 'pipe', 'pipe'] });
-    const ff      = spawn(FFMPEG_PATH, _h264Args(), { stdio: ['pipe', 'pipe', 'pipe'] });
-    const ffAudio = spawn(FFMPEG_PATH, ffAudioArgs, { stdio: ['pipe', 'pipe', 'pipe'] });
-
-    yt.stdout.on('data', chunk => {
-      try { ff.stdin.write(chunk); } catch {}
-      try { ffAudio.stdin.write(chunk); } catch {}
-    });
-    yt.stdout.on('end', () => {
-      try { ff.stdin.end(); } catch {}
-      try { ffAudio.stdin.end(); } catch {}
-    });
-
-    ff.stdin.on('error', () => {});
-    ffAudio.stdin.on('error', () => {});
-
-    let ytStderr = '';
-    yt.stderr.on('data', chunk => {
-      ytStderr += chunk.toString();
-      const lines = ytStderr.split('\n'); ytStderr = lines.pop();
-      lines.forEach(l => { if (l.trim()) console.log('[yt-dlp/stream]', l); });
-    });
-    yt.on('error', err => console.error('[yt-dlp] spawn hatası:', err.message));
-    yt.on('close', code => { if (code !== 0) console.warn('[yt-dlp] çıkış kodu:', code); });
-
-    ACTIVE.set(ws, { proc: ff, yt, ffAudio });
+    const ytArgs = [_ytCookieArgs(), '--no-playlist', '--no-warnings', '--geo-bypass', '-f', '18/best', '-o', '-', inputUrl].flat().filter(Boolean);
+    const yt = spawn(YT_DLP, ytArgs, { stdio: ['ignore', 'pipe', 'ignore'] });
+    const ff = spawn(FFMPEG_PATH, _h264Args(), { stdio: ['pipe', 'pipe', 'ignore'] });
+    yt.stdout.pipe(ff.stdin);
+    ACTIVE.set(ws, { proc: ff, yt });
     _attachH264Output(ws, ff, 'H264-YT');
-    _attachAudioOutput(ws, ffAudio);
     ws.on('close', () => _killStream(ws));
-    ws.on('error', () => _killStream(ws));
     return;
   }
 
   if (_isGoogleVideoCdn(inputUrl)) {
-    console.log('[Stream/H264] DoH+pipe modu');
-    const ff = spawn(FFMPEG_PATH, _h264Args(), { stdio: ['pipe', 'pipe', 'pipe'] });
-    ff.stdin.on('error', () => {});
-
-    const fetchHandle = await _fetchAndPipe(inputUrl, ff.stdin, (err) => {
-      console.error('[Stream/H264] CDN fetch hatası:', err.message);
-      try { ff.kill('SIGKILL'); } catch {}
-    });
-
+    const ff = spawn(FFMPEG_PATH, _h264Args(), { stdio: ['pipe', 'pipe', 'ignore'] });
+    const fetchHandle = await _fetchAndPipe(inputUrl, ff.stdin, () => ff.kill('SIGKILL'));
     ACTIVE.set(ws, { proc: ff, fetch: fetchHandle });
     _attachH264Output(ws, ff, 'H264-CDN');
     ws.on('close', () => _killStream(ws));
-    ws.on('error', () => _killStream(ws));
     return;
   }
 
-  console.log('[Stream/H264] Direkt URL modu');
-  const ytHeaders =
-    'User-Agent: Mozilla/5.0 (Linux; Android 11; Pixel 5) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/109.0.0.0 Mobile Safari/537.36\r\n' +
-    'Referer: https://www.youtube.com/\r\n' +
-    'Origin: https://www.youtube.com\r\n';
-
-  const directArgs = [
-    '-fflags', 'nobuffer+discardcorrupt', '-flags', 'low_delay',
-    '-headers', ytHeaders, '-rtsp_transport', 'tcp', '-i', inputUrl,
-    '-an',
-    '-c:v', 'libx264', '-preset', 'ultrafast', '-tune', 'zerolatency',
-    '-profile:v', 'baseline', '-level', '4.1',
-    '-x264opts', 'annexb=1:repeat-headers=1:keyint=30:min-keyint=30:bframes=0:scenecut=0',
-    '-vf', 'scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2:color=black,fps=30',
-    '-f', 'h264', 'pipe:1',
-  ];
-
-  const ff = spawn(FFMPEG_PATH, directArgs, { stdio: ['ignore', 'pipe', 'pipe'] });
+  const directArgs = ['-headers', 'User-Agent: Mozilla/5.0\r\n', '-i', inputUrl, ..._h264Args()];
+  const ff = spawn(FFMPEG_PATH, directArgs, { stdio: ['ignore', 'pipe', 'ignore'] });
   ACTIVE.set(ws, { proc: ff });
   _attachH264Output(ws, ff, 'H264-Direct');
   ws.on('close', () => _killStream(ws));
-  ws.on('error', () => _killStream(ws));
 }
 
 function _killStream(ws) {
   const entry = ACTIVE.get(ws);
   if (entry) {
-    if (entry.fetch)    entry.fetch.abort();
-    if (entry.yt)       try { entry.yt.kill('SIGKILL'); } catch {}
-    if (entry.ffAudio)  try { entry.ffAudio.kill('SIGKILL'); } catch {}
+    if (entry.fetch) entry.fetch.abort();
+    if (entry.yt) try { entry.yt.kill('SIGKILL'); } catch {}
     try { entry.proc.kill('SIGKILL'); } catch {}
     ACTIVE.delete(ws);
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// HTTP Audio (YouTube Only)
-// ─────────────────────────────────────────────────────────────────────────────
-
 function handleAudioRequest(req, res) {
   const rawUrl = req.query.url;
-  if (!rawUrl) { res.status(400).end(); return; }
-
+  if (!rawUrl) return res.status(400).end();
   let inputUrl;
-  try { inputUrl = decodeURIComponent(rawUrl); } catch { res.status(400).end(); return; }
+  try { inputUrl = decodeURIComponent(rawUrl); } catch { return res.status(400).end(); }
 
-  if (!_isYouTubeUrl(inputUrl)) { res.status(400).end(); return; }
-
-  const cookieArgs = _ytCookieArgs();
-  const ytArgs = [
-    ...cookieArgs,
-    '--no-playlist', '--no-warnings', '--geo-bypass',
-    '--extractor-args', 'youtube:player_client=web,web_safari,android',
-    '-f', '140/bestaudio[ext=m4a]/bestaudio/18',
-    '-o', '-',
-    inputUrl,
-  ];
-
-  const yt = spawn(YT_DLP, ytArgs, { stdio: ['ignore', 'pipe', 'pipe'] });
-  const ff = spawn(FFMPEG_PATH, [
-    '-i', 'pipe:0',
-    '-vn',
-    '-acodec', 'libmp3lame', '-q:a', '5',
-    '-f', 'mp3',
-    'pipe:1',
-  ], { stdio: ['pipe', 'pipe', 'pipe'] });
-
-  yt.stdout.pipe(ff.stdin);
-  ff.stdin.on('error', () => {});
+  const ytArgs = [_ytCookieArgs(), '--no-playlist', '--no-warnings', '--geo-bypass', '-f', '140/bestaudio/18', '-o', '-', inputUrl].flat().filter(Boolean);
+  const yt = spawn(YT_DLP, ytArgs, { stdio: ['ignore', 'pipe', 'ignore'] });
+  const ff = spawn(FFMPEG_PATH, ['-i', 'pipe:0', '-vn', '-acodec', 'libmp3lame', '-q:a', '5', '-f', 'mp3', 'pipe:1'], { stdio: ['pipe', 'pipe', 'ignore'] });
   
+  yt.stdout.pipe(ff.stdin);
   res.setHeader('Content-Type', 'audio/mpeg');
-  res.setHeader('Cache-Control', 'no-cache');
   ff.stdout.pipe(res);
-
-  req.on('close', () => {
-    try { yt.kill('SIGKILL'); } catch {}
-    try { ff.kill('SIGKILL'); } catch {}
-  });
-
-  let ytErr = '';
-  yt.stderr.on('data', c => { ytErr += c; const l = ytErr.split('\n'); ytErr = l.pop(); l.forEach(x => x.trim() && console.log('[AudioStream/yt-dlp]', x)); });
+  req.on('close', () => { try { yt.kill('SIGKILL'); ff.kill('SIGKILL'); } catch {} });
 }
 
 module.exports = { handleStreamConnection, handleAudioRequest };
