@@ -34,7 +34,12 @@ class TeslaPlayer {
     this.currentChannel = null;
 
     this._syncTimer   = null;
+    this._dummyVideo  = document.createElement('video');
   }
+
+  // Backwards compatibility for app.js UI logic
+  get video() { return this._audio || this._dummyVideo; }
+  get hasActiveSource() { return !!this._worker || !!this._audio; }
 
   _startSyncLoop() {
     if (this._syncTimer) clearInterval(this._syncTimer);
