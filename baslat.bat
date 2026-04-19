@@ -2,6 +2,43 @@
 title Açıl Susam
 cd /d "%~dp0"
 
+if /i "%~1"=="cookies" goto cookies_b64
+if /i "%~1"=="b64" goto cookies_b64
+if /i "%~1"=="railway" goto cookies_b64
+goto start_normal
+
+:cookies_b64
+title Açıl Susam - YouTube cookies (Railway B64)
+echo.
+echo  YouTube cookies ^> Base64 (tek seferlik, panoya)
+echo  Kaynak: bu klasordeki youtube-cookies.txt
+echo.
+if not exist "youtube-cookies.txt" (
+    echo  HATA: youtube-cookies.txt yok. Tarayicidan cikardiginiz
+    echo  cikere dosyasini proje kokune "youtube-cookies.txt" adiyla kaydedin.
+    echo.
+    pause
+    exit /b 1
+)
+echo  Base64 uretilip PANO'ya aliniyor...
+powershell -NoProfile -ExecutionPolicy Bypass -Command "[Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes((Get-Content -Path '.\youtube-cookies.txt' -Raw))) | Set-Clipboard"
+if errorlevel 1 (
+    echo  HATA: PowerShell / pano islemi basarisiz.
+    pause
+    exit /b 1
+)
+echo.
+echo  Tamam. Panoda tek satir Base64 var.
+echo.
+echo  Railway: TESLA proje - Variables - ekle:
+echo    YOUTUBE_COOKIES_FILE  =  /data/youtube-cookies.txt
+echo    YOUTUBE_COOKIES_B64   =  (panodaki satiri yapistir)
+echo  Sonra Redeploy.
+echo.
+pause
+exit /b 0
+
+:start_normal
 echo.
 echo  Açıl Susam Başlatıcı
 echo.
@@ -119,6 +156,8 @@ echo.
 echo  Açıl Susam çalışıyor
 echo  Adres   : http://localhost:3000
 echo  Yonetim : http://localhost:3000/manage
+echo  Railway B64 (PowerShell):  .\baslat.bat cookies
+echo  CMD icin:  baslat.bat cookies
 echo.
 echo  Kapatmak icin bir tusa basin.
 pause >nul
