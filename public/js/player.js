@@ -59,23 +59,29 @@ class TeslaPlayer {
       this.mpegPlayer.destroy();
     }
 
+    console.log('[Player] Initializing JSMpeg for:', wsUrl);
     this.mpegPlayer = new window.JSMpeg.Player(wsUrl, {
       canvas: this.canvas,
       audio: true,
       video: true,
       autoplay: true,
       disableGl: true, // Absolutely crucial for Tesla D-gear bypass
-      audioBufferSize: 512 * 1024,
-      maxAudioLag: 0.2, // Prevents video from speeding up to catch up with old buffer
-      videoBufferSize: 512 * 1024,
+      audioBufferSize: 1024 * 1024,
+      videoBufferSize: 2 * 1024 * 1024, // Increased for stability
+      maxAudioLag: 0.3,
       onPlay: () => {
+        console.log('[Player] JSMpeg started playing');
         this.isPlaying = true;
         if (this.mpegPlayer && this.mpegPlayer.audioOut) {
           this.mpegPlayer.volume = 1; 
         }
       },
       onPause: () => {
+        console.log('[Player] JSMpeg paused');
         this.isPlaying = false;
+      },
+      onSourceEstablished: () => {
+        console.log('[Player] JSMpeg socket connected');
       }
     });
 

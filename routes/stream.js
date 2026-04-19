@@ -28,12 +28,14 @@ function _isYouTubeUrl(url) {
 
 function _ffmpegOutputs() {
   return [
-    '-re', // Read input in real time to prevent video from going too fast (Speed Sync)
     '-vf', 'scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2:color=black,fps=30',
-    '-map', '0:v:0?', '-map', '0:a:0?', // Explicitly map first video and audio streams
     '-f', 'mpegts',
     '-codec:v', 'mpeg1video',
-    '-b:v', '1500k',
+    '-s', '1280x720',
+    '-b:v', '1000k',
+    '-maxrate', '1200k',
+    '-bufsize', '2000k',
+    '-bf', '0',
     '-codec:a', 'mp2',
     '-ar', '44100',
     '-ac', '2',
@@ -44,33 +46,26 @@ function _ffmpegOutputs() {
 }
 
 function _setupOutputs(ws, ff) {
-  // JSMpeg expects raw MPEG-TS stream natively via WebSocket
   ff.stdout.on('data', (chunk) => {
-    if (ws.readyState === 1) {
-      ws.send(chunk);
-    }
+    if (ws.readyState === 1) ws.send(chunk);
   });
 
-  // ERROR LOGGING (pipe:2 - stderr)
   ff.stderr.on('data', (c) => {
     const msg = c.toString();
     if (msg.includes('Error') || msg.includes('Failed')) {
-      console.warn('[FMPEG-ERR]', msg.trim());
+      console.warn('[FMMPEG-ERR]', msg.trim());
     }
   });
 
-  ff.on('close', () => { ACTIVE.delete(ws); if (ws.readyState <= 1) ws.close(1001); });
+  ff.on('close', (code) => {
+    console.log('[Stream] FFmpeg exit code:', code);
+    ACTIVE.delete(ws);
+    if (ws.readyState <= 1) ws.close(1001);
+  });
 }
 
 function _sendWsPacket(ws, type, data, startTs) {
-  if (ws.readyState !== 1) return;
-  const pts = BigInt(Date.now() - startTs);
-  const header = Buffer.allocUnsafe(9);
-  header[0] = type;
-  header.writeBigUInt64LE(pts, 1);
-  try {
-    ws.send(Buffer.concat([header, data]), { binary: true });
-  } catch (e) {}
+  // Not used in Multiplex mode, but kept for legacy
 }
 
 async function handleStreamConnection(ws, req) {
@@ -80,24 +75,31 @@ async function handleStreamConnection(ws, req) {
   const targetUrl = decodeURIComponent(url);
   try {
     if (_isYouTubeUrl(targetUrl)) {
-      console.log('[Stream] YouTube Multiplex Mode:', targetUrl);
-      const ytArgs = [_ytCookieArgs(), '--no-playlist', '--no-warnings', '-f', '18/best', '-o', '-', targetUrl].flat().filter(Boolean);
-      const yt = spawn(YT_DLP, ytArgs, { stdio: ['ignore', 'pipe', 'ignore'] });
-      const args = ['-i', 'pipe:0'].concat(_ffmpegOutputs());
-      const ff = spawn(FFMPEG_PATH, args, { stdio: ['pipe', 'pipe', 'pipe', 'pipe'] });
+      console.log('[Stream] yt-dlp:', targetUrl);
+      const ytArgs = [_ytCookieArgs(), '--no-playlist', '--no-warnings', '-f', '18/92/22/best', '-o', '-', targetUrl].flat().filter(Boolean);
+      const yt = spawn(YT_DLP, ytArgs, { stdio: ['ignore', 'pipe', 'pipe'] });
+      
+      const args = ['-i', 'pipe:0', '-map', '0:v:0', '-map', '0:a:0'].concat(_ffmpegOutputs());
+      const ff = spawn(FFMPEG_PATH, args, { stdio: ['pipe', 'pipe', 'pipe'] });
       
       yt.stdout.pipe(ff.stdin);
+      
+      yt.stderr.on('data', (d) => {
+         const m = d.toString();
+         if (m.includes('ERROR')) console.warn('[YT-ERR]', m.trim());
+      });
+
       ACTIVE.set(ws, { ff, yt });
       _setupOutputs(ws, ff);
     } else {
-      console.log('[Stream] Direct Multiplex Mode:', targetUrl);
-      const args = ['-i', targetUrl].concat(_ffmpegOutputs());
-      const ff = spawn(FFMPEG_PATH, args, { stdio: ['ignore', 'pipe', 'pipe', 'pipe'] });
+      console.log('[Stream] Direct:', targetUrl);
+      const args = ['-i', targetUrl, '-map', '0:v:0?', '-map', '0:a:0?'].concat(_ffmpegOutputs());
+      const ff = spawn(FFMPEG_PATH, args, { stdio: ['ignore', 'pipe', 'pipe'] });
       ACTIVE.set(ws, { ff });
       _setupOutputs(ws, ff);
     }
   } catch (e) {
-    console.error('[Stream] Başlatma Hatası:', e.message);
+    console.error('[Stream] App Error:', e.message);
     ws.close(1011);
   }
 
