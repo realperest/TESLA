@@ -28,19 +28,20 @@ function _isYouTubeUrl(url) {
 
 function _ffmpegOutputs() {
   return [
+    '-thread_queue_size', '512',
     '-vf', 'scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2:color=black,fps=30',
     '-f', 'mpegts',
     '-codec:v', 'mpeg1video',
     '-s', '1280x720',
     '-b:v', '1000k',
     '-maxrate', '1200k',
-    '-bufsize', '2000k',
+    '-bufsize', '3000k',
     '-bf', '0',
     '-codec:a', 'mp2',
-    '-af', 'volume=2.0', // Boost audio volume
+    '-af', 'volume=2.5', // Slightly more boost
     '-ar', '44100',
     '-ac', '2',
-    '-b:a', '96k',
+    '-b:a', '128k',
     '-muxdelay', '0.001',
     'pipe:1'
   ];
@@ -80,10 +81,19 @@ async function handleStreamConnection(ws, req) {
       const ytArgs = [_ytCookieArgs(), '--no-playlist', '--no-warnings', '-f', '18/92/22/best', '-o', '-', targetUrl].flat().filter(Boolean);
       const yt = spawn(YT_DLP, ytArgs, { stdio: ['ignore', 'pipe', 'pipe'] });
       
-      // -re MUST be before -i pipe:0 to regulate the input read speed from the pipe
       const args = ['-re', '-i', 'pipe:0', '-map', '0:v:0', '-map', '0:a:0'].concat(_ffmpegOutputs());
       const ff = spawn(FFMPEG_PATH, args, { stdio: ['pipe', 'pipe', 'pipe'] });
       
+      // Prevent EPIPE crash
+      yt.stdout.on('error', (e) => console.warn('[YT-STDOUT-ERR]', e.message));
+      ff.stdin.on('error', (e) => {
+         if (e.code === 'EPIPE') {
+           console.warn('[FF-STDIN-EPIPE] FFmpeg input closed unexpectedly');
+         } else {
+           console.warn('[FF-STDIN-ERR]', e.message);
+         }
+      });
+
       yt.stdout.pipe(ff.stdin);
       
       yt.stderr.on('data', (d) => {

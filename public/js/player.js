@@ -86,6 +86,17 @@ class TeslaPlayer {
     });
 
     this.isPlaying = true;
+    
+    // Periodically check/resume audio context as Tesla browser aggressively suspends it
+    if (this._audioRetry) clearInterval(this._audioRetry);
+    this._audioRetry = setInterval(() => {
+        if (this.mpegPlayer && this.mpegPlayer.audioOut && this.mpegPlayer.audioOut.context) {
+            if (this.mpegPlayer.audioOut.context.state === 'suspended') {
+                console.log('[Player] Resuming audio context...');
+                this.mpegPlayer.audioOut.context.resume();
+            }
+        }
+    }, 2000);
 
     // Fake timeline for app.js progress bar
     if (this._dummyTimer) clearInterval(this._dummyTimer);
