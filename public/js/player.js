@@ -132,16 +132,15 @@ class TeslaPlayer {
     let firstFrameReceived = false;
 
     const _onFrame = (msg) => {
-      if (!this._wcMode || !msg.bitmap) return;
-      if (!firstFrameReceived) {
-        firstFrameReceived = true;
+      if (!this._wcMode || !msg.frame) return;
+      const w = msg.frame.displayWidth;
+      const h = msg.frame.displayHeight;
+      if (this.canvas.width !== w || this.canvas.height !== h) {
+        this.canvas.width  = w;
+        this.canvas.height = h;
       }
-      if (this.canvas.width !== msg.bitmap.width || this.canvas.height !== msg.bitmap.height) {
-        this.canvas.width  = msg.bitmap.width;
-        this.canvas.height = msg.bitmap.height;
-      }
-      this.ctx.drawImage(msg.bitmap, 0, 0, this.canvas.width, this.canvas.height);
-      msg.bitmap.close();
+      this.ctx.drawImage(msg.frame, 0, 0, w, h);
+      msg.frame.close();
     };
 
     this._worker.onmessage = (e) => {

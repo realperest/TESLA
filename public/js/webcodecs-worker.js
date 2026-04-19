@@ -11,16 +11,13 @@
  * SPS + PPS gelince AVCC DecoderConfigurationRecord oluşturulur ve
  * VideoDecoder description ile konfigure edilir.
  *
- * MJPEG modu:
- *   Byte 0 = 0xFF → JPEG frame (byte 1'den itibaren raw JPEG)
- *
  * Ana thread → Worker:
- *   { type: 'start', wsUrl, mode }
+ *   { type: 'start', wsUrl }
  *   { type: 'stop' }
  *
  * Worker → Ana thread:
- *   { type: 'frame', bitmap }   — Transferable ImageBitmap
- *   { type: 'ready', mode }
+ *   { type: 'frame', frame }  — Transferable VideoFrame (ana thread drawImage yapar)
+ *   { type: 'ready' }
  *   { type: 'closed' }
  *   { type: 'error', message }
  */
@@ -29,8 +26,8 @@
 
 let ws      = null;
 let decoder = null;
-let spsRaw  = null; // Uint8Array, start code olmadan
-let ppsRaw  = null; // Uint8Array, start code olmadan
+let spsRaw  = null;
+let ppsRaw  = null;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Ana thread mesajları
@@ -42,7 +39,7 @@ self.onmessage = function (e) {
 
   if (msg.type === 'start') {
     _cleanup();
-    _connect(msg.wsUrl, 'h264');
+    _connect(msg.wsUrl);
     return;
   }
   if (msg.type === 'stop') {
@@ -59,7 +56,7 @@ function _connect(wsUrl) {
   ws.binaryType = 'arraybuffer';
 
   ws.onopen = function () {
-    self.postMessage({ type: 'ready', mode: 'h264' });
+    self.postMessage({ type: 'ready' });
   };
 
   ws.onmessage = _onH264;
@@ -84,31 +81,30 @@ function _onH264(e) {
 
   const msgType = new Uint8Array(buf, 0, 1)[0];
 
-  // SPS mesajı
   if (msgType === 0x07) {
     spsRaw = new Uint8Array(buf.slice(1));
     return;
   }
 
-  // PPS mesajı — her iki NAL hazırsa decoder'ı configure et
   if (msgType === 0x08) {
     ppsRaw = new Uint8Array(buf.slice(1));
-    if (spsRaw) _configureDecoder(spsRaw, ppsRaw);
+    if (spsRaw) {
+      _configureDecoder(spsRaw, ppsRaw).catch(function (err) {
+        self.postMessage({ type: 'error', message: 'Decoder init: ' + err.message });
+      });
+    }
     return;
   }
 
-  // Frame mesajı (0x00 veya 0x01)
   if (msgType !== 0x00 && msgType !== 0x01) return;
-  if (buf.byteLength < 10) return; // header 9 byte + en az 1 byte data
-
-  if (!decoder || decoder.state === 'configured' === false) return;
+  if (buf.byteLength < 10) return;
+  if (!decoder || decoder.state !== 'configured') return;
 
   const isKey = msgType === 0x01;
   const view  = new DataView(buf);
-  const tsUs  = Number(view.getBigUint64(1, true)); // byte 1-8, LE
-  const avcc  = buf.slice(9); // AVCC formatında NAL data
+  const tsUs  = Number(view.getBigUint64(1, true));
+  const avcc  = buf.slice(9);
 
-  // Backpressure kontrolü: kuyruk doluysa delta frame'leri at
   if (decoder.decodeQueueSize > 8 && !isKey) return;
 
   try {
@@ -118,47 +114,46 @@ function _onH264(e) {
       data      : avcc,
     }));
   } catch (err) {
-    // Decoder hata verdiyse keyframe bekle
     if (isKey && spsRaw && ppsRaw) {
       try { decoder.close(); } catch {}
       decoder = null;
-      _configureDecoder(spsRaw, ppsRaw);
+      _configureDecoder(spsRaw, ppsRaw).catch(function () {});
     }
   }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// VideoDecoder konfigürasyonu — AVCC description tabanlı
+// VideoDecoder konfigürasyonu
 // ─────────────────────────────────────────────────────────────────────────────
 
-function _configureDecoder(sps, pps) {
+async function _configureDecoder(sps, pps) {
   if (decoder) {
     try { decoder.close(); } catch {}
     decoder = null;
   }
 
-  // AVCC DecoderConfigurationRecord oluştur
   const description = _buildAVCC(sps, pps);
+  const codec = 'avc1.' + _hex(sps[1]) + _hex(sps[2]) + _hex(sps[3]);
 
-  // codec string: avc1.PPCCLL (profile, compat, level hex)
-  const codec = 'avc1.' +
-    _hex(sps[1]) + _hex(sps[2]) + _hex(sps[3]);
+  // Codec desteğini doğrula
+  if (typeof VideoDecoder.isConfigSupported === 'function') {
+    try {
+      const check = await VideoDecoder.isConfigSupported({ codec, description });
+      if (!check.supported) {
+        self.postMessage({ type: 'error', message: 'Codec desteklenmiyor: ' + codec });
+        return;
+      }
+    } catch {}
+  }
 
   decoder = new VideoDecoder({
     output: function (frame) {
-      try {
-        const ofc = new OffscreenCanvas(frame.displayWidth, frame.displayHeight);
-        ofc.getContext('2d').drawImage(frame, 0, 0);
-        frame.close();
-        const bitmap = ofc.transferToImageBitmap();
-        self.postMessage({ type: 'frame', bitmap }, [bitmap]);
-      } catch (err) {
-        try { frame.close(); } catch {}
-        self.postMessage({ type: 'error', message: 'Frame render: ' + err.message });
-      }
+      // VideoFrame Transferable: zero-copy, ana thread drawImage ile çizer
+      self.postMessage({ type: 'frame', frame }, [frame]);
     },
     error: function (err) {
       self.postMessage({ type: 'error', message: 'VideoDecoder: ' + err.message });
+      decoder = null;
     },
   });
 
@@ -166,8 +161,7 @@ function _configureDecoder(sps, pps) {
     decoder.configure({
       codec,
       description,
-      hardwareAcceleration : 'prefer-hardware',
-      optimizeForLatency   : true,
+      hardwareAcceleration: 'no-preference',
     });
   } catch (err) {
     self.postMessage({ type: 'error', message: 'Decoder configure: ' + err.message });
@@ -177,24 +171,22 @@ function _configureDecoder(sps, pps) {
 }
 
 /**
- * SPS + PPS byte dizilerinden AVCC DecoderConfigurationRecord oluşturur.
- * Her iki dizi de start code OLMADAN ham NAL verisi içermeli.
- * Returns: ArrayBuffer
+ * AVCC DecoderConfigurationRecord oluşturur (start code olmadan ham NAL verisi).
  */
 function _buildAVCC(sps, pps) {
   const size = 11 + sps.length + pps.length;
   const buf  = new Uint8Array(size);
   let i = 0;
-  buf[i++] = 1;          // configurationVersion
-  buf[i++] = sps[1];     // AVCProfileIndication
-  buf[i++] = sps[2];     // profile_compatibility
-  buf[i++] = sps[3];     // AVCLevelIndication
-  buf[i++] = 0xFF;       // lengthSizeMinusOne = 3 → 4-byte length
-  buf[i++] = 0xE1;       // numSequenceParameterSets = 1
+  buf[i++] = 1;
+  buf[i++] = sps[1];
+  buf[i++] = sps[2];
+  buf[i++] = sps[3];
+  buf[i++] = 0xFF;
+  buf[i++] = 0xE1;
   buf[i++] = (sps.length >> 8) & 0xFF;
   buf[i++] = sps.length  & 0xFF;
   buf.set(sps, i); i += sps.length;
-  buf[i++] = 1;          // numPictureParameterSets
+  buf[i++] = 1;
   buf[i++] = (pps.length >> 8) & 0xFF;
   buf[i++] = pps.length  & 0xFF;
   buf.set(pps, i);
@@ -203,25 +195,6 @@ function _buildAVCC(sps, pps) {
 
 function _hex(n) {
   return (n & 0xFF).toString(16).padStart(2, '0');
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// MJPEG
-// ─────────────────────────────────────────────────────────────────────────────
-
-function _onMjpeg(e) {
-  const buf = e.data;
-  if (!buf || buf.byteLength < 2) return;
-
-  const first = new Uint8Array(buf, 0, 1)[0];
-  if (first !== 0xFF) return;
-
-  const jpegData = buf.slice(1);
-  const blob = new Blob([jpegData], { type: 'image/jpeg' });
-
-  createImageBitmap(blob).then(function (bitmap) {
-    self.postMessage({ type: 'frame', bitmap }, [bitmap]);
-  }).catch(function () {});
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
