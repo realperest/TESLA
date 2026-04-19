@@ -28,19 +28,19 @@ function _isYouTubeUrl(url) {
 
 function _ffmpegOutputs() {
   return [
-    '-vf', 'scale=960:540:force_original_aspect_ratio=decrease,pad=960:540:(ow-iw)/2:(oh-ih)/2:color=black,fps=30', // Sharper qHD at 30fps
+    '-vf', 'scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2:color=black,fps=24', // Full HD 720p
     '-f', 'mpegts',
     '-codec:v', 'mpeg1video',
-    '-s', '960x540',
-    '-b:v', '1500k', // High quality bitrate
-    '-maxrate', '1800k',
-    '-bufsize', '3000k',
-    '-g', '15',
+    '-s', '1280x720',
+    '-b:v', '2500k', // High quality HD bitrate
+    '-maxrate', '3000k',
+    '-bufsize', '5000k',
+    '-g', '12',
     '-acodec', 'mp2',
     '-af', 'volume=2.0',
     '-ar', '44100',
-    '-ac', '2', // Back to Stereo
-    '-b:a', '128k',
+    '-ac', '2',
+    '-b:a', '160k', // High quality audio
     '-mpegts_flags', '+initial_discontinuity+system_b',
     '-muxdelay', '0.001',
     'pipe:1'
