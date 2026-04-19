@@ -28,13 +28,13 @@ function _isYouTubeUrl(url) {
 
 function _ffmpegOutputs() {
   return [
-    '-vf', 'scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2:color=black,fps=30',
+    '-vf', 'scale=854:480:force_original_aspect_ratio=decrease,pad=854:480:(ow-iw)/2:(oh-ih)/2:color=black,fps=25', // Lower res & FPS for stability
     '-f', 'mpegts',
     '-codec:v', 'mpeg1video',
-    '-s', '1280x720',
-    '-b:v', '1000k',
-    '-maxrate', '1200k',
-    '-bufsize', '3000k',
+    '-s', '854x480',
+    '-b:v', '800k', // Lower bitrate for smoother flow
+    '-maxrate', '1000k',
+    '-bufsize', '2000k',
     '-bf', '0',
     '-acodec', 'mp2',
     '-af', 'loudnorm=I=-16:TP=-1.5:LRA=11', // Professional normalization for better triggers
@@ -78,7 +78,7 @@ async function handleStreamConnection(ws, req) {
   try {
     if (_isYouTubeUrl(targetUrl)) {
       console.log('[Stream] yt-dlp:', targetUrl);
-      const ytArgs = [_ytCookieArgs(), '--no-playlist', '--no-warnings', '-f', '18/92/22/best', '-o', '-', targetUrl].flat().filter(Boolean);
+      const ytArgs = [_ytCookieArgs(), '--no-playlist', '--no-warnings', '--force-ipv4', '--geo-bypass', '-f', '18/92/22/best', '-o', '-', targetUrl].flat().filter(Boolean);
       const yt = spawn(YT_DLP, ytArgs, { stdio: ['ignore', 'pipe', 'pipe'] });
       
       // thread_queue_size MUST be an INPUT option (before -i)
