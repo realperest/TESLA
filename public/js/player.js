@@ -64,10 +64,15 @@ class TeslaPlayer {
       audio: true,
       video: true,
       autoplay: true,
-      disableGl: true, // Absolutely crucial for Tesla D-gear bypass to avoid blocked WebGL contexts
+      disableGl: true, // Absolutely crucial for Tesla D-gear bypass
       audioBufferSize: 512 * 1024,
+      maxAudioLag: 0.2, // Prevents video from speeding up to catch up with old buffer
+      videoBufferSize: 512 * 1024,
       onPlay: () => {
         this.isPlaying = true;
+        if (this.mpegPlayer && this.mpegPlayer.audioOut) {
+          this.mpegPlayer.volume = 1; 
+        }
       },
       onPause: () => {
         this.isPlaying = false;

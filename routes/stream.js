@@ -28,14 +28,16 @@ function _isYouTubeUrl(url) {
 
 function _ffmpegOutputs() {
   return [
+    '-re', // Read input in real time to prevent video from going too fast (Speed Sync)
     '-vf', 'scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2:color=black,fps=30',
+    '-map', '0:v:0?', '-map', '0:a:0?', // Explicitly map first video and audio streams
     '-f', 'mpegts',
     '-codec:v', 'mpeg1video',
     '-b:v', '1500k',
     '-codec:a', 'mp2',
     '-ar', '44100',
     '-ac', '2',
-    '-b:a', '128k',
+    '-b:a', '96k',
     '-muxdelay', '0.001',
     'pipe:1'
   ];
