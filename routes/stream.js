@@ -117,10 +117,12 @@ async function handleStreamConnection(ws, req) {
     } else {
       console.log('[Stream] Direct:', targetUrl);
       const args = [
+        '-reconnect', '1',
+        '-reconnect_at_eof', '1',
+        '-reconnect_streamed', '1',
+        '-reconnect_delay_max', '2',
         '-user-agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
         '-headers', 'Referer: https://www.trtizle.com/\r\n',
-        '-probesize', '500000',
-        '-analyzeduration', '500000',
         '-i', targetUrl, 
         '-map', '0:v:0?', 
         '-map', '0:a:0?'
