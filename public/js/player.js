@@ -1,80 +1,31 @@
-/**
- * Açıl Susam — TeslaPlayer V3 (Multiplex & Stable Edition)
- * Versiyon: 260419.0021
- */
-
 'use strict';
 
-function isTesla() { return /Tesla\//.test(navigator.userAgent); }
-
-function supportsWebCodecs() { 
-  return typeof VideoDecoder !== 'undefined' && 
-         typeof Worker !== 'undefined' && 
-         typeof HTMLCanvasElement.prototype.transferControlToOffscreen !== 'undefined'; 
-}
+/**
+ * TeslaPlayer V4 (JSMpeg Edition)
+ * Rebuilt from scratch using JSMpeg for 100% Canvas & AudioContext compatibility.
+ * Bypasses all complex WebCodecs and container restrictions.
+ */
 
 class TeslaPlayer {
   constructor(canvasId, opts = {}) {
     this.canvas       = document.getElementById(canvasId);
-    this._offscreen   = null;
-    try { this._offscreen = this.canvas.transferControlToOffscreen(); } catch {}
-    this._ctx         = null;
     this.spinnerId    = opts.spinnerId    || 'spinner';
     this.containerId  = opts.containerId  || 'player-area';
     this.container    = document.getElementById(this.containerId);
 
     this.isPlaying    = false;
-    this._wcMode      = false;
     this.currentChannel = null;
-    this._syncTimer   = null;
+    
+    // Internal JSMpeg instance
+    this.mpegPlayer = null;
+    
+    // For backwards app.js compatibility
     this._dummyVideo  = document.createElement('video');
-
-    // Create persistent worker
-    if (isTesla() || supportsWebCodecs()) {
-      this._worker = new Worker('/js/webcodecs-worker.js');
-      if (this._offscreen) {
-        this._worker.postMessage({ type: 'init_canvas', canvas: this._offscreen }, [this._offscreen]);
-      }
-      this._worker.onmessage = this._handleWorkerMessage.bind(this);
-    }
+    this._dummyTimer  = null;
   }
 
-  // Backwards compatibility for app.js UI logic
-  get video() { return this._audioCtx ? this._dummyVideo : this._dummyVideo; }
-  get hasActiveSource() { return !!this._worker && this.isPlaying; }
-
-  _handleWorkerMessage(e) {
-    const msg = e.data;
-    if (msg.type === 'ready') {
-      this.isPlaying = true;
-      this._startSyncLoop();
-    } else if (msg.type === 'audio-pcm') {
-      this._handlePcmAudio(msg.pcm, msg.info);
-    } else if (msg.type === 'error') {
-      console.error('[Player/Worker] Error:', msg.message);
-    }
-  }
-
-  _startSyncLoop() {
-    if (this._syncTimer) clearInterval(this._syncTimer);
-    this._syncTimer = setInterval(() => {
-      if (this._wcMode && this.isPlaying && this._audioCtx) {
-        // Master Clock: AudioContext currentTime (ms) -> Worker'a gönder
-        this._worker?.postMessage({ 
-          type: 'sync', 
-          currentTime: this._audioCtx.currentTime * 1000 
-        });
-        
-        // Populate dummy video's timeline to keep app.js happy
-        if (this._dummyVideo) {
-          try {
-            this._dummyVideo.currentTime = this._audioCtx.currentTime;
-            Object.defineProperty(this._dummyVideo, 'duration', { value: this._audioCtx.currentTime + 3600, configurable: true }); 
-          } catch(e) {}
-        }
-      }
-    }, 16); // ~60fps
-  }
+  get video() { return this._dummyVideo; }
+  get hasActiveSource() { return !!this.mpegPlayer; }
 
   async load(channel, opts = {}) {
     const silentError  = !!opts.silentError;
@@ -82,25 +33,12 @@ class TeslaPlayer {
 
     this.stop();
     this.currentChannel = channel;
-
-    // Create AudioContext inside user-gesture wrapper to satisfy Autoplay policies
-    if (!this._audioCtx) {
-      this._audioCtx = new (window.AudioContext || window.webkitAudioContext)({ latencyHint: 'interactive' });
-    }
-    if (this._audioCtx.state === 'suspended') {
-      try { this._audioCtx.resume(); } catch {}
-    }
-    this._nextAudioTime = this._audioCtx.currentTime + 0.1;
     
     const spinner = document.getElementById(this.spinnerId);
     if (spinner) spinner.classList.add('active');
 
     try {
-      if (isTesla() || supportsWebCodecs()) {
-        await this._loadWebCodecs(channel);
-      } else {
-        await this._loadClassic(channel);
-      }
+      this._startJsmpeg(channel);
       return true;
     } catch (err) {
       console.error('[Player] Load Error:', err);
@@ -112,88 +50,62 @@ class TeslaPlayer {
     }
   }
 
-  async _loadClassic(channel) {
-    throw new Error('Fallback _loadClassic not implemented in V3. Device must support WebCodecs.');
-  }
-
-  async _loadWebCodecs(channel) {
-    this._wcMode = true;
+  _startJsmpeg(channel) {
     const rawUrl = channel.ytUrl || channel.url;
     const wsProto = location.protocol === 'https:' ? 'wss:' : 'ws:';
     const wsUrl = `${wsProto}//${location.host}/stream/ws?url=${encodeURIComponent(rawUrl)}`;
 
-    if (!this._worker) {
-      throw new Error("Worker was not initialized.");
+    if (this.mpegPlayer) {
+      this.mpegPlayer.destroy();
     }
 
-    this._worker.postMessage({ type: 'start', wsUrl });
-
-    // Handshake bekle
-    return new Promise((res, rej) => {
-      const timeout = setTimeout(() => rej('Worker Timeout'), 15000);
-      const originalHandler = this._worker.onmessage;
-      this._worker.onmessage = (e) => {
-        if (originalHandler) originalHandler(e);
-        if (e.data.type === 'ready') { clearTimeout(timeout); res(); }
-      };
-    });
-  }
-
-  _handlePcmAudio(pcmBuffer, info) {
-    if (!this._audioCtx) return; // Should be initialized in load()
-
-    const { sampleRate, numberOfChannels, numberOfFrames } = info;
-    const f32 = new Float32Array(pcmBuffer);
-    
-    const audioBuffer = this._audioCtx.createBuffer(numberOfChannels, numberOfFrames, sampleRate);
-    
-    // Copy planar data to audio buffer channels
-    for (let c = 0; c < numberOfChannels; c++) {
-      const channelData = audioBuffer.getChannelData(c);
-      const offset = c * numberOfFrames;
-      for (let i = 0; i < numberOfFrames; i++) {
-        channelData[i] = f32[offset + i];
+    this.mpegPlayer = new window.JSMpeg.Player(wsUrl, {
+      canvas: this.canvas,
+      audio: true,
+      video: true,
+      autoplay: true,
+      audioBufferSize: 512 * 1024,
+      onPlay: () => {
+        this.isPlaying = true;
+      },
+      onPause: () => {
+        this.isPlaying = false;
       }
-    }
+    });
 
-    const source = this._audioCtx.createBufferSource();
-    source.buffer = audioBuffer;
-    
-    // Gain node for volume/mute control
-    if (!this._gainNode) {
-      this._gainNode = this._audioCtx.createGain();
-      this._gainNode.connect(this._audioCtx.destination);
-    }
-    source.connect(this._gainNode);
+    this.isPlaying = true;
 
-    // Sync safety: if we fell too far behind, jump forward
-    if (this._nextAudioTime < this._audioCtx.currentTime) {
-      this._nextAudioTime = this._audioCtx.currentTime + 0.05;
-    }
-
-    source.start(this._nextAudioTime);
-    this._nextAudioTime += audioBuffer.duration;
-  }
-
-  _stopAudio() {
-    if (this._audioCtx) {
-      this._audioCtx.close().catch(() => {});
-      this._audioCtx = null;
-    }
-    this._gainNode = null;
+    // Fake timeline for app.js progress bar
+    if (this._dummyTimer) clearInterval(this._dummyTimer);
+    this._dummyTimer = setInterval(() => {
+        if (this.mpegPlayer) {
+            this._dummyVideo.currentTime = this.mpegPlayer.currentTime || 0;
+            Object.defineProperty(this._dummyVideo, 'duration', { value: this._dummyVideo.currentTime + 3600, configurable: true }); 
+        }
+    }, 50);
   }
 
   stop() {
-    if (this._syncTimer) clearInterval(this._syncTimer);
-    this._syncTimer = null;
-
-    if (this._worker) {
-      this._worker.postMessage({ type: 'stop' });
+    if (this._dummyTimer) {
+      clearInterval(this._dummyTimer);
+      this._dummyTimer = null;
     }
-    this._stopAudio();
+
+    if (this.mpegPlayer) {
+      this.mpegPlayer.destroy();
+      this.mpegPlayer = null;
+    }
     
     this.isPlaying = false;
-    this._wcMode = false;
+    this.currentChannel = null;
+
+    try {
+      const ctx = this.canvas.getContext('2d');
+      if (ctx) {
+        ctx.fillStyle = '#000';
+        ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+      }
+    } catch {}
   }
 
   _showError(c) {
@@ -201,35 +113,41 @@ class TeslaPlayer {
     errDiv.style.cssText = 'position:absolute;inset:0;background:rgba(0,0,0,0.8);color:#fff;display:flex;align-items:center;justify-content:center;z-index:99;font-family:sans-serif;';
     errDiv.innerHTML = `<div><b>⚠️ Bağlantı Hatası</b><br>${c?.name || ''} yüklenemedi.</div>`;
     this.container?.appendChild(errDiv);
-    setTimeout(() => errDiv.remove(), 5000);
+    setTimeout(() => { if (errDiv.parentNode) errDiv.remove(); }, 3000);
   }
 
   togglePlay() {
-    if (this._audioCtx) {
-      if (this._audioCtx.state === 'running') { this._audioCtx.suspend(); this.isPlaying = false; }
-      else { this._audioCtx.resume(); this.isPlaying = true; }
+    if (!this.mpegPlayer) return;
+    if (this.isPlaying) {
+      this.mpegPlayer.pause();
+    } else {
+      this.mpegPlayer.play();
     }
   }
 
   toggleMute() { 
-    this._muted = !this._muted;
-    if (this._gainNode) {
-      this._gainNode.gain.value = this._muted ? 0 : (this._volume !== undefined ? this._volume : 1);
+    if (!this.mpegPlayer || !this.mpegPlayer.audioOut) return false;
+    const isMuted = this.mpegPlayer.audioOut.unlocked ? this.mpegPlayer.volume === 0 : false;
+    
+    if (isMuted) {
+      this.mpegPlayer.volume = this._lastVol || 1;
+    } else {
+      this._lastVol = this.mpegPlayer.volume;
+      this.mpegPlayer.volume = 0;
     }
-    // Also sync the dummy video for UI updates
-    if (this._dummyVideo) this._dummyVideo.muted = this._muted;
-    return this._muted;
+    
+    const newMuted = this.mpegPlayer.volume === 0;
+    this._dummyVideo.muted = newMuted;
+    return newMuted;
   }
 
   setVolume(v) { 
-    this._volume = v;
-    if (this._gainNode && !this._muted) {
-      this._gainNode.gain.value = v; 
-    }
-    if (this._dummyVideo) this._dummyVideo.volume = v;
+    if (!this.mpegPlayer) return;
+    this.mpegPlayer.volume = v;
+    this._dummyVideo.volume = v;
   }
 
-  get paused() { return this._audioCtx ? this._audioCtx.state !== 'running' : true; }
+  get paused() { return !this.isPlaying; }
 }
 
 window.TeslaPlayer = TeslaPlayer;

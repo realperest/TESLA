@@ -28,86 +28,32 @@ function _isYouTubeUrl(url) {
 
 function _ffmpegOutputs() {
   return [
-    '-map', '0:v:0?', '-c:v', 'libx264', '-preset', 'ultrafast', '-tune', 'zerolatency',
-    '-profile:v', 'baseline', '-level', '3.1',
-    '-x264opts', 'annexb=1:repeat-headers=1:keyint=30:min-keyint=30:bframes=0:scenecut=0',
     '-vf', 'scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2:color=black,fps=30',
-    '-f', 'h264',
-    'pipe:1',
-    '-map', '0:a:0?', '-c:a', 'aac', '-b:a', '128k', '-f', 'adts', 'pipe:3'
+    '-f', 'mpegts',
+    '-codec:v', 'mpeg1video',
+    '-b:v', '1500k',
+    '-codec:a', 'mp2',
+    '-ar', '44100',
+    '-ac', '2',
+    '-b:a', '128k',
+    '-muxdelay', '0.001',
+    'pipe:1'
   ];
 }
 
-const TYPE_VIDEO = 0x01;
-const TYPE_AUDIO = 0x02;
-
 function _setupOutputs(ws, ff) {
-  let videoBuffer = Buffer.alloc(0);
-  let audioBuffer = Buffer.alloc(0);
-  const startTs = Date.now();
-
-  // VIDEO (pipe:1 - stdout)
+  // JSMpeg expects raw MPEG-TS stream natively via WebSocket
   ff.stdout.on('data', (chunk) => {
-    videoBuffer = Buffer.concat([videoBuffer, chunk]);
-    let offset = 0;
-    let i = 0;
-    while (i <= videoBuffer.length - 4) {
-      if (videoBuffer[i] === 0 && videoBuffer[i+1] === 0 && videoBuffer[i+2] === 0 && videoBuffer[i+3] === 1) {
-        if (i > offset) {
-          const nalUnit = videoBuffer.slice(offset, i);
-          _sendWsPacket(ws, TYPE_VIDEO, nalUnit, startTs);
-        }
-        offset = i;
-        i += 4;
-      } else {
-        i++;
-      }
+    if (ws.readyState === 1) {
+      ws.send(chunk);
     }
-    videoBuffer = videoBuffer.slice(offset);
   });
-
-  // AUDIO (pipe:3 - adts)
-  const audioPipe = ff.stdio[3];
-  if (audioPipe) {
-    audioPipe.on('data', (chunk) => {
-      audioBuffer = Buffer.concat([audioBuffer, chunk]);
-      let offset = 0;
-      let i = 0;
-      
-      // ADTS Sync word: 0xFFF (12 bits) = buf[i] == 0xFF && (buf[i+1] & 0xF0) == 0xF0
-      while (i <= audioBuffer.length - 7) {
-        if (audioBuffer[i] === 0xFF && (audioBuffer[i+1] & 0xF0) === 0xF0) {
-          const frameLen = ((audioBuffer[i+3] & 0x03) << 11) |
-                           (audioBuffer[i+4] << 3) |
-                           ((audioBuffer[i+5] & 0xE0) >> 5);
-          
-          if (frameLen === 0) {
-            i++; // avoid infinite loop if malformed
-            continue;
-          }
-          
-          if (i + frameLen <= audioBuffer.length) {
-            const adtsFrame = audioBuffer.slice(i, i + frameLen);
-            _sendWsPacket(ws, TYPE_AUDIO, adtsFrame, startTs);
-            i += frameLen;
-            offset = i;
-          } else {
-            // Buffer doesn't have the full frame yet
-            break;
-          }
-        } else {
-          i++;
-        }
-      }
-      audioBuffer = audioBuffer.slice(offset);
-    });
-  }
 
   // ERROR LOGGING (pipe:2 - stderr)
   ff.stderr.on('data', (c) => {
-    const line = c.toString().trim();
-    if (line.includes('Error') || line.includes('warning')) {
-      console.log(`[ffmpeg] ${line}`);
+    const msg = c.toString();
+    if (msg.includes('Error') || msg.includes('Failed')) {
+      console.warn('[FMPEG-ERR]', msg.trim());
     }
   });
 
