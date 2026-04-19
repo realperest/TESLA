@@ -122,12 +122,12 @@ async function _fetchAndPipe(inputUrl, writable, onError) {
 
 function _jpegArgs() {
   return [
-    '-re', '-i', 'pipe:0',
+    '-i', 'pipe:0',           // -re yok: mümkün olan en hızlı encode
     '-an',
-    '-vf', 'scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2:color=black,fps=24',
+    '-vf', 'scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2:color=black,fps=15',
     '-f', 'image2pipe',
     '-vcodec', 'mjpeg',
-    '-q:v', '4',
+    '-q:v', '6',              // biraz düşük kalite = daha küçük frame = daha az latency
     'pipe:1',
   ];
 }
@@ -142,27 +142,27 @@ function _attachJpegOutput(ws, ff, label) {
   ff.stdout.on('data', (chunk) => {
     buf = Buffer.concat([buf, chunk]);
 
-    // SOI (FF D8) ve EOI (FF D9) sınırlarını bul
+    // Buffer'daki tüm tam frame'leri bul; sadece EN SON frame'i gönder (latency minimizasyonu)
+    let lastStart = -1;
+    let lastEnd   = -1;
     let i = 0;
     while (i < buf.length - 1) {
       if (buf[i] === 0xFF && buf[i + 1] === 0xD8) {
-        // SOI bulundu — EOI ara
-        let j = i + 2;
-        while (j < buf.length - 1) {
-          if (buf[j] === 0xFF && buf[j + 1] === 0xD9) {
-            // Tam JPEG frame
-            const frame = buf.slice(i, j + 2);
-            if (ws.readyState === 1) ws.send(frame, { binary: true });
-            buf = buf.slice(j + 2);
-            i = 0;
-            break;
-          }
-          j++;
-        }
-        if (j >= buf.length - 1) break; // EOI henüz gelmedi, bekle
+        lastStart = i;
+        i += 2;
+      } else if (buf[i] === 0xFF && buf[i + 1] === 0xD9 && lastStart >= 0) {
+        lastEnd = i + 2;
+        i += 2;
       } else {
         i++;
       }
+    }
+
+    if (lastStart >= 0 && lastEnd > lastStart) {
+      // Eski frame'leri at, sadece son tam frame'i gönder
+      const frame = buf.slice(lastStart, lastEnd);
+      if (ws.readyState === 1) ws.send(frame, { binary: true });
+      buf = buf.slice(lastEnd);
     }
   });
 
