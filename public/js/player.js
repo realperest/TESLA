@@ -16,7 +16,7 @@ function supportsWebCodecs() {
 class TeslaPlayer {
   constructor(canvasId, opts = {}) {
     this.canvas       = document.getElementById(canvasId);
-    this.ctx          = this.canvas.getContext('2d');
+    this._ctx         = null;
     this.spinnerId    = opts.spinnerId    || 'spinner';
     this.containerId  = opts.containerId  || 'player-area';
     this.container    = document.getElementById(this.containerId);
@@ -200,9 +200,14 @@ class TeslaPlayer {
     this.isPlaying = false;
     this._wcMode = false;
 
-    if (this.ctx && !this._worker) {
-      this.ctx.fillStyle = '#000';
-      this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+    if (!this._worker) {
+      try {
+        if (!this._ctx) this._ctx = this.canvas.getContext('2d');
+        if (this._ctx) {
+          this._ctx.fillStyle = '#000';
+          this._ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+        }
+      } catch {}
     }
   }
 
