@@ -42,7 +42,7 @@ class TeslaPlayer {
       return true;
     } catch (err) {
       console.error('[Player] Load Error:', err);
-      if (!silentError) this._showError(channel);
+      if (!silentError) this._showError(channel, err.message || err.toString());
       if (throwOnError) throw err;
       return false;
     } finally {
@@ -64,6 +64,7 @@ class TeslaPlayer {
       audio: true,
       video: true,
       autoplay: true,
+      disableGl: true, // Absolutely crucial for Tesla D-gear bypass to avoid blocked WebGL contexts
       audioBufferSize: 512 * 1024,
       onPlay: () => {
         this.isPlaying = true;
@@ -108,12 +109,12 @@ class TeslaPlayer {
     } catch {}
   }
 
-  _showError(c) {
+  _showError(c, errDetails = '') {
     const errDiv = document.createElement('div');
     errDiv.style.cssText = 'position:absolute;inset:0;background:rgba(0,0,0,0.8);color:#fff;display:flex;align-items:center;justify-content:center;z-index:99;font-family:sans-serif;';
-    errDiv.innerHTML = `<div><b>⚠️ Bağlantı Hatası</b><br>${c?.name || ''} yüklenemedi.</div>`;
+    errDiv.innerHTML = `<div style="text-align:center"><b>⚠️ Bağlantı Hatası</b><br>${c?.name || ''} yüklenemedi.<br><br><span style="color:#ff6b6b;font-size:12px;display:inline-block;padding:10px;background:rgba(0,0,0,0.5);border-radius:4px;">${errDetails}</span></div>`;
     this.container?.appendChild(errDiv);
-    setTimeout(() => { if (errDiv.parentNode) errDiv.remove(); }, 3000);
+    setTimeout(() => { if (errDiv.parentNode) errDiv.remove(); }, 8000);
   }
 
   togglePlay() {
