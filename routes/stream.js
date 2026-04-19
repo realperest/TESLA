@@ -37,11 +37,12 @@ function _ffmpegOutputs() {
     '-maxrate', '1200k',
     '-bufsize', '3000k',
     '-bf', '0',
-    '-codec:a', 'mp2',
-    '-af', 'volume=2.5', // Slightly more boost
+    '-acodec', 'mp2',
+    '-af', 'volume=3.0',
     '-ar', '44100',
-    '-ac', '2',
-    '-b:a', '128k',
+    '-ac', '1', // Trying Mono for better compatibility
+    '-b:a', '64k',
+    '-mpegts_flags', '+initial_discontinuity+system_b',
     '-muxdelay', '0.001',
     'pipe:1'
   ];

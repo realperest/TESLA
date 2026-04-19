@@ -134,9 +134,26 @@ class TeslaPlayer {
   _showError(c, errDetails = '') {
     const errDiv = document.createElement('div');
     errDiv.style.cssText = 'position:absolute;inset:0;background:rgba(0,0,0,0.8);color:#fff;display:flex;align-items:center;justify-content:center;z-index:99;font-family:sans-serif;';
-    errDiv.innerHTML = `<div style="text-align:center"><b>⚠️ Bağlantı Hatası</b><br>${c?.name || ''} yüklenemedi.<br><br><span style="color:#ff6b6b;font-size:12px;display:inline-block;padding:10px;background:rgba(0,0,0,0.5);border-radius:4px;">${errDetails}</span></div>`;
+    errDiv.innerHTML = `<div style="text-align:center;padding:20px;">
+        <div style="font-size:24px;margin-bottom:10px;">⚠️ Bağlantı Hatası</div>
+        <div style="margin-bottom:15px;">${c?.name || ''} yüklenemedi.</div>
+        <div style="color:#ff6b6b;font-size:12px;background:rgba(0,0,0,0.5);padding:10px;border-radius:4px;word-break:break-all;">${errDetails}</div>
+        <button onclick="location.reload()" style="margin-top:15px;padding:8px 20px;background:#fff;color:#000;border:none;border-radius:20px;font-weight:bold;cursor:pointer;">Yeniden Dene</button>
+    </div>`;
     this.container?.appendChild(errDiv);
-    setTimeout(() => { if (errDiv.parentNode) errDiv.remove(); }, 8000);
+  }
+
+  // New helper to force audio unlock from UI
+  unlockAudio() {
+    if (this.mpegPlayer && this.mpegPlayer.audioOut) {
+        console.log('[Player] Attempting manual audio unlock...');
+        this.mpegPlayer.audioOut.unlock(() => {
+            console.log('[Player] Audio UNLOCKED successfully');
+            if (this.mpegPlayer.audioOut.context) {
+                this.mpegPlayer.audioOut.context.resume();
+            }
+        });
+    }
   }
 
   togglePlay() {
