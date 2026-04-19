@@ -129,8 +129,6 @@ class TeslaPlayer {
     this._worker = new Worker('/js/webcodecs-worker.js');
     this._workerActive = true;
 
-    let audioStarted = false;
-
     const _onFrame = (msg) => {
       if (!this._wcMode || !msg.bitmap) return;
       const w = msg.bitmap.width;
@@ -141,8 +139,6 @@ class TeslaPlayer {
       }
       this.ctx.drawImage(msg.bitmap, 0, 0, w, h);
       msg.bitmap.close();
-      // Sesi ilk görüntüyle birlikte başlat — senkron için
-      if (!audioStarted) { audioStarted = true; this._startAudio(channel); }
     };
 
     this._worker.onmessage = (e) => {
@@ -153,6 +149,7 @@ class TeslaPlayer {
 
       if (msg.type === 'ready') {
         this.isPlaying = true;
+        this._startAudio(channel); // görüntü gelmeden yüklenmeye başlasın
         return;
       }
 
@@ -343,14 +340,16 @@ class TeslaPlayer {
 
   togglePlay() {
     if (this._wcMode) {
-      // WebCodecs modunda oynat/duraklat: sesi kontrol et
-      if (!this._audio) return;
-      if (this._audio.paused) {
-        this._audio.play().catch(() => {});
-        this.isPlaying = true;
-      } else {
-        this._audio.pause();
+      if (this._workerActive) {
+        // Durdur: hem görüntü hem ses
+        this._stopWorker();
+        this._stopAudio();
         this.isPlaying = false;
+        this.ctx.fillStyle = '#000';
+        this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+      } else {
+        // Yeniden başlat
+        if (this.currentChannel) this.load(this.currentChannel, { silentError: true });
       }
       return;
     }

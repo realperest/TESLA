@@ -122,7 +122,7 @@ async function _fetchAndPipe(inputUrl, writable, onError) {
 
 function _jpegArgs() {
   return [
-    '-i', 'pipe:0',           // -re yok: mümkün olan en hızlı encode
+    '-re', '-i', 'pipe:0',    // gerçek zamanlı okuma — 10x hız sorununu önler
     '-an',
     '-vf', 'scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2:color=black,fps=15',
     '-f', 'image2pipe',
