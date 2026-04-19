@@ -94,6 +94,17 @@ function hideTvOverlay() {
 // ─────────────────────────────────────────────
 
 async function init() {
+  // Global interaction listener to unlock AudioContext on first touch
+  const unlock = () => {
+    if (player) player.unlockAudio();
+    if (ytPlayer) ytPlayer.unlockAudio();
+    if (iptvPlayer) iptvPlayer.unlockAudio();
+    document.removeEventListener('touchstart', unlock);
+    document.removeEventListener('mousedown', unlock);
+  };
+  document.addEventListener('touchstart', unlock);
+  document.addEventListener('mousedown', unlock);
+
   player   = new TeslaPlayer('video-canvas');
   ytPlayer = new TeslaPlayer('yt-canvas', { spinnerId: 'yt-spinner', containerId: 'yt-player-area' });
   iptvPlayer = new TeslaPlayer('iptv-video-canvas', {

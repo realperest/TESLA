@@ -153,6 +153,38 @@ class TeslaPlayer {
                 this.mpegPlayer.audioOut.context.resume();
             }
         });
+    } else {
+        // Fallback: Try to resume any context we can find
+        const ctx = window.AudioContext || window.webkitAudioContext;
+        if (ctx) {
+            const tempCtx = new ctx();
+            tempCtx.resume();
+        }
+    }
+  }
+
+  // Diagnostic: Play a simple beep to see if AudioContext is alive at all
+  testAudio() {
+    try {
+        const AudioContext = window.AudioContext || window.webkitAudioContext;
+        const context = new AudioContext();
+        const oscillator = context.createOscillator();
+        const gainNode = context.createGain();
+
+        oscillator.type = 'sine';
+        oscillator.frequency.setValueAtTime(440, context.currentTime);
+        gainNode.gain.setValueAtTime(0.1, context.currentTime);
+
+        oscillator.connect(gainNode);
+        gainNode.connect(context.destination);
+
+        oscillator.start();
+        setTimeout(() => oscillator.stop(), 500);
+        console.log('[Player] Diagnostic beep sent');
+        alert('Diagnostic Beep Sent. Did you hear it?');
+    } catch (e) {
+        console.error('[Player] Diagnostic failed:', e);
+        alert('Audio Error: ' + e.message);
     }
   }
 

@@ -38,10 +38,10 @@ function _ffmpegOutputs() {
     '-bufsize', '3000k',
     '-bf', '0',
     '-acodec', 'mp2',
-    '-af', 'volume=3.0',
-    '-ar', '44100',
-    '-ac', '1', // Trying Mono for better compatibility
-    '-b:a', '64k',
+    '-af', 'loudnorm=I=-16:TP=-1.5:LRA=11', // Professional normalization for better triggers
+    '-ar', '48000', // Modern hardware standard
+    '-ac', '1',
+    '-b:a', '96k',
     '-mpegts_flags', '+initial_discontinuity+system_b',
     '-muxdelay', '0.001',
     'pipe:1'
