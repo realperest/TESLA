@@ -5,8 +5,10 @@
  */
 
 let decoder = null;
+let audioDecoder = null;
 let ws = null;
 let frameQueue = []; 
+let audioQueue = [];
 let lastAudioTime = -1;
 let videoPtsOffset = null;
 let offscreenCanvas = null;
@@ -33,6 +35,7 @@ self.onmessage = function (e) {
 };
 
 function _initDecoder() {
+  // VIDEO DECODER
   decoder = new VideoDecoder({
     output: (frame) => {
       const rawPts = frame.timestamp / 1000;
@@ -44,15 +47,43 @@ function _initDecoder() {
       }
     },
     error: (e) => {
-      console.error('[Worker] Decoder Hatası:', e);
-      self.postMessage({ type: 'error', message: 'Decoder: ' + e.message });
+      console.error('[Worker] Video Decoder Hatası:', e);
     }
   });
 
-  // Level 3.1 Baseline for widespread Annex B support
   decoder.configure({
     codec: 'avc1.42E01F',
     optimizeForLatency: true
+  });
+
+  // AUDIO DECODER
+  audioDecoder = new AudioDecoder({
+    output: (audioData) => {
+      const size = audioData.allocationSize({ planeIndex: 0, format: 'f32' });
+      const buffer = new ArrayBuffer(size);
+      const f32 = new Float32Array(buffer);
+      audioData.copyTo(buffer, { planeIndex: 0, format: 'f32' });
+      
+      const pcmInfo = {
+        sampleRate: audioData.sampleRate,
+        numberOfChannels: audioData.numberOfChannels,
+        numberOfFrames: audioData.numberOfFrames,
+        timestamp: audioData.timestamp / 1000
+      };
+      
+      audioData.close();
+
+      self.postMessage({ type: 'audio-pcm', pcm: buffer, info: pcmInfo }, [buffer]);
+    },
+    error: (e) => {
+      console.error('[Worker] Audio Decoder Hatası:', e);
+    }
+  });
+
+  audioDecoder.configure({
+    codec: 'mp4a.40.2',
+    sampleRate: 48000,
+    numberOfChannels: 2
   });
 }
 
@@ -81,13 +112,18 @@ function _connect(wsUrl) {
             timestamp: pts * 1000,
             data: payload
           }));
-        } catch (err) {
-          console.warn('[Worker] Decode failed:', err.message);
-        }
+        } catch (err) {}
       }
-    } else if (type === 0x02) { // Audio Packet
-      // ArrayBuffer'ı ana theard'e transfer et (Zero-copy)
-      self.postMessage({ type: 'audio', chunk: payload }, [payload]);
+    } else if (type === 0x02) { // Audio (ADTS) Packet
+      if (audioDecoder && audioDecoder.state === 'configured') {
+        try {
+          audioDecoder.decode(new EncodedAudioChunk({
+            type: 'key', // usually all ADTS chunks can be treated as key frames
+            timestamp: pts * 1000,
+            data: payload
+          }));
+        } catch (err) {}
+      }
     }
   };
 

@@ -34,7 +34,7 @@ function _ffmpegOutputs() {
     '-vf', 'scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2:color=black,fps=30',
     '-f', 'h264',
     'pipe:1',
-    '-map', '0:a:0?', '-c:a', 'libmp3lame', '-q:a', '5', '-f', 'mp3', 'pipe:3'
+    '-map', '0:a:0?', '-c:a', 'aac', '-b:a', '128k', '-f', 'adts', 'pipe:3'
   ];
 }
 
@@ -43,6 +43,7 @@ const TYPE_AUDIO = 0x02;
 
 function _setupOutputs(ws, ff) {
   let videoBuffer = Buffer.alloc(0);
+  let audioBuffer = Buffer.alloc(0);
   const startTs = Date.now();
 
   // VIDEO (pipe:1 - stdout)
@@ -56,7 +57,7 @@ function _setupOutputs(ws, ff) {
           const nalUnit = videoBuffer.slice(offset, i);
           _sendWsPacket(ws, TYPE_VIDEO, nalUnit, startTs);
         }
-        offset = i; // Next element includes the 00 00 00 01 delimiter
+        offset = i;
         i += 4;
       } else {
         i++;
@@ -65,11 +66,40 @@ function _setupOutputs(ws, ff) {
     videoBuffer = videoBuffer.slice(offset);
   });
 
-  // AUDIO (pipe:3)
+  // AUDIO (pipe:3 - adts)
   const audioPipe = ff.stdio[3];
   if (audioPipe) {
     audioPipe.on('data', (chunk) => {
-      _sendWsPacket(ws, TYPE_AUDIO, chunk, startTs);
+      audioBuffer = Buffer.concat([audioBuffer, chunk]);
+      let offset = 0;
+      let i = 0;
+      
+      // ADTS Sync word: 0xFFF (12 bits) = buf[i] == 0xFF && (buf[i+1] & 0xF0) == 0xF0
+      while (i <= audioBuffer.length - 7) {
+        if (audioBuffer[i] === 0xFF && (audioBuffer[i+1] & 0xF0) === 0xF0) {
+          const frameLen = ((audioBuffer[i+3] & 0x03) << 11) |
+                           (audioBuffer[i+4] << 3) |
+                           ((audioBuffer[i+5] & 0xE0) >> 5);
+          
+          if (frameLen === 0) {
+            i++; // avoid infinite loop if malformed
+            continue;
+          }
+          
+          if (i + frameLen <= audioBuffer.length) {
+            const adtsFrame = audioBuffer.slice(i, i + frameLen);
+            _sendWsPacket(ws, TYPE_AUDIO, adtsFrame, startTs);
+            i += frameLen;
+            offset = i;
+          } else {
+            // Buffer doesn't have the full frame yet
+            break;
+          }
+        } else {
+          i++;
+        }
+      }
+      audioBuffer = audioBuffer.slice(offset);
     });
   }
 
