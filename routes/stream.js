@@ -28,19 +28,19 @@ function _isYouTubeUrl(url) {
 
 function _ffmpegOutputs() {
   return [
-    '-vf', 'scale=854:480:force_original_aspect_ratio=decrease,pad=854:480:(ow-iw)/2:(oh-ih)/2:color=black,fps=25', // Lower res & FPS for stability
+    '-vf', 'scale=640:360:force_original_aspect_ratio=decrease,pad=640:360:(ow-iw)/2:(oh-ih)/2:color=black,fps=24', // Ultra stable 360p
     '-f', 'mpegts',
     '-codec:v', 'mpeg1video',
-    '-s', '854x480',
-    '-b:v', '800k', // Lower bitrate for smoother flow
-    '-maxrate', '1000k',
-    '-bufsize', '2000k',
-    '-bf', '0',
+    '-s', '640x360',
+    '-b:v', '600k',
+    '-maxrate', '800k',
+    '-bufsize', '1200k',
+    '-g', '12', // Smaller GOP for faster sync
     '-acodec', 'mp2',
-    '-af', 'loudnorm=I=-16:TP=-1.5:LRA=11', // Professional normalization for better triggers
-    '-ar', '48000', // Modern hardware standard
+    '-af', 'volume=2.0', // Simpler filter for less CPU
+    '-ar', '44100',
     '-ac', '1',
-    '-b:a', '96k',
+    '-b:a', '64k',
     '-mpegts_flags', '+initial_discontinuity+system_b',
     '-muxdelay', '0.001',
     'pipe:1'

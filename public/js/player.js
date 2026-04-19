@@ -68,7 +68,7 @@ class TeslaPlayer {
       disableGl: true, // Absolutely crucial for Tesla D-gear bypass
       audioBufferSize: 1024 * 1024,
       videoBufferSize: 2 * 1024 * 1024,
-      maxAudioLag: 0.5, // Increased for smoother playback on patchy networks
+      maxAudioLag: 0.8, // More buffer for smooth playback
       onPlay: () => {
         console.log('[Player] JSMpeg started playing');
         this.isPlaying = true;
