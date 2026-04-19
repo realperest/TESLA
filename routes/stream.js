@@ -28,7 +28,6 @@ function _isYouTubeUrl(url) {
 
 function _ffmpegOutputs() {
   return [
-    '-thread_queue_size', '512',
     '-vf', 'scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2:color=black,fps=30',
     '-f', 'mpegts',
     '-codec:v', 'mpeg1video',
@@ -82,7 +81,8 @@ async function handleStreamConnection(ws, req) {
       const ytArgs = [_ytCookieArgs(), '--no-playlist', '--no-warnings', '-f', '18/92/22/best', '-o', '-', targetUrl].flat().filter(Boolean);
       const yt = spawn(YT_DLP, ytArgs, { stdio: ['ignore', 'pipe', 'pipe'] });
       
-      const args = ['-re', '-i', 'pipe:0', '-map', '0:v:0', '-map', '0:a:0'].concat(_ffmpegOutputs());
+      // thread_queue_size MUST be an INPUT option (before -i)
+      const args = ['-thread_queue_size', '1024', '-re', '-i', 'pipe:0', '-map', '0:v:0', '-map', '0:a:0'].concat(_ffmpegOutputs());
       const ff = spawn(FFMPEG_PATH, args, { stdio: ['pipe', 'pipe', 'pipe'] });
       
       // Prevent EPIPE crash
@@ -106,7 +106,7 @@ async function handleStreamConnection(ws, req) {
       _setupOutputs(ws, ff);
     } else {
       console.log('[Stream] Direct:', targetUrl);
-      const args = ['-re', '-i', targetUrl, '-map', '0:v:0?', '-map', '0:a:0?'].concat(_ffmpegOutputs());
+      const args = ['-thread_queue_size', '1024', '-re', '-i', targetUrl, '-map', '0:v:0?', '-map', '0:a:0?'].concat(_ffmpegOutputs());
       const ff = spawn(FFMPEG_PATH, args, { stdio: ['ignore', 'pipe', 'pipe'] });
       ACTIVE.set(ws, { ff });
       _setupOutputs(ws, ff);

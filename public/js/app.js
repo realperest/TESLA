@@ -94,24 +94,26 @@ function hideTvOverlay() {
 // ─────────────────────────────────────────────
 
 async function init() {
-  // Global interaction listener to unlock AudioContext on first touch
+  console.log('[App] v260419.0038 initializing...');
   const unlock = () => {
-    if (player) player.unlockAudio();
-    if (ytPlayer) ytPlayer.unlockAudio();
-    if (iptvPlayer) iptvPlayer.unlockAudio();
-    document.removeEventListener('touchstart', unlock);
-    document.removeEventListener('mousedown', unlock);
+    if (window.player) window.player.unlockAudio();
+    if (window.ytPlayer) window.ytPlayer.unlockAudio();
+    if (window.iptvPlayer) window.iptvPlayer.unlockAudio();
   };
   document.addEventListener('touchstart', unlock);
   document.addEventListener('mousedown', unlock);
 
-  player   = new TeslaPlayer('video-canvas');
-  ytPlayer = new TeslaPlayer('yt-canvas', { spinnerId: 'yt-spinner', containerId: 'yt-player-area' });
-  iptvPlayer = new TeslaPlayer('iptv-video-canvas', {
+  window.player = new TeslaPlayer('video-canvas');
+  window.ytPlayer = new TeslaPlayer('yt-canvas', { spinnerId: 'yt-spinner', containerId: 'yt-player-area' });
+  window.iptvPlayer = new TeslaPlayer('iptv-video-canvas', {
     spinnerId: 'iptv-spinner',
     containerId: 'iptv-player-area',
     emptyStateId: 'iptv-empty-state',
   });
+
+  player = window.player;
+  ytPlayer = window.ytPlayer;
+  iptvPlayer = window.iptvPlayer;
 
   try {
     const [meData, chData] = await Promise.all([API.get('/me'), API.get('/channels')]);
