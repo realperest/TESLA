@@ -37,6 +37,7 @@ function _ffmpegOutputs() {
     '-bufsize', '2000k',
     '-bf', '0',
     '-codec:a', 'mp2',
+    '-af', 'volume=2.0', // Boost audio volume
     '-ar', '44100',
     '-ac', '2',
     '-b:a', '96k',
@@ -74,12 +75,12 @@ async function handleStreamConnection(ws, req) {
   
   const targetUrl = decodeURIComponent(url);
   try {
-    if (_isYouTubeUrl(targetUrl)) {
       console.log('[Stream] yt-dlp:', targetUrl);
       const ytArgs = [_ytCookieArgs(), '--no-playlist', '--no-warnings', '-f', '18/92/22/best', '-o', '-', targetUrl].flat().filter(Boolean);
       const yt = spawn(YT_DLP, ytArgs, { stdio: ['ignore', 'pipe', 'pipe'] });
       
-      const args = ['-i', 'pipe:0', '-map', '0:v:0', '-map', '0:a:0'].concat(_ffmpegOutputs());
+      // -re MUST be before -i pipe:0 to regulate the input read speed from the pipe
+      const args = ['-re', '-i', 'pipe:0', '-map', '0:v:0', '-map', '0:a:0'].concat(_ffmpegOutputs());
       const ff = spawn(FFMPEG_PATH, args, { stdio: ['pipe', 'pipe', 'pipe'] });
       
       yt.stdout.pipe(ff.stdin);
@@ -93,7 +94,7 @@ async function handleStreamConnection(ws, req) {
       _setupOutputs(ws, ff);
     } else {
       console.log('[Stream] Direct:', targetUrl);
-      const args = ['-i', targetUrl, '-map', '0:v:0?', '-map', '0:a:0?'].concat(_ffmpegOutputs());
+      const args = ['-re', '-i', targetUrl, '-map', '0:v:0?', '-map', '0:a:0?'].concat(_ffmpegOutputs());
       const ff = spawn(FFMPEG_PATH, args, { stdio: ['ignore', 'pipe', 'pipe'] });
       ACTIVE.set(ws, { ff });
       _setupOutputs(ws, ff);
