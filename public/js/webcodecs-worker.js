@@ -53,7 +53,8 @@ function _initDecoder() {
 
   decoder.configure({
     codec: 'avc1.42E01F',
-    optimizeForLatency: true
+    optimizeForLatency: true,
+    avc: { format: 'annexb' }
   });
 
   // AUDIO DECODER
