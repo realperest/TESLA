@@ -136,13 +136,25 @@ function _jpegArgs() {
 // JPEG frame boundary tespiti + WebSocket gönderim
 // ─────────────────────────────────────────────────────────────────────────────
 
+const TYPE_VIDEO = Buffer.from([0x01]);
+const TYPE_AUDIO = Buffer.from([0x02]);
+
+function _attachAudioOutput(ws, ffAudio) {
+  ffAudio.stdout.on('data', (chunk) => {
+    if (ws.readyState === 1) {
+      try { ws.send(Buffer.concat([TYPE_AUDIO, chunk]), { binary: true }); } catch {}
+    }
+  });
+  ffAudio.stderr.on('data', () => {}); // sessizce yut
+}
+
 function _attachJpegOutput(ws, ff, label) {
   let buf = Buffer.alloc(0);
 
   ff.stdout.on('data', (chunk) => {
     buf = Buffer.concat([buf, chunk]);
 
-    // Buffer'daki tüm tam frame'leri bul; sadece EN SON frame'i gönder (latency minimizasyonu)
+    // Buffer'daki tüm tam frame'leri bul; sadece EN SON frame'i gönder
     let lastStart = -1;
     let lastEnd   = -1;
     let i = 0;
@@ -159,9 +171,11 @@ function _attachJpegOutput(ws, ff, label) {
     }
 
     if (lastStart >= 0 && lastEnd > lastStart) {
-      // Eski frame'leri at, sadece son tam frame'i gönder
       const frame = buf.slice(lastStart, lastEnd);
-      if (ws.readyState === 1) ws.send(frame, { binary: true });
+      // 0x01 + JPEG frame → video mesajı
+      if (ws.readyState === 1) {
+        try { ws.send(Buffer.concat([TYPE_VIDEO, frame]), { binary: true }); } catch {}
+      }
       buf = buf.slice(lastEnd);
     }
   });
@@ -214,9 +228,9 @@ function _startJpeg(ws, inputUrl) {
 }
 
 async function _startJpegAsync(ws, inputUrl) {
-  // ── YOL 1: YouTube URL → yt-dlp pipe ─────────────────────────────────────
+  // ── YOL 1: YouTube URL → yt-dlp tee → video+ses ffmpeg aynı anda ──────────
   if (_isYouTubeUrl(inputUrl)) {
-    console.log('[Stream/JPEG] YouTube→yt-dlp modu');
+    console.log('[Stream/JPEG] YouTube→yt-dlp tee modu');
 
     const cookieArgs = _ytCookieArgs();
     const ytArgs = [
@@ -228,11 +242,30 @@ async function _startJpegAsync(ws, inputUrl) {
       inputUrl,
     ];
 
-    const yt = spawn(YT_DLP, ytArgs, { stdio: ['ignore', 'pipe', 'pipe'] });
-    const ff = spawn(FFMPEG_PATH, _jpegArgs(), { stdio: ['pipe', 'pipe', 'pipe'] });
+    const ffAudioArgs = [
+      '-i', 'pipe:0',
+      '-vn',
+      '-acodec', 'libmp3lame', '-q:a', '5',
+      '-f', 'mp3',
+      'pipe:1',
+    ];
 
-    yt.stdout.pipe(ff.stdin);
+    const yt      = spawn(YT_DLP,    ytArgs,       { stdio: ['ignore', 'pipe', 'pipe'] });
+    const ff      = spawn(FFMPEG_PATH, _jpegArgs(), { stdio: ['pipe', 'pipe', 'pipe'] });
+    const ffAudio = spawn(FFMPEG_PATH, ffAudioArgs, { stdio: ['pipe', 'pipe', 'pipe'] });
+
+    // Tek yt-dlp çıktısını her iki ffmpeg'e manuel tee ile gönder
+    yt.stdout.on('data', chunk => {
+      try { ff.stdin.write(chunk); } catch {}
+      try { ffAudio.stdin.write(chunk); } catch {}
+    });
+    yt.stdout.on('end', () => {
+      try { ff.stdin.end(); } catch {}
+      try { ffAudio.stdin.end(); } catch {}
+    });
+
     ff.stdin.on('error', () => {});
+    ffAudio.stdin.on('error', () => {});
 
     let ytStderr = '';
     yt.stderr.on('data', chunk => {
@@ -240,11 +273,13 @@ async function _startJpegAsync(ws, inputUrl) {
       const lines = ytStderr.split('\n'); ytStderr = lines.pop();
       lines.forEach(l => { if (l.trim()) console.log('[yt-dlp/stream]', l); });
     });
-    yt.on('error', err => console.error('[yt-dlp] spawn hatası:', err.message));
-    yt.on('close', code => { if (code !== 0) console.warn('[yt-dlp] çıkış kodu:', code); });
+    yt.on('error',  err  => console.error('[yt-dlp] spawn hatası:', err.message));
+    yt.on('close',  code => { if (code !== 0) console.warn('[yt-dlp] çıkış kodu:', code); });
+    ffAudio.on('error', err => console.error('[ffAudio] hata:', err.message));
 
-    ACTIVE.set(ws, { proc: ff, yt });
+    ACTIVE.set(ws, { proc: ff, yt, ffAudio });
     _attachJpegOutput(ws, ff, 'JPEG-YT');
+    _attachAudioOutput(ws, ffAudio);
     ws.on('close', () => _killStream(ws));
     ws.on('error', () => _killStream(ws));
     return;
@@ -318,8 +353,9 @@ function _sendFrame(ws, isKey, tsUs, data) {
 function _killStream(ws) {
   const entry = ACTIVE.get(ws);
   if (entry) {
-    if (entry.fetch) entry.fetch.abort();
-    if (entry.yt) try { entry.yt.kill('SIGKILL'); } catch {}
+    if (entry.fetch)    entry.fetch.abort();
+    if (entry.yt)       try { entry.yt.kill('SIGKILL'); } catch {}
+    if (entry.ffAudio)  try { entry.ffAudio.kill('SIGKILL'); } catch {}
     try { entry.proc.kill('SIGKILL'); } catch {}
     ACTIVE.delete(ws);
   }

@@ -21,12 +21,25 @@ function _connect(wsUrl) {
     const data = e.data;
     if (!data || data.byteLength < 2) return;
 
-    // Her WebSocket mesajı = 1 tam JPEG frame (FF D8 ... FF D9)
-    createImageBitmap(new Blob([data], { type: 'image/jpeg' }))
-      .then(function (bitmap) {
-        self.postMessage({ type: 'frame', bitmap }, [bitmap]);
-      })
-      .catch(function () {});
+    const view     = new Uint8Array(data);
+    const msgType  = view[0];
+    const payload  = data.slice(1);
+
+    if (msgType === 0x01) {
+      // Video frame: JPEG → ImageBitmap
+      createImageBitmap(new Blob([payload], { type: 'image/jpeg' }))
+        .then(function (bitmap) {
+          self.postMessage({ type: 'frame', bitmap }, [bitmap]);
+        })
+        .catch(function () {});
+      return;
+    }
+
+    if (msgType === 0x02) {
+      // Ses chunk: MP3 verisi → ana thread'e ilet
+      self.postMessage({ type: 'audio', chunk: payload }, [payload]);
+      return;
+    }
   };
 
   ws.onerror = function () {

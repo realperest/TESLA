@@ -66,6 +66,12 @@ class TeslaPlayer {
     this._audio    = null;
     this._audioHls = null;
 
+    // YouTube WebSocket ses (MediaSource)
+    this._mediaSource       = null;
+    this._sourceBuffer      = null;
+    this._sourceBufferReady = false;
+    this._audioQueue        = [];
+
     this.isPlaying      = false;
     this.currentChannel = null;
     this._wcMode        = false; // Şu an WebCodecs modunda mı?
@@ -129,16 +135,8 @@ class TeslaPlayer {
     this._worker = new Worker('/js/webcodecs-worker.js');
     this._workerActive = true;
 
-    let _audioStarted = false;
-
     const _onFrame = (msg) => {
       if (!this._wcMode || !msg.bitmap) return;
-
-      // İlk kare geldiğinde audioyu başlat — böylece görüntü ve ses aynı anda çıkar
-      if (!_audioStarted) {
-        _audioStarted = true;
-        this._startAudio(channel);
-      }
 
       const w = msg.bitmap.width;
       const h = msg.bitmap.height;
@@ -154,10 +152,18 @@ class TeslaPlayer {
       const msg = e.data;
       if (!msg) return;
 
-      if (msg.type === 'frame')  { _onFrame(msg); return; }
+      if (msg.type === 'frame') { _onFrame(msg); return; }
+
+      if (msg.type === 'audio') {
+        // YouTube ses chunk'ı — MediaSource ile <audio> elementine besle
+        this._feedAudioChunk(msg.chunk);
+        return;
+      }
 
       if (msg.type === 'ready') {
         this.isPlaying = true;
+        // YouTube dışı kanallar için harici ses stream'i başlat
+        if (!channel.ytUrl) this._startAudio(channel);
         return;
       }
 
@@ -246,6 +252,49 @@ class TeslaPlayer {
     }
   }
 
+  _feedAudioChunk(chunk) {
+    if (!this._mediaSource) {
+      // İlk chunk geldiğinde MediaSource kur
+      this._mediaSource    = new MediaSource();
+      this._audioQueue     = [];
+      this._sourceBufferReady = false;
+
+      this._audio     = document.createElement('audio');
+      this._audio.src = URL.createObjectURL(this._mediaSource);
+      this._audio.volume = 1;
+
+      this._mediaSource.addEventListener('sourceopen', () => {
+        const mime = 'audio/mpeg';
+        if (!MediaSource.isTypeSupported(mime)) {
+          console.warn('[Audio] audio/mpeg MediaSource desteklenmiyor');
+          return;
+        }
+        this._sourceBuffer = this._mediaSource.addSourceBuffer(mime);
+        this._sourceBuffer.mode = 'sequence';
+        this._sourceBuffer.addEventListener('updateend', () => {
+          this._flushAudioQueue();
+        });
+        this._sourceBufferReady = true;
+        this._flushAudioQueue();
+      });
+
+      this._audio.play().catch(() => {});
+    }
+
+    this._audioQueue.push(chunk instanceof ArrayBuffer ? chunk : chunk.buffer || chunk);
+    this._flushAudioQueue();
+  }
+
+  _flushAudioQueue() {
+    if (!this._sourceBufferReady || !this._sourceBuffer || this._sourceBuffer.updating) return;
+    if (!this._audioQueue || this._audioQueue.length === 0) return;
+    try {
+      this._sourceBuffer.appendBuffer(this._audioQueue.shift());
+    } catch (e) {
+      console.warn('[Audio] appendBuffer hatası:', e.message);
+    }
+  }
+
   _stopAudio() {
     if (this._audioHls) {
       try { this._audioHls.destroy(); } catch {}
@@ -255,6 +304,13 @@ class TeslaPlayer {
       try { this._audio.pause(); this._audio.src = ''; } catch {}
       this._audio = null;
     }
+    if (this._mediaSource) {
+      try { this._mediaSource.endOfStream(); } catch {}
+      this._mediaSource = null;
+    }
+    this._sourceBuffer = null;
+    this._sourceBufferReady = false;
+    this._audioQueue = [];
   }
 
   _stopWorker() {
