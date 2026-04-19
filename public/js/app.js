@@ -135,6 +135,19 @@ async function init() {
     return;
   }
 
+  // Akıllı Sekme Yönetimi: Sekme gizlendiğinde durdur, açıldığında en güncel yerden devam et
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') {
+      if (typeof player !== 'undefined' && player.isPlaying) { window._lastChannel = player.currentChannel; player.stop(); }
+      if (typeof ytPlayer !== 'undefined' && ytPlayer.isPlaying) { window._lastYtChannel = ytPlayer.currentChannel; ytPlayer.stop(); }
+      if (typeof iptvPlayer !== 'undefined' && iptvPlayer.isPlaying) { window._lastIptvChannel = iptvPlayer.currentChannel; iptvPlayer.stop(); }
+    } else if (document.visibilityState === 'visible') {
+      if (window._lastChannel) { player.load(window._lastChannel); window._lastChannel = null; }
+      if (window._lastYtChannel) { ytPlayer.load(window._lastYtChannel); window._lastYtChannel = null; }
+      if (window._lastIptvChannel) { iptvPlayer.load(window._lastIptvChannel); window._lastIptvChannel = null; }
+    }
+  });
+
   const tvSearch = document.getElementById('tv-search-input');
   if (tvSearch) {
     tvSearch.addEventListener('input', (e) => {
