@@ -323,7 +323,7 @@ function _splitNalUnits(buf) {
 function _sendFrame(ws, isKey, tsUs, data) {
   const header = Buffer.allocUnsafe(9);
   header[0] = isKey ? 0x01 : 0x00;
-  new DataView(header.buffer, header.byteOffset, 8).setBigUint64(0, tsUs, true);
+  header.writeBigUInt64LE(tsUs, 1); // byte 1-8'e yazar, byte 0'ı (isKey) korur
   try { ws.send(Buffer.concat([header, data]), { binary: true }); } catch {}
 }
 
