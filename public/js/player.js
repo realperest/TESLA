@@ -1,6 +1,6 @@
 /**
- * Açıl Susam — TeslaPlayer V2 (Stable Clean Edition)
- * Versiyon: 260419.0020
+ * Açıl Susam — TeslaPlayer V3 (Multiplex & Stable Edition)
+ * Versiyon: 260419.0021
  */
 
 'use strict';
@@ -21,9 +21,14 @@ class TeslaPlayer {
     this.containerId  = opts.containerId  || 'player-area';
     this.container    = document.getElementById(this.containerId);
 
+    // Audio Elements for MSE
+    this._audio             = null;
+    this._mediaSource       = null;
+    this._sourceBuffer      = null;
+    this._sourceBufferReady = false;
+    this._audioQueue        = [];
+
     this._worker      = null;
-    this._audio       = null;
-    this._audioHls    = null;
     this.isPlaying    = false;
     this._wcMode      = false;
     this.currentChannel = null;
@@ -80,8 +85,9 @@ class TeslaPlayer {
       const msg = e.data;
       if (msg.type === 'ready') {
         this.isPlaying = true;
-        this._startAudio(channel);
         this._startSyncLoop();
+      } else if (msg.type === 'audio') {
+        this._feedAudioChunk(msg.chunk);
       } else if (msg.type === 'error') {
         console.error('[Player/Worker] Error:', msg.message);
       }
@@ -104,36 +110,65 @@ class TeslaPlayer {
     });
   }
 
-  _startAudio(channel) {
-    this._stopAudio();
-    const audioUrl = channel.ytUrl
-      ? `/stream/audio?url=${encodeURIComponent(channel.ytUrl)}`
-      : channel.url;
+  _feedAudioChunk(chunk) {
+    if (!this._mediaSource) {
+      this._mediaSource    = new MediaSource();
+      this._audioQueue     = [];
+      this._sourceBufferReady = false;
 
-    this._audio = document.createElement('audio');
-    this._audio.volume = 1;
-    this._audio.crossOrigin = 'anonymous';
+      this._audio          = document.createElement('audio');
+      this._audio.src      = URL.createObjectURL(this._mediaSource);
+      this._audio.volume   = 1;
+      this._audio.autoplay = true;
 
-    if (!channel.ytUrl && (audioUrl.includes('.m3u8') || channel.isHls)) {
-      if (typeof Hls !== 'undefined' && Hls.isSupported()) {
-        this._audioHls = new Hls({ enableWorker: true });
-        this._audioHls.loadSource(audioUrl);
-        this._audioHls.attachMedia(this._audio);
-        this._audioHls.on(Hls.Events.MANIFEST_PARSED, () => this._audio.play());
-      } else {
-        this._audio.src = audioUrl;
-        this._audio.play();
-      }
-    } else {
-      this._audio.src = audioUrl;
-      this._audio.play();
+      this._mediaSource.addEventListener('sourceopen', () => {
+        const mime = 'audio/mpeg';
+        if (!MediaSource.isTypeSupported(mime)) {
+          console.error('[Player] audio/mpeg MediaSource desteklenmiyor!');
+          return;
+        }
+        try {
+          this._sourceBuffer = this._mediaSource.addSourceBuffer(mime);
+          this._sourceBuffer.mode = 'sequence';
+          this._sourceBuffer.addEventListener('updateend', () => this._flushAudioQueue());
+          this._sourceBufferReady = true;
+          this._flushAudioQueue();
+        } catch (e) {
+          console.error('[Player] SourceBuffer hatası:', e);
+        }
+      });
+
+      this._audio.play().catch(() => {});
+    }
+
+    this._audioQueue.push(chunk instanceof ArrayBuffer ? chunk : Buffer.from(chunk));
+    this._flushAudioQueue();
+  }
+
+  _flushAudioQueue() {
+    if (!this._sourceBufferReady || !this._sourceBuffer || this._sourceBuffer.updating) return;
+    if (!this._audioQueue || this._audioQueue.length === 0) return;
+    try {
+      this._sourceBuffer.appendBuffer(this._audioQueue.shift());
+    } catch (e) {
+      // Ignore quota exceeded temporarily
     }
   }
 
   _stopAudio() {
-    if (this._audioHls) { this._audioHls.destroy(); this._audioHls = null; }
-    if (this._audio) { this._audio.pause(); this._audio.src = ''; this._audio.remove(); }
-    this._audio = null;
+    if (this._audio) {
+      this._audio.pause();
+      this._audio.src = '';
+      this._audio.remove();
+      this._audio = null;
+    }
+    if (this._mediaSource && this._mediaSource.readyState === 'open') {
+      try { this._mediaSource.endOfStream(); } catch {}
+    }
+    this._mediaSource = null;
+    this._sourceBuffer = null;
+    this._sourceBufferReady = false;
+    this._audioQueue = [];
   }
 
   stop() {
@@ -150,7 +185,6 @@ class TeslaPlayer {
     this.isPlaying = false;
     this._wcMode = false;
 
-    // Canvas'ı manuel temizle (Eğer transfer edilmediyse)
     if (this.ctx && !this._worker) {
       this.ctx.fillStyle = '#000';
       this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
@@ -165,8 +199,9 @@ class TeslaPlayer {
     setTimeout(() => errDiv.remove(), 5000);
   }
 
-  // UI Event Handlers
   togglePlay() {
+    // In multiplex mode, pause is tricky since data still arrives from WebSocket.
+    // For now, mute audio. True pause would require sending a signal to backend.
     if (this._audio) {
       if (this._audio.paused) { this._audio.play(); this.isPlaying = true; }
       else { this._audio.pause(); this.isPlaying = false; }

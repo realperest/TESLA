@@ -1,13 +1,14 @@
 'use strict';
 
 /**
- * Tesla WebCodecs Worker V2 (Stable Edition)
+ * Tesla WebCodecs Worker V3 (Multiplex Edition)
  */
 
 let decoder = null;
 let ws = null;
 let frameQueue = []; 
-let lastAudioTime = 0;
+let lastAudioTime = -1;
+let videoPtsOffset = null;
 let offscreenCanvas = null;
 let offscreenCtx = null;
 
@@ -34,13 +35,11 @@ self.onmessage = function (e) {
 function _initDecoder() {
   decoder = new VideoDecoder({
     output: (frame) => {
-      const pts = frame.timestamp / 1000;
-      frameQueue.push({ frame, pts });
-      // Küçüktün büyüğe sırala
-      frameQueue.sort((a, b) => a.pts - b.pts);
+      const rawPts = frame.timestamp / 1000;
+      frameQueue.push({ frame, rawPts });
+      frameQueue.sort((a, b) => a.rawPts - b.rawPts);
       
-      // Buffer çok şişerse temizle (Gecikmeyi önlemek için)
-      if (frameQueue.length > 45) {
+      if (frameQueue.length > 50) {
         frameQueue.shift().frame.close();
       }
     },
@@ -50,8 +49,9 @@ function _initDecoder() {
     }
   });
 
+  // Level 3.1 Baseline for widespread Annex B support
   decoder.configure({
-    codec: 'avc1.42E01F', // Daha geniş uyumluluk için Level 3.1 Baseline
+    codec: 'avc1.42E01F',
     optimizeForLatency: true
   });
 }
@@ -67,18 +67,17 @@ function _connect(wsUrl) {
     if (data.byteLength < 9) return;
 
     const view = new DataView(data);
-    if (view.getUint8(0) === 0x01) { // Video Packet
-      const pts = Number(view.getBigUint64(1, true));
-      const payload = data.slice(9);
-      
+    const type = view.getUint8(0);
+    const pts = Number(view.getBigUint64(1, true));
+    const payload = data.slice(9);
+
+    if (type === 0x01) { // Video Packet
       if (decoder && decoder.state === 'configured') {
         const nalArray = new Uint8Array(payload);
-        // NAL Unit Type kontrolü (bit 0-4)
         const nalType = nalArray[4] & 0x1F; 
-        
         try {
           decoder.decode(new EncodedVideoChunk({
-            type: (nalType === 5) ? 'key' : 'delta',
+            type: (nalType === 5 || nalType === 7 || nalType === 8) ? 'key' : 'delta',
             timestamp: pts * 1000,
             data: payload
           }));
@@ -86,6 +85,9 @@ function _connect(wsUrl) {
           console.warn('[Worker] Decode failed:', err.message);
         }
       }
+    } else if (type === 0x02) { // Audio Packet
+      // ArrayBuffer'ı ana theard'e transfer et (Zero-copy)
+      self.postMessage({ type: 'audio', chunk: payload }, [payload]);
     }
   };
 
@@ -96,19 +98,32 @@ function _connect(wsUrl) {
 function _renderBestFrame() {
   if (frameQueue.length === 0 || !offscreenCtx) return;
 
-  // Ses zamanına en uygun frame'i bul
-  let bestIdx = -1;
-  const target = lastAudioTime;
+  // Ses henüz başlamamışsa, gelen çerçeveleri doğrudan ekrana bas
+  if (lastAudioTime < 0) {
+    const item = frameQueue.shift();
+    _draw(item.frame);
+    item.frame.close();
+    return;
+  }
 
-  // Ses çok ilerlemişse (Network lag), eski frame'leri hızlıca boşalt
-  if (frameQueue[frameQueue.length - 1].pts < target - 500) {
-    // 500ms'den fazla gerideysek buffer'ı temizle ki güncele yetişelim
+  // Ses başladı, video ve ses PTS ofsetini hesapla
+  if (videoPtsOffset === null && frameQueue.length > 0) {
+    // İlk hesaplama
+    videoPtsOffset = frameQueue[0].rawPts - lastAudioTime;
+  }
+
+  // Hedef zaman: Sesin güncel süresi üzerine baştaki offseti ekle
+  const targetPts = lastAudioTime + (videoPtsOffset || 0);
+
+  // Network lag senaryosu: Video çok geride kaldıysa buffer'ı boşalt
+  if (frameQueue[frameQueue.length - 1].rawPts < targetPts - 500) {
     while(frameQueue.length > 5) frameQueue.shift().frame.close();
     return;
   }
 
+  let bestIdx = -1;
   for (let i = 0; i < frameQueue.length; i++) {
-    if (frameQueue[i].pts <= target) {
+    if (frameQueue[i].rawPts <= targetPts) {
       bestIdx = i;
     } else {
       break;
@@ -116,29 +131,26 @@ function _renderBestFrame() {
   }
 
   if (bestIdx !== -1) {
-    // Seçilen frame'den öncekileri at
-    for (let i = 0; i < bestIdx; i++) {
-      frameQueue.shift().frame.close();
-    }
+    for (let i = 0; i < bestIdx; i++) frameQueue.shift().frame.close();
     const item = frameQueue.shift();
-    
-    // Canvas boyutu kontrol
-    if (offscreenCanvas.width !== item.frame.displayWidth) {
-      offscreenCanvas.width = item.frame.displayWidth;
-      offscreenCanvas.height = item.frame.displayHeight;
-    }
-
-    offscreenCtx.drawImage(item.frame, 0, 0);
+    _draw(item.frame);
     item.frame.close();
   }
 }
 
+function _draw(frame) {
+  if (offscreenCanvas.width !== frame.displayWidth) {
+    offscreenCanvas.width = frame.displayWidth;
+    offscreenCanvas.height = frame.displayHeight;
+  }
+  offscreenCtx.drawImage(frame, 0, 0);
+}
+
 function _cleanup() {
   if (ws) { ws.close(); ws = null; }
-  if (decoder) { 
-    try { decoder.close(); } catch {} 
-    decoder = null; 
-  }
+  if (decoder) { try { decoder.close(); } catch {} decoder = null; }
   frameQueue.forEach(f => f.frame.close());
   frameQueue = [];
+  lastAudioTime = -1;
+  videoPtsOffset = null;
 }
