@@ -49,7 +49,10 @@ class TeslaPlayer {
     }, 16); // ~60fps
   }
 
-  async load(channel) {
+  async load(channel, opts = {}) {
+    const silentError  = !!opts.silentError;
+    const throwOnError = !!opts.throwOnError;
+
     this.stop();
     this.currentChannel = channel;
     
@@ -62,12 +65,19 @@ class TeslaPlayer {
       } else {
         await this._loadClassic(channel);
       }
+      return true;
     } catch (err) {
       console.error('[Player] Load Error:', err);
-      this._showError(channel);
+      if (!silentError) this._showError(channel);
+      if (throwOnError) throw err;
+      return false;
     } finally {
       if (spinner) spinner.classList.remove('active');
     }
+  }
+
+  async _loadClassic(channel) {
+    throw new Error('Fallback _loadClassic not implemented in V3. Device must support WebCodecs.');
   }
 
   async _loadWebCodecs(channel) {
