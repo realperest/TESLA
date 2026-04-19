@@ -75,6 +75,7 @@ async function handleStreamConnection(ws, req) {
   
   const targetUrl = decodeURIComponent(url);
   try {
+    if (_isYouTubeUrl(targetUrl)) {
       console.log('[Stream] yt-dlp:', targetUrl);
       const ytArgs = [_ytCookieArgs(), '--no-playlist', '--no-warnings', '-f', '18/92/22/best', '-o', '-', targetUrl].flat().filter(Boolean);
       const yt = spawn(YT_DLP, ytArgs, { stdio: ['ignore', 'pipe', 'pipe'] });
