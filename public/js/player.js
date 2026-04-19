@@ -16,30 +16,44 @@ function supportsWebCodecs() {
 class TeslaPlayer {
   constructor(canvasId, opts = {}) {
     this.canvas       = document.getElementById(canvasId);
+    this._offscreen   = null;
+    try { this._offscreen = this.canvas.transferControlToOffscreen(); } catch {}
     this._ctx         = null;
     this.spinnerId    = opts.spinnerId    || 'spinner';
     this.containerId  = opts.containerId  || 'player-area';
     this.container    = document.getElementById(this.containerId);
 
-    // Audio Elements for MSE
-    this._audio             = null;
-    this._mediaSource       = null;
-    this._sourceBuffer      = null;
-    this._sourceBufferReady = false;
-    this._audioQueue        = [];
-
-    this._worker      = null;
     this.isPlaying    = false;
     this._wcMode      = false;
     this.currentChannel = null;
-
     this._syncTimer   = null;
     this._dummyVideo  = document.createElement('video');
+
+    // Create persistent worker
+    if (isTesla() || supportsWebCodecs()) {
+      this._worker = new Worker('/js/webcodecs-worker.js');
+      if (this._offscreen) {
+        this._worker.postMessage({ type: 'init_canvas', canvas: this._offscreen }, [this._offscreen]);
+      }
+      this._worker.onmessage = this._handleWorkerMessage.bind(this);
+    }
   }
 
   // Backwards compatibility for app.js UI logic
-  get video() { return this._audio || this._dummyVideo; }
-  get hasActiveSource() { return !!this._worker || !!this._audio; }
+  get video() { return this._audioCtx ? this._dummyVideo : this._dummyVideo; }
+  get hasActiveSource() { return !!this._worker && this.isPlaying; }
+
+  _handleWorkerMessage(e) {
+    const msg = e.data;
+    if (msg.type === 'ready') {
+      this.isPlaying = true;
+      this._startSyncLoop();
+    } else if (msg.type === 'audio-pcm') {
+      this._handlePcmAudio(msg.pcm, msg.info);
+    } else if (msg.type === 'error') {
+      console.error('[Player/Worker] Error:', msg.message);
+    }
+  }
 
   _startSyncLoop() {
     if (this._syncTimer) clearInterval(this._syncTimer);
@@ -108,35 +122,18 @@ class TeslaPlayer {
     const wsProto = location.protocol === 'https:' ? 'wss:' : 'ws:';
     const wsUrl = `${wsProto}//${location.host}/stream/ws?url=${encodeURIComponent(rawUrl)}`;
 
-    this._worker = new Worker('/js/webcodecs-worker.js');
-    
-    let offscreen = null;
-    try { offscreen = this.canvas.transferControlToOffscreen(); } catch (e) {}
-
-    this._worker.onmessage = (e) => {
-      const msg = e.data;
-      if (msg.type === 'ready') {
-        this.isPlaying = true;
-        this._startSyncLoop();
-      } else if (msg.type === 'audio-pcm') {
-        this._handlePcmAudio(msg.pcm, msg.info);
-      } else if (msg.type === 'error') {
-        console.error('[Player/Worker] Error:', msg.message);
-      }
-    };
-
-    if (offscreen) {
-      this._worker.postMessage({ type: 'start', wsUrl, canvas: offscreen }, [offscreen]);
-    } else {
-      this._worker.postMessage({ type: 'start', wsUrl });
+    if (!this._worker) {
+      throw new Error("Worker was not initialized.");
     }
+
+    this._worker.postMessage({ type: 'start', wsUrl });
 
     // Handshake bekle
     return new Promise((res, rej) => {
       const timeout = setTimeout(() => rej('Worker Timeout'), 15000);
       const originalHandler = this._worker.onmessage;
       this._worker.onmessage = (e) => {
-        originalHandler(e);
+        if (originalHandler) originalHandler(e);
         if (e.data.type === 'ready') { clearTimeout(timeout); res(); }
       };
     });
@@ -192,23 +189,11 @@ class TeslaPlayer {
 
     if (this._worker) {
       this._worker.postMessage({ type: 'stop' });
-      this._worker.terminate();
     }
-    this._worker = null;
     this._stopAudio();
     
     this.isPlaying = false;
     this._wcMode = false;
-
-    if (!this._worker) {
-      try {
-        if (!this._ctx) this._ctx = this.canvas.getContext('2d');
-        if (this._ctx) {
-          this._ctx.fillStyle = '#000';
-          this._ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
-        }
-      } catch {}
-    }
   }
 
   _showError(c) {
