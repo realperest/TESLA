@@ -117,60 +117,52 @@ async function _fetchAndPipe(inputUrl, writable, onError) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Ortak ffmpeg H.264 argümanları (stdin'den okuma)
+// ffmpeg JPEG (MJPEG) argümanları — WebCodecs yerine evrensel JPEG pipeline
 // ─────────────────────────────────────────────────────────────────────────────
 
-function _h264Args() {
+function _jpegArgs() {
   return [
     '-re', '-i', 'pipe:0',
     '-an',
-    '-c:v', 'libx264', '-preset', 'ultrafast', '-tune', 'zerolatency',
-    '-profile:v', 'baseline', '-level', '4.1',
-    '-x264opts', 'annexb=1:repeat-headers=1:keyint=60:min-keyint=30:bframes=0:scenecut=0',
-    '-vf', 'scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2:color=black,fps=30',
-    '-f', 'h264', 'pipe:1',
+    '-vf', 'scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2:color=black,fps=24',
+    '-f', 'image2pipe',
+    '-vcodec', 'mjpeg',
+    '-q:v', '4',
+    'pipe:1',
   ];
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// NAL unit parsing + WebSocket gönderim (ffmpeg stdout'u işle)
+// JPEG frame boundary tespiti + WebSocket gönderim
 // ─────────────────────────────────────────────────────────────────────────────
 
-function _attachH264Output(ws, ff, label) {
-  let buffer  = Buffer.alloc(0);
-  let startMs = Date.now();
+function _attachJpegOutput(ws, ff, label) {
+  let buf = Buffer.alloc(0);
 
   ff.stdout.on('data', (chunk) => {
-    buffer = Buffer.concat([buffer, chunk]);
-    const { units, remaining } = _splitNalUnits(buffer);
-    buffer = remaining;
+    buf = Buffer.concat([buf, chunk]);
 
-    for (const unit of units) {
-      if (!unit.length) continue;
-      const scLen   = (unit[0] === 0 && unit[1] === 0 && unit[2] === 0 && unit[3] === 1) ? 4 : 3;
-      if (unit.length <= scLen) continue;
-      const nalType = unit[scLen] & 0x1F;
-      if (nalType === 9 || nalType === 12) continue;
-      if (ws.readyState !== 1) return;
-
-      if (nalType === 7) {
-        const spsRaw = unit.slice(scLen);
-        const msg = Buffer.allocUnsafe(1 + spsRaw.length);
-        msg[0] = 0x07; spsRaw.copy(msg, 1);
-        ws.send(msg, { binary: true }); continue;
+    // SOI (FF D8) ve EOI (FF D9) sınırlarını bul
+    let i = 0;
+    while (i < buf.length - 1) {
+      if (buf[i] === 0xFF && buf[i + 1] === 0xD8) {
+        // SOI bulundu — EOI ara
+        let j = i + 2;
+        while (j < buf.length - 1) {
+          if (buf[j] === 0xFF && buf[j + 1] === 0xD9) {
+            // Tam JPEG frame
+            const frame = buf.slice(i, j + 2);
+            if (ws.readyState === 1) ws.send(frame, { binary: true });
+            buf = buf.slice(j + 2);
+            i = 0;
+            break;
+          }
+          j++;
+        }
+        if (j >= buf.length - 1) break; // EOI henüz gelmedi, bekle
+      } else {
+        i++;
       }
-      if (nalType === 8) {
-        const ppsRaw = unit.slice(scLen);
-        const msg = Buffer.allocUnsafe(1 + ppsRaw.length);
-        msg[0] = 0x08; ppsRaw.copy(msg, 1);
-        ws.send(msg, { binary: true }); continue;
-      }
-
-      const rawNal = unit.slice(scLen);
-      const avcc   = Buffer.allocUnsafe(4 + rawNal.length);
-      avcc.writeUInt32BE(rawNal.length, 0);
-      rawNal.copy(avcc, 4);
-      _sendFrame(ws, nalType === 5, BigInt(Date.now() - startMs) * 1000n, avcc);
     }
   });
 
@@ -207,38 +199,37 @@ function handleStreamConnection(ws, req) {
   try { inputUrl = decodeURIComponent(rawUrl); }
   catch { ws.close(1008, 'geçersiz url'); return; }
 
-  _startH264(ws, inputUrl);
+  _startJpeg(ws, inputUrl);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// H.264 stream — üç yol: YouTube→yt-dlp | CDN→DoH+pipe | Diğer→direkt
+// JPEG stream — üç yol: YouTube→yt-dlp | CDN→DoH+pipe | Diğer→direkt
 // ─────────────────────────────────────────────────────────────────────────────
 
-function _startH264(ws, inputUrl) {
-  _startH264Async(ws, inputUrl).catch(err => {
-    console.error('[Stream/H264] Başlatma hatası:', err.message);
+function _startJpeg(ws, inputUrl) {
+  _startJpegAsync(ws, inputUrl).catch(err => {
+    console.error('[Stream/JPEG] Başlatma hatası:', err.message);
     if (ws.readyState <= 1) ws.close(1011, 'stream hatası');
   });
 }
 
-async function _startH264Async(ws, inputUrl) {
+async function _startJpegAsync(ws, inputUrl) {
   // ── YOL 1: YouTube URL → yt-dlp pipe ─────────────────────────────────────
   if (_isYouTubeUrl(inputUrl)) {
-    console.log('[Stream/H264] YouTube→yt-dlp modu');
+    console.log('[Stream/JPEG] YouTube→yt-dlp modu');
 
     const cookieArgs = _ytCookieArgs();
     const ytArgs = [
       ...cookieArgs,
       '--no-playlist', '--no-warnings', '--geo-bypass',
       '--extractor-args', 'youtube:player_client=web,web_safari,android',
-      // Sadece combined (tek dosya) format → doğrudan pipe edilebilir
       '-f', '18/best[ext=mp4][vcodec!=none][acodec!=none][height<=480]/best[vcodec!=none][acodec!=none][height<=480]',
       '-o', '-',
       inputUrl,
     ];
 
     const yt = spawn(YT_DLP, ytArgs, { stdio: ['ignore', 'pipe', 'pipe'] });
-    const ff = spawn(FFMPEG_PATH, _h264Args(), { stdio: ['pipe', 'pipe', 'pipe'] });
+    const ff = spawn(FFMPEG_PATH, _jpegArgs(), { stdio: ['pipe', 'pipe', 'pipe'] });
 
     yt.stdout.pipe(ff.stdin);
     ff.stdin.on('error', () => {});
@@ -253,7 +244,7 @@ async function _startH264Async(ws, inputUrl) {
     yt.on('close', code => { if (code !== 0) console.warn('[yt-dlp] çıkış kodu:', code); });
 
     ACTIVE.set(ws, { proc: ff, yt });
-    _attachH264Output(ws, ff, 'H264-YT');
+    _attachJpegOutput(ws, ff, 'JPEG-YT');
     ws.on('close', () => _killStream(ws));
     ws.on('error', () => _killStream(ws));
     return;
@@ -261,25 +252,25 @@ async function _startH264Async(ws, inputUrl) {
 
   // ── YOL 2: googlevideo.com CDN → DoH + Node.js HTTP pipe ─────────────────
   if (_isGoogleVideoCdn(inputUrl)) {
-    console.log('[Stream/H264] DoH+pipe modu');
+    console.log('[Stream/JPEG] DoH+pipe modu');
 
-    const ff = spawn(FFMPEG_PATH, _h264Args(), { stdio: ['pipe', 'pipe', 'pipe'] });
+    const ff = spawn(FFMPEG_PATH, _jpegArgs(), { stdio: ['pipe', 'pipe', 'pipe'] });
     ff.stdin.on('error', () => {});
 
     const fetchHandle = await _fetchAndPipe(inputUrl, ff.stdin, (err) => {
-      console.error('[Stream/H264] CDN fetch hatası:', err.message);
+      console.error('[Stream/JPEG] CDN fetch hatası:', err.message);
       try { ff.kill('SIGKILL'); } catch {}
     });
 
     ACTIVE.set(ws, { proc: ff, fetch: fetchHandle });
-    _attachH264Output(ws, ff, 'H264-CDN');
+    _attachJpegOutput(ws, ff, 'JPEG-CDN');
     ws.on('close', () => _killStream(ws));
     ws.on('error', () => _killStream(ws));
     return;
   }
 
   // ── YOL 3: Direkt URL (IPTV/RTSP/HLS) ───────────────────────────────────
-  console.log('[Stream/H264] Direkt URL modu');
+  console.log('[Stream/JPEG] Direkt URL modu');
   const ytHeaders =
     'User-Agent: Mozilla/5.0 (Linux; Android 11; Pixel 5) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/109.0.0.0 Mobile Safari/537.36\r\n' +
     'Referer: https://www.youtube.com/\r\n' +
@@ -289,16 +280,13 @@ async function _startH264Async(ws, inputUrl) {
     '-fflags', 'nobuffer+discardcorrupt', '-flags', 'low_delay',
     '-headers', ytHeaders, '-rtsp_transport', 'tcp', '-i', inputUrl,
     '-an',
-    '-c:v', 'libx264', '-preset', 'ultrafast', '-tune', 'zerolatency',
-    '-profile:v', 'baseline', '-level', '4.1',
-    '-x264opts', 'annexb=1:repeat-headers=1:keyint=60:min-keyint=30:bframes=0:scenecut=0',
-    '-vf', 'scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2:color=black,fps=30',
-    '-f', 'h264', 'pipe:1',
+    '-vf', 'scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2:color=black,fps=24',
+    '-f', 'image2pipe', '-vcodec', 'mjpeg', '-q:v', '4', 'pipe:1',
   ];
 
   const ff = spawn(FFMPEG_PATH, directArgs, { stdio: ['ignore', 'pipe', 'pipe'] });
   ACTIVE.set(ws, { proc: ff });
-  _attachH264Output(ws, ff, 'H264-Direct');
+  _attachJpegOutput(ws, ff, 'JPEG-Direct');
   ws.on('close', () => _killStream(ws));
   ws.on('error', () => _killStream(ws));
 }
