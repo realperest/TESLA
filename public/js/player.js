@@ -1,10 +1,12 @@
 /**
- * Açıl Susam — TeslaPlayer V2 (Clean Edition)
+ * Açıl Susam — TeslaPlayer V2 (Stable Clean Edition)
+ * Versiyon: 260419.0020
  */
 
 'use strict';
 
 function isTesla() { return /Tesla\//.test(navigator.userAgent); }
+
 function supportsWebCodecs() { 
   return typeof VideoDecoder !== 'undefined' && 
          typeof Worker !== 'undefined' && 
@@ -19,34 +21,33 @@ class TeslaPlayer {
     this.containerId  = opts.containerId  || 'player-area';
     this.container    = document.getElementById(this.containerId);
 
-    this.video        = document.createElement('video');
-    this.video.muted  = false;
-    this.video.playsInline = true;
-
     this._worker      = null;
     this._audio       = null;
     this._audioHls    = null;
     this.isPlaying    = false;
     this._wcMode      = false;
+    this.currentChannel = null;
 
     this._syncTimer   = null;
-    this._startSyncLoop();
   }
 
   _startSyncLoop() {
-    const sync = () => {
+    if (this._syncTimer) clearInterval(this._syncTimer);
+    this._syncTimer = setInterval(() => {
       if (this._wcMode && this.isPlaying && this._audio && !this._audio.paused) {
         // Master Clock: Audio currentTime (ms) -> Worker'a gönder
-        this._worker?.postMessage({ type: 'sync', currentTime: this._audio.currentTime * 1000 });
+        this._worker?.postMessage({ 
+          type: 'sync', 
+          currentTime: this._audio.currentTime * 1000 
+        });
       }
-      this._syncTimer = setTimeout(sync, 16);
-    };
-    sync();
+    }, 16); // ~60fps
   }
 
   async load(channel) {
     this.stop();
     this.currentChannel = channel;
+    
     const spinner = document.getElementById(this.spinnerId);
     if (spinner) spinner.classList.add('active');
 
@@ -56,11 +57,11 @@ class TeslaPlayer {
       } else {
         await this._loadClassic(channel);
       }
-      if (spinner) spinner.classList.remove('active');
     } catch (err) {
-      console.error('[Player] Error:', err);
-      if (spinner) spinner.classList.remove('active');
+      console.error('[Player] Load Error:', err);
       this._showError(channel);
+    } finally {
+      if (spinner) spinner.classList.remove('active');
     }
   }
 
@@ -76,9 +77,13 @@ class TeslaPlayer {
     try { offscreen = this.canvas.transferControlToOffscreen(); } catch (e) {}
 
     this._worker.onmessage = (e) => {
-      if (e.data.type === 'ready') {
+      const msg = e.data;
+      if (msg.type === 'ready') {
         this.isPlaying = true;
         this._startAudio(channel);
+        this._startSyncLoop();
+      } else if (msg.type === 'error') {
+        console.error('[Player/Worker] Error:', msg.message);
       }
     };
 
@@ -88,13 +93,13 @@ class TeslaPlayer {
       this._worker.postMessage({ type: 'start', wsUrl });
     }
 
-    // Ready bekle
-    await new Promise((res, rej) => {
-      const t = setTimeout(() => rej('Timeout'), 10000);
-      const prev = this._worker.onmessage;
+    // Handshake bekle
+    return new Promise((res, rej) => {
+      const timeout = setTimeout(() => rej('Worker Timeout'), 15000);
+      const originalHandler = this._worker.onmessage;
       this._worker.onmessage = (e) => {
-        prev(e);
-        if (e.data.type === 'ready') { clearTimeout(t); res(); }
+        originalHandler(e);
+        if (e.data.type === 'ready') { clearTimeout(timeout); res(); }
       };
     });
   }
@@ -107,54 +112,67 @@ class TeslaPlayer {
 
     this._audio = document.createElement('audio');
     this._audio.volume = 1;
-    this._audio.autoplay = true;
+    this._audio.crossOrigin = 'anonymous';
 
     if (!channel.ytUrl && (audioUrl.includes('.m3u8') || channel.isHls)) {
       if (typeof Hls !== 'undefined' && Hls.isSupported()) {
         this._audioHls = new Hls({ enableWorker: true });
         this._audioHls.loadSource(audioUrl);
         this._audioHls.attachMedia(this._audio);
+        this._audioHls.on(Hls.Events.MANIFEST_PARSED, () => this._audio.play());
+      } else {
+        this._audio.src = audioUrl;
+        this._audio.play();
       }
     } else {
       this._audio.src = audioUrl;
+      this._audio.play();
     }
-    this._audio.play().catch(() => {});
   }
 
   _stopAudio() {
-    if (this._audioHls) this._audioHls.destroy();
-    if (this._audio) { this._audio.pause(); this._audio.src = ''; }
+    if (this._audioHls) { this._audioHls.destroy(); this._audioHls = null; }
+    if (this._audio) { this._audio.pause(); this._audio.src = ''; this._audio.remove(); }
     this._audio = null;
-    this._audioHls = null;
   }
 
   stop() {
-    if (this._worker) this._worker.terminate();
+    if (this._syncTimer) clearInterval(this._syncTimer);
+    this._syncTimer = null;
+
+    if (this._worker) {
+      this._worker.postMessage({ type: 'stop' });
+      this._worker.terminate();
+    }
     this._worker = null;
     this._stopAudio();
+    
     this.isPlaying = false;
     this._wcMode = false;
-    if (this.ctx && !this.canvas.transferControlToOffscreen) {
+
+    // Canvas'ı manuel temizle (Eğer transfer edilmediyse)
+    if (this.ctx && !this._worker) {
       this.ctx.fillStyle = '#000';
       this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
     }
   }
 
   _showError(c) {
-    const el = document.createElement('div');
-    el.style.cssText = 'position:absolute;inset:0;background:#000;color:#fff;display:flex;align-items:center;justify-content:center;z-index:99';
-    el.innerHTML = `Yüklenemedi: ${c?.name || ''}`;
-    this.container?.appendChild(el);
-    setTimeout(() => el.remove(), 5000);
+    const errDiv = document.createElement('div');
+    errDiv.style.cssText = 'position:absolute;inset:0;background:rgba(0,0,0,0.8);color:#fff;display:flex;align-items:center;justify-content:center;z-index:99;font-family:sans-serif;';
+    errDiv.innerHTML = `<div><b>⚠️ Bağlantı Hatası</b><br>${c?.name || ''} yüklenemedi.</div>`;
+    this.container?.appendChild(errDiv);
+    setTimeout(() => errDiv.remove(), 5000);
   }
 
-  // UI uyumluluk metodları
+  // UI Event Handlers
   togglePlay() {
     if (this._audio) {
       if (this._audio.paused) { this._audio.play(); this.isPlaying = true; }
       else { this._audio.pause(); this.isPlaying = false; }
     }
   }
+
   toggleMute() { if (this._audio) return (this._audio.muted = !this._audio.muted); }
   setVolume(v) { if (this._audio) this._audio.volume = v; }
   get paused() { return this._audio ? this._audio.paused : true; }

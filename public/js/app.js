@@ -117,6 +117,7 @@ async function init() {
     renderChannels(channels);
     updateDockBackButton();
     applyPlayerLocale();
+    initVersionBadge();
   } catch {
     return;
   }
@@ -1534,6 +1535,22 @@ function dockNav(section) {
   }
 
   updateDockBackButton();
+}
+
+function initVersionBadge() {
+  const badge = document.getElementById('app-version-badge');
+  if (!badge) return;
+  const currentVersion = badge.dataset.version;
+  const viewedKey = 'viewed-version-' + currentVersion;
+  
+  if (!localStorage.getItem(viewedKey)) {
+    badge.style.color = '#22c55e'; // Green
+    badge.style.fontWeight = 'bold';
+    localStorage.setItem(viewedKey, 'true');
+  } else {
+    badge.style.color = '#888'; // Normal (White/Gray)
+    badge.style.fontWeight = 'bold';
+  }
 }
 
 document.addEventListener('DOMContentLoaded', init);
