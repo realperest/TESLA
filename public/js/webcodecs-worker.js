@@ -88,11 +88,7 @@ function _onH264(e) {
 
   if (msgType === 0x08) {
     ppsRaw = new Uint8Array(buf.slice(1));
-    if (spsRaw) {
-      _configureDecoder(spsRaw, ppsRaw).catch(function (err) {
-        self.postMessage({ type: 'error', message: 'Decoder init: ' + err.message });
-      });
-    }
+    if (spsRaw) _configureDecoder(spsRaw, ppsRaw);
     return;
   }
 
@@ -126,7 +122,7 @@ function _onH264(e) {
 // VideoDecoder konfigürasyonu
 // ─────────────────────────────────────────────────────────────────────────────
 
-async function _configureDecoder(sps, pps) {
+function _configureDecoder(sps, pps) {
   if (decoder) {
     try { decoder.close(); } catch {}
     decoder = null;
@@ -135,20 +131,8 @@ async function _configureDecoder(sps, pps) {
   const description = _buildAVCC(sps, pps);
   const codec = 'avc1.' + _hex(sps[1]) + _hex(sps[2]) + _hex(sps[3]);
 
-  // Codec desteğini doğrula
-  if (typeof VideoDecoder.isConfigSupported === 'function') {
-    try {
-      const check = await VideoDecoder.isConfigSupported({ codec, description });
-      if (!check.supported) {
-        self.postMessage({ type: 'error', message: 'Codec desteklenmiyor: ' + codec });
-        return;
-      }
-    } catch {}
-  }
-
   decoder = new VideoDecoder({
     output: function (frame) {
-      // VideoFrame Transferable: zero-copy, ana thread drawImage ile çizer
       self.postMessage({ type: 'frame', frame }, [frame]);
     },
     error: function (err) {
