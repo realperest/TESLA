@@ -59,10 +59,10 @@ function _initDecoder() {
   // AUDIO DECODER
   audioDecoder = new AudioDecoder({
     output: (audioData) => {
-      const size = audioData.allocationSize({ planeIndex: 0, format: 'f32' });
+      const size = audioData.allocationSize({ planeIndex: 0, format: 'f32-planar' });
       const buffer = new ArrayBuffer(size);
       const f32 = new Float32Array(buffer);
-      audioData.copyTo(buffer, { planeIndex: 0, format: 'f32' });
+      audioData.copyTo(buffer, { planeIndex: 0, format: 'f32-planar' });
       
       const pcmInfo = {
         sampleRate: audioData.sampleRate,

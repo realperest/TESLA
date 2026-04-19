@@ -44,7 +44,7 @@ class TeslaPlayer {
   _startSyncLoop() {
     if (this._syncTimer) clearInterval(this._syncTimer);
     this._syncTimer = setInterval(() => {
-      if (this._wcMode && this.isPlaying && this._audioCtx && this._audioCtx.state === 'running') {
+      if (this._wcMode && this.isPlaying && this._audioCtx) {
         // Master Clock: AudioContext currentTime (ms) -> Worker'a gönder
         this._worker?.postMessage({ 
           type: 'sync', 
@@ -54,7 +54,6 @@ class TeslaPlayer {
         // Populate dummy video's timeline to keep app.js happy
         if (this._dummyVideo) {
           try {
-            // we don't have exact duration easily available for live streams, just fake it increasing
             this._dummyVideo.currentTime = this._audioCtx.currentTime;
             Object.defineProperty(this._dummyVideo, 'duration', { value: this._audioCtx.currentTime + 3600, configurable: true }); 
           } catch(e) {}
@@ -69,6 +68,15 @@ class TeslaPlayer {
 
     this.stop();
     this.currentChannel = channel;
+
+    // Create AudioContext inside user-gesture wrapper to satisfy Autoplay policies
+    if (!this._audioCtx) {
+      this._audioCtx = new (window.AudioContext || window.webkitAudioContext)({ latencyHint: 'interactive' });
+    }
+    if (this._audioCtx.state === 'suspended') {
+      try { this._audioCtx.resume(); } catch {}
+    }
+    this._nextAudioTime = this._audioCtx.currentTime + 0.1;
     
     const spinner = document.getElementById(this.spinnerId);
     if (spinner) spinner.classList.add('active');
@@ -135,14 +143,7 @@ class TeslaPlayer {
   }
 
   _handlePcmAudio(pcmBuffer, info) {
-    if (!this._audioCtx) {
-      this._audioCtx = new (window.AudioContext || window.webkitAudioContext)({ latencyHint: 'interactive' });
-      this._nextAudioTime = this._audioCtx.currentTime + 0.1; // 100ms buffering
-    }
-
-    if (this._audioCtx.state === 'suspended' && this.isPlaying) {
-      this._audioCtx.resume();
-    }
+    if (!this._audioCtx) return; // Should be initialized in load()
 
     const { sampleRate, numberOfChannels, numberOfFrames } = info;
     const f32 = new Float32Array(pcmBuffer);
