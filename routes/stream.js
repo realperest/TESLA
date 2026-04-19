@@ -117,7 +117,16 @@ async function handleStreamConnection(ws, req) {
       _setupOutputs(ws, ff);
     } else {
       console.log('[Stream] Direct:', targetUrl);
-      const args = ['-thread_queue_size', '1024', '-re', '-i', targetUrl, '-map', '0:v:0?', '-map', '0:a:0?'].concat(_ffmpegOutputs());
+      // Removed -re for direct HLS/Stream inputs as it can cause stalls. Added identity headers and faster analysis.
+      const args = [
+        '-user_agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        '-headers', 'Referer: https://www.trtizle.com/\r\n',
+        '-probesize', '500000',
+        '-analyzeduration', '500000',
+        '-i', targetUrl, 
+        '-map', '0:v:0?', 
+        '-map', '0:a:0?'
+      ].concat(_ffmpegOutputs());
       const ff = spawn(FFMPEG_PATH, args, { stdio: ['ignore', 'pipe', 'pipe'] });
       ACTIVE.set(ws, { ff });
       _setupOutputs(ws, ff);
