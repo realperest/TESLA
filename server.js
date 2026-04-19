@@ -21,7 +21,7 @@ const youtubeRoutes = require('./routes/youtube');
 const { authenticate, verifyForWs } = require('./middleware/authenticate');
 const { ipLock } = require('./middleware/ipLock');
 const { startChannelUpdater } = require('./services/channelUpdater');
-const { handleStreamConnection } = require('./routes/stream');
+const { handleStreamConnection, handleAudioRequest } = require('./routes/stream');
 
 const app = express();
 app.set('trust proxy', 1); // Reverse proxy arkasında gerçek IP için
@@ -73,6 +73,7 @@ app.use('/auth', authRoutes);
 // ── API rotaları (authenticate + ipLock middleware içinde) ──────────────────
 app.use('/api', apiRoutes);
 app.use('/proxy', proxyRoutes);
+app.get('/stream/audio', authenticate, handleAudioRequest);
 app.use('/api/youtube', youtubeRoutes);
 
 // ── Korumalı HTML sayfaları ─────────────────────────────────────────────────

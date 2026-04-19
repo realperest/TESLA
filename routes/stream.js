@@ -325,4 +325,54 @@ function _killStream(ws) {
   }
 }
 
-module.exports = { handleStreamConnection };
+// ─────────────────────────────────────────────────────────────────────────────
+// HTTP audio stream — YouTube URL → yt-dlp ses-only → ffmpeg MP3 → response
+// ─────────────────────────────────────────────────────────────────────────────
+
+function handleAudioRequest(req, res) {
+  const rawUrl = req.query.url;
+  if (!rawUrl) { res.status(400).end(); return; }
+
+  let inputUrl;
+  try { inputUrl = decodeURIComponent(rawUrl); } catch { res.status(400).end(); return; }
+
+  if (!_isYouTubeUrl(inputUrl)) { res.status(400).end(); return; }
+
+  const cookieArgs = _ytCookieArgs();
+  const ytArgs = [
+    ...cookieArgs,
+    '--no-playlist', '--no-warnings', '--geo-bypass',
+    '--extractor-args', 'youtube:player_client=web,web_safari,android',
+    '-f', '140/bestaudio[ext=m4a]/bestaudio/18',
+    '-o', '-',
+    inputUrl,
+  ];
+
+  const yt = spawn(YT_DLP, ytArgs, { stdio: ['ignore', 'pipe', 'pipe'] });
+  const ff = spawn(FFMPEG_PATH, [
+    '-i', 'pipe:0',
+    '-vn',
+    '-acodec', 'libmp3lame', '-q:a', '5',
+    '-f', 'mp3',
+    'pipe:1',
+  ], { stdio: ['pipe', 'pipe', 'pipe'] });
+
+  yt.stdout.pipe(ff.stdin);
+  ff.stdin.on('error', () => {});
+  yt.on('error', err => console.error('[AudioStream/yt-dlp] hata:', err.message));
+  ff.on('error', err => console.error('[AudioStream/ffmpeg] hata:', err.message));
+
+  res.setHeader('Content-Type', 'audio/mpeg');
+  res.setHeader('Cache-Control', 'no-cache');
+  ff.stdout.pipe(res);
+
+  req.on('close', () => {
+    try { yt.kill('SIGKILL'); } catch {}
+    try { ff.kill('SIGKILL'); } catch {}
+  });
+
+  let ytErr = '';
+  yt.stderr.on('data', c => { ytErr += c; const l = ytErr.split('\n'); ytErr = l.pop(); l.forEach(x => x.trim() && console.log('[AudioStream/yt-dlp]', x)); });
+}
+
+module.exports = { handleStreamConnection, handleAudioRequest };

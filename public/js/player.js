@@ -129,8 +129,17 @@ class TeslaPlayer {
     this._worker = new Worker('/js/webcodecs-worker.js');
     this._workerActive = true;
 
+    let _audioStarted = false;
+
     const _onFrame = (msg) => {
       if (!this._wcMode || !msg.bitmap) return;
+
+      // İlk kare geldiğinde audioyu başlat — böylece görüntü ve ses aynı anda çıkar
+      if (!_audioStarted) {
+        _audioStarted = true;
+        this._startAudio(channel);
+      }
+
       const w = msg.bitmap.width;
       const h = msg.bitmap.height;
       if (this.canvas.width !== w || this.canvas.height !== h) {
@@ -149,7 +158,6 @@ class TeslaPlayer {
 
       if (msg.type === 'ready') {
         this.isPlaying = true;
-        this._startAudio(channel); // görüntü gelmeden yüklenmeye başlasın
         return;
       }
 
@@ -208,14 +216,18 @@ class TeslaPlayer {
   _startAudio(channel) {
     this._stopAudio();
 
-    const url = channel.url;
-    if (!url) return;
+    // YouTube kanalları için sunucu taraflı ses stream'i kullan (A/V senkronizasyonu)
+    const audioUrl = channel.ytUrl
+      ? `/stream/audio?url=${encodeURIComponent(channel.ytUrl)}`
+      : channel.url;
+
+    if (!audioUrl) return;
 
     this._audio = document.createElement('audio');
     this._audio.volume = 1;
     this._audio.muted  = false;
 
-    const isHls = url.includes('.m3u8') || url.includes('/proxy/hls') || channel.isHls;
+    const isHls = !channel.ytUrl && (audioUrl.includes('.m3u8') || audioUrl.includes('/proxy/hls') || channel.isHls);
 
     if (isHls && typeof Hls !== 'undefined' && Hls.isSupported()) {
       this._audioHls = new Hls({
@@ -223,13 +235,13 @@ class TeslaPlayer {
         lowLatencyMode : false,
         maxMaxBufferLength: 10,
       });
-      this._audioHls.loadSource(url);
+      this._audioHls.loadSource(audioUrl);
       this._audioHls.attachMedia(this._audio);
       this._audioHls.on(Hls.Events.MANIFEST_PARSED, () => {
         this._audio.play().catch(() => {});
       });
     } else {
-      this._audio.src = url;
+      this._audio.src = audioUrl;
       this._audio.play().catch(() => {});
     }
   }
