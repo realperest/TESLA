@@ -16,7 +16,7 @@ try {
   FFMPEG_PATH = process.env.FFMPEG_PATH || 'ffmpeg';
 }
 
-// yt-dlp binary — proxy.js ile aynı mantık
+// yt-dlp binary
 const YT_DLP = (() => {
   const venv = path.join(__dirname, '..', 'venv', 'Scripts', 'yt-dlp.exe');
   try { fs.accessSync(venv); return venv; } catch { return 'yt-dlp'; }
@@ -36,7 +36,7 @@ function _ytCookieArgs() {
   return [];
 }
 
-// Aktif stream'ler: ws → { proc, yt?, fetch? }
+// Aktif stream'ler: ws → { proc, yt?, fetch?, ffAudio? }
 const ACTIVE = new Map();
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -53,7 +53,7 @@ function _isGoogleVideoCdn(url) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// DNS-over-HTTPS — Railway UDP/53 yetersiz olduğunda (googlevideo CDN için)
+// DNS-over-HTTPS
 // ─────────────────────────────────────────────────────────────────────────────
 
 async function _dohResolve(hostname) {
@@ -117,66 +117,69 @@ async function _fetchAndPipe(inputUrl, writable, onError) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// ffmpeg JPEG (MJPEG) argümanları — WebCodecs yerine evrensel JPEG pipeline
+// FFmpeg H.264 Argümanları
 // ─────────────────────────────────────────────────────────────────────────────
 
-function _jpegArgs() {
+function _h264Args() {
   return [
-    '-re', '-i', 'pipe:0',    // gerçek zamanlı okuma — 10x hız sorununu önler
+    '-re', '-i', 'pipe:0',
     '-an',
-    '-vf', 'scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2:color=black,fps=15',
-    '-f', 'image2pipe',
-    '-vcodec', 'mjpeg',
-    '-q:v', '6',              // biraz düşük kalite = daha küçük frame = daha az latency
-    'pipe:1',
+    '-c:v', 'libx264', '-preset', 'ultrafast', '-tune', 'zerolatency',
+    '-profile:v', 'baseline', '-level', '4.1',
+    '-x264opts', 'annexb=1:repeat-headers=1:keyint=30:min-keyint=30:bframes=0:scenecut=0',
+    '-vf', 'scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2:color=black,fps=30',
+    '-f', 'h264', 'pipe:1',
   ];
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// JPEG frame boundary tespiti + WebSocket gönderim
+// WebSocket Mesaj Tipleri
 // ─────────────────────────────────────────────────────────────────────────────
 
-const TYPE_VIDEO = Buffer.from([0x01]);
-const TYPE_AUDIO = Buffer.from([0x02]);
+const TYPE_VIDEO = 0x01;
+const TYPE_AUDIO = 0x02;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Ses ve Video Çıktılarını WebSocket'e Bağlama
+// ─────────────────────────────────────────────────────────────────────────────
 
 function _attachAudioOutput(ws, ffAudio) {
   ffAudio.stdout.on('data', (chunk) => {
     if (ws.readyState === 1) {
-      try { ws.send(Buffer.concat([TYPE_AUDIO, chunk]), { binary: true }); } catch {}
+      const header = Buffer.allocUnsafe(1);
+      header[0] = TYPE_AUDIO;
+      try { ws.send(Buffer.concat([header, chunk]), { binary: true }); } catch {}
     }
   });
-  ffAudio.stderr.on('data', () => {}); // sessizce yut
+  ffAudio.stderr.on('data', () => {});
 }
 
-function _attachJpegOutput(ws, ff, label) {
-  let buf = Buffer.alloc(0);
+function _attachH264Output(ws, ff, label) {
+  let buffer  = Buffer.alloc(0);
+  let startMs = Date.now();
 
   ff.stdout.on('data', (chunk) => {
-    buf = Buffer.concat([buf, chunk]);
+    buffer = Buffer.concat([buffer, chunk]);
+    const { units, remaining } = _splitNalUnits(buffer);
+    buffer = remaining;
 
-    // Buffer'daki tüm tam frame'leri bul; sadece EN SON frame'i gönder
-    let lastStart = -1;
-    let lastEnd   = -1;
-    let i = 0;
-    while (i < buf.length - 1) {
-      if (buf[i] === 0xFF && buf[i + 1] === 0xD8) {
-        lastStart = i;
-        i += 2;
-      } else if (buf[i] === 0xFF && buf[i + 1] === 0xD9 && lastStart >= 0) {
-        lastEnd = i + 2;
-        i += 2;
-      } else {
-        i++;
-      }
-    }
+    for (const unit of units) {
+      if (!unit.length) continue;
+      
+      const scLen = (unit[0] === 0 && unit[1] === 0 && unit[2] === 0 && unit[3] === 1) ? 4 : 3;
+      if (unit.length <= scLen) continue;
+      
+      const nalType = unit[scLen] & 0x1F;
+      if (nalType === 9 || nalType === 12) continue;
+      if (ws.readyState !== 1) return;
 
-    if (lastStart >= 0 && lastEnd > lastStart) {
-      const frame = buf.slice(lastStart, lastEnd);
-      // 0x01 + JPEG frame → video mesajı
-      if (ws.readyState === 1) {
-        try { ws.send(Buffer.concat([TYPE_VIDEO, frame]), { binary: true }); } catch {}
-      }
-      buf = buf.slice(lastEnd);
+      // PTS (Presentation Timestamp) ekleme - milisaniye cinsinden
+      const pts = BigInt(Date.now() - startMs);
+      const header = Buffer.allocUnsafe(9);
+      header[0] = TYPE_VIDEO; 
+      header.writeBigUInt64LE(pts, 1);
+
+      ws.send(Buffer.concat([header, unit]), { binary: true });
     }
   });
 
@@ -200,8 +203,21 @@ function _attachJpegOutput(ws, ff, label) {
   });
 }
 
+function _splitNalUnits(buf) {
+  const units = [];
+  let unitStart = -1, i = 0;
+  while (i < buf.length - 2) {
+    let found = false, scLen = 0;
+    if (i + 3 < buf.length && buf[i] === 0 && buf[i+1] === 0 && buf[i+2] === 0 && buf[i+3] === 1) { found = true; scLen = 4; }
+    else if (buf[i] === 0 && buf[i+1] === 0 && buf[i+2] === 1) { found = true; scLen = 3; }
+    if (found) { if (unitStart >= 0) units.push(buf.slice(unitStart, i)); unitStart = i; i += scLen; }
+    else { i++; }
+  }
+  return { units, remaining: unitStart >= 0 ? buf.slice(unitStart) : buf };
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
-// WebSocket bağlantı girişi
+// WebSocket Bağlantı Yönetimi
 // ─────────────────────────────────────────────────────────────────────────────
 
 function handleStreamConnection(ws, req) {
@@ -213,24 +229,19 @@ function handleStreamConnection(ws, req) {
   try { inputUrl = decodeURIComponent(rawUrl); }
   catch { ws.close(1008, 'geçersiz url'); return; }
 
-  _startJpeg(ws, inputUrl);
+  _startStream(ws, inputUrl);
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// JPEG stream — üç yol: YouTube→yt-dlp | CDN→DoH+pipe | Diğer→direkt
-// ─────────────────────────────────────────────────────────────────────────────
-
-function _startJpeg(ws, inputUrl) {
-  _startJpegAsync(ws, inputUrl).catch(err => {
-    console.error('[Stream/JPEG] Başlatma hatası:', err.message);
+function _startStream(ws, inputUrl) {
+  _startStreamAsync(ws, inputUrl).catch(err => {
+    console.error('[Stream/H264] Başlatma hatası:', err.message);
     if (ws.readyState <= 1) ws.close(1011, 'stream hatası');
   });
 }
 
-async function _startJpegAsync(ws, inputUrl) {
-  // ── YOL 1: YouTube URL → yt-dlp tee → video+ses ffmpeg aynı anda ──────────
+async function _startStreamAsync(ws, inputUrl) {
   if (_isYouTubeUrl(inputUrl)) {
-    console.log('[Stream/JPEG] YouTube→yt-dlp tee modu');
+    console.log('[Stream/H264] YouTube→yt-dlp modu');
 
     const cookieArgs = _ytCookieArgs();
     const ytArgs = [
@@ -251,10 +262,9 @@ async function _startJpegAsync(ws, inputUrl) {
     ];
 
     const yt      = spawn(YT_DLP,    ytArgs,       { stdio: ['ignore', 'pipe', 'pipe'] });
-    const ff      = spawn(FFMPEG_PATH, _jpegArgs(), { stdio: ['pipe', 'pipe', 'pipe'] });
+    const ff      = spawn(FFMPEG_PATH, _h264Args(), { stdio: ['pipe', 'pipe', 'pipe'] });
     const ffAudio = spawn(FFMPEG_PATH, ffAudioArgs, { stdio: ['pipe', 'pipe', 'pipe'] });
 
-    // Tek yt-dlp çıktısını her iki ffmpeg'e manuel tee ile gönder
     yt.stdout.on('data', chunk => {
       try { ff.stdin.write(chunk); } catch {}
       try { ffAudio.stdin.write(chunk); } catch {}
@@ -273,39 +283,35 @@ async function _startJpegAsync(ws, inputUrl) {
       const lines = ytStderr.split('\n'); ytStderr = lines.pop();
       lines.forEach(l => { if (l.trim()) console.log('[yt-dlp/stream]', l); });
     });
-    yt.on('error',  err  => console.error('[yt-dlp] spawn hatası:', err.message));
-    yt.on('close',  code => { if (code !== 0) console.warn('[yt-dlp] çıkış kodu:', code); });
-    ffAudio.on('error', err => console.error('[ffAudio] hata:', err.message));
+    yt.on('error', err => console.error('[yt-dlp] spawn hatası:', err.message));
+    yt.on('close', code => { if (code !== 0) console.warn('[yt-dlp] çıkış kodu:', code); });
 
     ACTIVE.set(ws, { proc: ff, yt, ffAudio });
-    _attachJpegOutput(ws, ff, 'JPEG-YT');
+    _attachH264Output(ws, ff, 'H264-YT');
     _attachAudioOutput(ws, ffAudio);
     ws.on('close', () => _killStream(ws));
     ws.on('error', () => _killStream(ws));
     return;
   }
 
-  // ── YOL 2: googlevideo.com CDN → DoH + Node.js HTTP pipe ─────────────────
   if (_isGoogleVideoCdn(inputUrl)) {
-    console.log('[Stream/JPEG] DoH+pipe modu');
-
-    const ff = spawn(FFMPEG_PATH, _jpegArgs(), { stdio: ['pipe', 'pipe', 'pipe'] });
+    console.log('[Stream/H264] DoH+pipe modu');
+    const ff = spawn(FFMPEG_PATH, _h264Args(), { stdio: ['pipe', 'pipe', 'pipe'] });
     ff.stdin.on('error', () => {});
 
     const fetchHandle = await _fetchAndPipe(inputUrl, ff.stdin, (err) => {
-      console.error('[Stream/JPEG] CDN fetch hatası:', err.message);
+      console.error('[Stream/H264] CDN fetch hatası:', err.message);
       try { ff.kill('SIGKILL'); } catch {}
     });
 
     ACTIVE.set(ws, { proc: ff, fetch: fetchHandle });
-    _attachJpegOutput(ws, ff, 'JPEG-CDN');
+    _attachH264Output(ws, ff, 'H264-CDN');
     ws.on('close', () => _killStream(ws));
     ws.on('error', () => _killStream(ws));
     return;
   }
 
-  // ── YOL 3: Direkt URL (IPTV/RTSP/HLS) ───────────────────────────────────
-  console.log('[Stream/JPEG] Direkt URL modu');
+  console.log('[Stream/H264] Direkt URL modu');
   const ytHeaders =
     'User-Agent: Mozilla/5.0 (Linux; Android 11; Pixel 5) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/109.0.0.0 Mobile Safari/537.36\r\n' +
     'Referer: https://www.youtube.com/\r\n' +
@@ -315,39 +321,18 @@ async function _startJpegAsync(ws, inputUrl) {
     '-fflags', 'nobuffer+discardcorrupt', '-flags', 'low_delay',
     '-headers', ytHeaders, '-rtsp_transport', 'tcp', '-i', inputUrl,
     '-an',
-    '-vf', 'scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2:color=black,fps=24',
-    '-f', 'image2pipe', '-vcodec', 'mjpeg', '-q:v', '4', 'pipe:1',
+    '-c:v', 'libx264', '-preset', 'ultrafast', '-tune', 'zerolatency',
+    '-profile:v', 'baseline', '-level', '4.1',
+    '-x264opts', 'annexb=1:repeat-headers=1:keyint=30:min-keyint=30:bframes=0:scenecut=0',
+    '-vf', 'scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2:color=black,fps=30',
+    '-f', 'h264', 'pipe:1',
   ];
 
   const ff = spawn(FFMPEG_PATH, directArgs, { stdio: ['ignore', 'pipe', 'pipe'] });
   ACTIVE.set(ws, { proc: ff });
-  _attachJpegOutput(ws, ff, 'JPEG-Direct');
+  _attachH264Output(ws, ff, 'H264-Direct');
   ws.on('close', () => _killStream(ws));
   ws.on('error', () => _killStream(ws));
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Yardımcı fonksiyonlar
-// ─────────────────────────────────────────────────────────────────────────────
-
-function _splitNalUnits(buf) {
-  const units = [];
-  let unitStart = -1, i = 0;
-  while (i < buf.length - 2) {
-    let found = false, scLen = 0;
-    if (i + 3 < buf.length && buf[i] === 0 && buf[i+1] === 0 && buf[i+2] === 0 && buf[i+3] === 1) { found = true; scLen = 4; }
-    else if (buf[i] === 0 && buf[i+1] === 0 && buf[i+2] === 1) { found = true; scLen = 3; }
-    if (found) { if (unitStart >= 0) units.push(buf.slice(unitStart, i)); unitStart = i; i += scLen; }
-    else { i++; }
-  }
-  return { units, remaining: unitStart >= 0 ? buf.slice(unitStart) : buf };
-}
-
-function _sendFrame(ws, isKey, tsUs, data) {
-  const header = Buffer.allocUnsafe(9);
-  header[0] = isKey ? 0x01 : 0x00;
-  header.writeBigUInt64LE(tsUs, 1); // byte 1-8'e yazar, byte 0'ı (isKey) korur
-  try { ws.send(Buffer.concat([header, data]), { binary: true }); } catch {}
 }
 
 function _killStream(ws) {
@@ -362,7 +347,7 @@ function _killStream(ws) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// HTTP audio stream — YouTube URL → yt-dlp ses-only → ffmpeg MP3 → response
+// HTTP Audio (YouTube Only)
 // ─────────────────────────────────────────────────────────────────────────────
 
 function handleAudioRequest(req, res) {
@@ -395,9 +380,7 @@ function handleAudioRequest(req, res) {
 
   yt.stdout.pipe(ff.stdin);
   ff.stdin.on('error', () => {});
-  yt.on('error', err => console.error('[AudioStream/yt-dlp] hata:', err.message));
-  ff.on('error', err => console.error('[AudioStream/ffmpeg] hata:', err.message));
-
+  
   res.setHeader('Content-Type', 'audio/mpeg');
   res.setHeader('Cache-Control', 'no-cache');
   ff.stdout.pipe(res);
