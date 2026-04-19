@@ -84,8 +84,8 @@ async function handleStreamConnection(ws, req) {
         '--no-warnings', 
         '--force-ipv4', 
         '--geo-bypass', 
-        '--user-agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
-        '--extractor-args', 'youtube:player_client=ios,web',
+        '--user-agent', 'com.google.android.youtube/19.05.36 (Linux; U; Android 14; tr_TR; Pixel 8 Pro Build/UQ1A.240205.004) gzip',
+        '--extractor-args', 'youtube:player_client=android,ios',
         '-f', '18/22/best', 
         '-o', '-', 
         targetUrl
