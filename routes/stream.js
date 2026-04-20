@@ -60,36 +60,42 @@ async function handleStreamConnection(ws, req) {
 
   try {
     let ff, yt;
-    let playUrl = targetUrl;
-
     console.log(`[Stream] Loading: ${targetUrl} (Seek: ${startTime}s)`);
     
-    const ytArgs = [
-      '--no-playlist', '--no-warnings', '--force-ipv4', '--geo-bypass',
-      '--user-agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
-      '--extractor-args', isYouTube ? 'youtube:player_client=tv,android' : `generic:referer=https://www.trtizle.com/`,
-      isYouTube && startTime !== '0' ? '--download-sections' : null, 
-      isYouTube && startTime !== '0' ? `*${startTime}-inf` : null, // Modern yt-dlp seek syntax
-      '--format', 'bestvideo[height<=720]+bestaudio/best[height<=720]/best[height<=720]',
-      '-o', '-', targetUrl
-    ].filter(Boolean);
-    
-    yt = spawn(YT_DLP, ytArgs, { stdio: ['ignore', 'pipe', 'pipe'] });
-    
-    const ffArgs = ['-thread_queue_size', '1024', '-re', '-i', 'pipe:0', '-map', '0:v:0?', '-map', '0:a:0?'].concat(_ffmpegOutputs());
-    ff = spawn(FFMPEG_PATH, ffArgs, { stdio: ['pipe', 'pipe', 'pipe'] });
+    if (isYouTube) {
+      // Get direct stream URL for native seek
+      const ytDiscovery = spawn(YT_DLP, ['--no-playlist', '--geo-bypass', '--force-ipv4', '-g', targetUrl], { stdio: ['ignore', 'pipe', 'pipe'] });
+      let directUrl = '';
+      ytDiscovery.stdout.on('data', (d) => directUrl += d.toString());
+      
+      ytDiscovery.on('close', (code) => {
+        if (code !== 0 || !directUrl.trim()) return ws.close(1011);
+        const streamUrl = directUrl.trim().split('\n')[0];
+        
+        console.log(`[Stream] Native Seek to ${startTime}s`);
+        const ffArgs = [
+          '-ss', startTime, // Seek BEFORE input
+          '-reconnect', '1', '-reconnect_at_eof', '1', '-reconnect_streamed', '1',
+          '-user_agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+          '-i', streamUrl, 
+          '-avoid_negative_ts', 'make_zero', // CRITICAL: Fixes the freezing frame issue
+          '-fflags', '+genpts+discardcorrupt+igndts',
+          '-map', '0:v:0?', '-map', '0:a:0?'
+        ].concat(_ffmpegOutputs());
 
-    yt.stdout.pipe(ff.stdin);
-    
-    // Process monitoring
-    ACTIVE.set(ws, { ff, yt });
-
-    ff.stdout.on('data', (d) => { if (ws.readyState === 1) ws.send(d); });
-    ff.on('close', () => { if (ws.readyState === 1) ws.close(); _cleanupSession(ws); });
-    
-    // Log warnings without crashing
-    yt.stderr.on('data', (d) => { if (d.toString().includes('ERROR')) console.error('[YT-ERR]', d.toString().trim()); });
-
+        ff = spawn(FFMPEG_PATH, ffArgs, { stdio: ['ignore', 'pipe', 'pipe'] });
+        ACTIVE.set(ws, { ff });
+        ff.stdout.on('data', (d) => { if (ws.readyState === 1) ws.send(d); });
+        ff.on('close', () => { if (ws.readyState === 1) ws.close(); _cleanupSession(ws); });
+      });
+    } else {
+      // Generic/IPTV: Direct pipe
+      const ffArgs = ['-reconnect', '1', '-reconnect_at_eof', '1', '-reconnect_streamed', '1', '-i', targetUrl, '-map', '0:v:0?', '-map', '0:a:0?'].concat(_ffmpegOutputs());
+      ff = spawn(FFMPEG_PATH, ffArgs, { stdio: ['ignore', 'pipe', 'pipe'] });
+      ACTIVE.set(ws, { ff });
+      ff.stdout.on('data', (d) => { if (ws.readyState === 1) ws.send(d); });
+      ff.on('close', () => { if (ws.readyState === 1) ws.close(); _cleanupSession(ws); });
+    }
   } catch (err) {
     console.error('[Stream] App Error:', err.message);
     ws.close(1011);
