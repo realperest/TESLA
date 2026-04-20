@@ -23,6 +23,7 @@ class TeslaPlayerV2 {
         this._estimatedBufferedEnd = 0;
         this._videoFallbackTimer = null;
         this._fallbackPlayer = null;
+        this._fallbackCanvas = null;
 
         // Sync helper
         this._syncTimer = null;
@@ -50,7 +51,10 @@ class TeslaPlayerV2 {
     }
 
     _initWorker() {
-        if (this.worker) return;
+        if (this.worker) {
+            try { this.worker.terminate(); } catch {}
+            this.worker = null;
+        }
 
         this.worker = new Worker('/js/webcodecs_worker_v2.js');
         this.worker.onmessage = (ev) => {
@@ -148,6 +152,14 @@ class TeslaPlayerV2 {
             try { this._fallbackPlayer.destroy(); } catch {}
             this._fallbackPlayer = null;
         }
+        if (this._fallbackCanvas) {
+            try { this._fallbackCanvas.remove(); } catch {}
+            this._fallbackCanvas = null;
+        }
+        if (this.worker) {
+            try { this.worker.terminate(); } catch {}
+            this.worker = null;
+        }
         if (this.ws) { this.ws.close(); this.ws = null; }
         if (this.audio) { this.audio.pause(); this.audio.src = ''; }
         this._audioStarted = false;
@@ -195,13 +207,25 @@ class TeslaPlayerV2 {
         const wsProto = location.protocol === 'https:' ? 'wss:' : 'ws:';
         const wsUrl = `${wsProto}//${location.host}/stream/ws?url=${encodeURIComponent(rawUrl)}&t=${t}`;
         try {
+            const host = this.canvas?.parentElement;
+            if (!host) return;
+            host.style.position = host.style.position || 'relative';
+            this._fallbackCanvas = document.createElement('canvas');
+            this._fallbackCanvas.style.position = 'absolute';
+            this._fallbackCanvas.style.inset = '0';
+            this._fallbackCanvas.style.width = '100%';
+            this._fallbackCanvas.style.height = '100%';
+            this._fallbackCanvas.style.display = 'block';
+            this._fallbackCanvas.style.zIndex = '2';
+            host.appendChild(this._fallbackCanvas);
+
             this._fallbackPlayer = new window.JSMpeg.Player(wsUrl, {
-                canvas: this.canvas,
+                canvas: this._fallbackCanvas,
                 audio: false,
                 video: true,
                 autoplay: true,
                 disableGl: true,
-                videoBufferSize: 8 * 1024 * 1024
+                videoBufferSize: 12 * 1024 * 1024
             });
             if (this.spinner) this.spinner.classList.remove('active');
         } catch (err) {
