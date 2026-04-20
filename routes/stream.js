@@ -51,7 +51,7 @@ function _ffmpegOutputs() {
 async function handleStreamConnection(ws, req) {
   const query = new URL('http://x' + (req.url || '')).searchParams;
   const url = query.get('url');
-  const startTime = query.get('t') || '0'; 
+  let startTime = query.get('t') || '0'; 
   
   if (!url) return ws.close(1008);
   
@@ -59,45 +59,45 @@ async function handleStreamConnection(ws, req) {
   const isYouTube = targetUrl.includes('youtube.com') || targetUrl.includes('youtu.be');
 
   try {
-    console.log(`[Stream] Unified Loader: ${targetUrl} (Seek: ${startTime}s)`);
-    
-    if (isYouTube) {
-      const ytDiscovery = spawn(YT_DLP, ['--no-playlist', '--geo-bypass', '--force-ipv4', '-g', targetUrl], { stdio: ['ignore', 'pipe', 'pipe'] });
-      let directUrl = '';
-      ytDiscovery.stdout.on('data', (d) => directUrl += d.toString());
-      
-      ytDiscovery.on('close', (code) => {
-        if (code !== 0 || !directUrl.trim()) return ws.close(1011);
-        const streamUrl = directUrl.trim().split('\n')[0];
-        
-        const ffArgs = [
-          '-ss', startTime, 
-          '-reconnect', '1', '-reconnect_at_eof', '1', '-reconnect_streamed', '1',
-          '-user_agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
-          '-i', streamUrl, '-map', '0:v:0?', '-map', '0:a:0?'
-        ].concat(_ffmpegOutputs());
+    let ff, yt;
+    let playUrl = targetUrl;
 
-        let ff = spawn(FFMPEG_PATH, ffArgs, { stdio: ['ignore', 'pipe', 'pipe'] });
-        ACTIVE.set(ws, { ff });
-        ff.stdout.on('data', (d) => { if (ws.readyState === 1) ws.send(d); });
-        ff.on('close', () => { if (ws.readyState === 1) ws.close(); _cleanupSession(ws); });
-      });
-    } else {
-      const ffArgs = [
-        '-reconnect', '1', '-reconnect_at_eof', '1', '-reconnect_streamed', '1',
-        '-user-agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
-        '-headers', 'Referer: https://www.trtizle.com/\r\n',
-        '-i', targetUrl, '-map', '0:v:0?', '-map', '0:a:0?'
-      ].concat(_ffmpegOutputs());
-      let ff = spawn(FFMPEG_PATH, ffArgs, { stdio: ['ignore', 'pipe', 'pipe'] });
-      ACTIVE.set(ws, { ff });
-      ff.stdout.on('data', (d) => { if (ws.readyState === 1) ws.send(d); });
-      ff.on('close', () => { if (ws.readyState === 1) ws.close(); _cleanupSession(ws); });
+    if (isYouTube && startTime !== '0') {
+      // Append YouTube time parameter for native seeking
+      playUrl = targetUrl.includes('?') ? `${targetUrl}&t=${startTime}` : `${targetUrl}?t=${startTime}`;
     }
+
+    console.log(`[Stream] Loading: ${playUrl}`);
+    
+    const ytArgs = [
+      '--no-playlist', '--no-warnings', '--force-ipv4', '--geo-bypass',
+      '--user-agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+      '--extractor-args', isYouTube ? 'youtube:player_client=tv,android' : `generic:referer=https://www.trtizle.com/`,
+      '--format', 'bestvideo[height<=720]+bestaudio/best[height<=720]/best[height<=720]',
+      '-o', '-', playUrl
+    ];
+    
+    yt = spawn(YT_DLP, ytArgs, { stdio: ['ignore', 'pipe', 'pipe'] });
+    
+    const ffArgs = ['-thread_queue_size', '1024', '-re', '-i', 'pipe:0', '-map', '0:v:0?', '-map', '0:a:0?'].concat(_ffmpegOutputs());
+    ff = spawn(FFMPEG_PATH, ffArgs, { stdio: ['pipe', 'pipe', 'pipe'] });
+
+    yt.stdout.pipe(ff.stdin);
+    
+    // Process monitoring
+    ACTIVE.set(ws, { ff, yt });
+
+    ff.stdout.on('data', (d) => { if (ws.readyState === 1) ws.send(d); });
+    ff.on('close', () => { if (ws.readyState === 1) ws.close(); _cleanupSession(ws); });
+    
+    // Log warnings without crashing
+    yt.stderr.on('data', (d) => { if (d.toString().includes('ERROR')) console.error('[YT-ERR]', d.toString().trim()); });
+
   } catch (err) {
-    console.error('[Stream] Global Error:', err.message);
+    console.error('[Stream] App Error:', err.message);
     ws.close(1011);
   }
+
   ws.on('close', () => _cleanupSession(ws));
 }
 
