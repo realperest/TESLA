@@ -19,6 +19,7 @@ let currentAuNals = [];
 let currentAuHasVcl = false;
 let currentAuHasIdr = false;
 let currentAuPts = 0;
+let lastAuAppendMs = 0;
 
 self.onmessage = async (e) => {
     const { type, payload } = e.data;
@@ -69,7 +70,7 @@ function configureDecoder() {
         decoder.configure({
             codec: 'avc1.42E01E', 
             optimizeForLatency: true,
-            hardwareAcceleration: 'prefer-software'
+            hardwareAcceleration: 'prefer-hardware'
         });
         isConfigured = true;
         console.log('[WorkerV2] Decoder Configured');
@@ -115,6 +116,7 @@ function pushNalToAccessUnit(nal, pts) {
             flushCurrentAccessUnit();
             currentAuPts = pts;
             currentAuNals.push(nal);
+            lastAuAppendMs = Date.now();
             return;
         }
 
@@ -132,11 +134,13 @@ function pushNalToAccessUnit(nal, pts) {
             }
             currentAuHasVcl = true;
             currentAuNals.push(nal);
+            lastAuAppendMs = Date.now();
             return;
         }
 
         if (!currentAuNals.length) currentAuPts = pts;
         currentAuNals.push(nal);
+        lastAuAppendMs = Date.now();
     } catch (err) {
         self.postMessage({ type: 'status', payload: { state: 'decode_error' } });
     }
@@ -212,6 +216,12 @@ function concatMany(arr) {
 
 function renderLoop() {
     if (!ctx) return;
+
+    // Bazı akışlarda AUD/geçiş işareti seyrek gelebiliyor.
+    // VCL taşıyan AU birikmişse kısa gecikmeyle flush ederek görüntünün hiç başlamamasını engeller.
+    if (currentAuHasVcl && (Date.now() - lastAuAppendMs) > 80) {
+        flushCurrentAccessUnit();
+    }
 
     if (frameQueue.length === 0) {
         self.postMessage({ type: 'status', payload: 'underflow' });
