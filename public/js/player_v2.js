@@ -54,9 +54,8 @@ class TeslaPlayerV2 {
     _initAudio(channel, t) {
         if (this.audio) { this.audio.pause(); this.audio.src = ''; }
         
-        // Audio stream via separate HTTP request to keep pipeline simple
-        // or uses the same WS? In V2, we use a separate <audio> element for Master Clock.
-        this.audio = new Audio(`/stream/audio?url=${encodeURIComponent(channel.ytUrl || channel.url)}&t=${t}`);
+        this.audio = new Audio(`/stream/audio_v2?url=${encodeURIComponent(channel.ytUrl || channel.url)}&t=${t}`);
+        this.audio.crossOrigin = 'anonymous';
         this.audio.autoplay = true;
         
         this.audio.onplay = () => {

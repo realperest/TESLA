@@ -22,7 +22,7 @@ const { authenticate, verifyForWs } = require('./middleware/authenticate');
 const { ipLock } = require('./middleware/ipLock');
 const { startChannelUpdater } = require('./services/channelUpdater');
 const { handleStreamConnection, handleAudioRequest } = require('./routes/stream');
-const { handleStreamConnectionV2 } = require('./routes/stream_v2');
+const { handleStreamConnectionV2, handleAudioRequestV2 } = require('./routes/stream_v2');
 
 const app = express();
 app.set('trust proxy', 1); // Reverse proxy arkasında gerçek IP için
@@ -75,6 +75,7 @@ app.use('/auth', authRoutes);
 app.use('/api', apiRoutes);
 app.use('/proxy', proxyRoutes);
 app.get('/stream/audio', authenticate, handleAudioRequest);
+app.get('/stream/audio_v2', authenticate, handleAudioRequestV2);
 app.use('/api/youtube', youtubeRoutes);
 
 // ── Korumalı HTML sayfaları ─────────────────────────────────────────────────

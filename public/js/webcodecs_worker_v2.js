@@ -2,9 +2,7 @@
 
 /**
  * WebCodecs Worker V2
- * - OffscreenCanvas Rendering
- * - WebCodecs VideoDecoder
- * - PTS-based Synchronization
+ * Optimized for Tesla/Chromium
  */
 
 let canvas = null;
@@ -12,36 +10,25 @@ let ctx = null;
 let decoder = null;
 let frameQueue = [];
 let masterClock = 0;
-let isFirstFrame = true;
-
-// NAL unit start pattern detection (Annex-B)
-function findNALStart(buf, offset) {
-    for (let i = offset; i < buf.length - 4; i++) {
-        if (buf[i] === 0 && buf[i+1] === 0 && buf[i+2] === 0 && buf[i+3] === 1) return i;
-        if (buf[i] === 0 && buf[i+1] === 0 && buf[i+2] === 1) return i;
-    }
-    return -1;
-}
+let isConfigured = false;
 
 self.onmessage = async (e) => {
     const { type, payload } = e.data;
 
     if (type === 'init') {
         canvas = payload.canvas;
-        ctx = canvas.getContext('2d');
+        // Optimize for speed
+        ctx = canvas.getContext('2d', { alpha: false, desynchronized: true });
         initDecoder();
-        console.log('[WorkerV2] Initialized with OffscreenCanvas');
     } 
     else if (type === 'clock') {
         masterClock = payload.time;
         renderLoop();
     }
     else if (type === 'video') {
-        // payload: ArrayBuffer [PTS(8) + DATA]
         const view = new DataView(payload);
         const pts = view.getFloat64(0, true);
         const data = new Uint8Array(payload, 8);
-
         decodeChunk(data, pts);
     }
 };
@@ -51,65 +38,81 @@ function initDecoder() {
         output: (frame) => {
             frameQueue.push({
                 frame: frame,
-                pts: frame.timestamp / 1000000 // Convert micro to seconds
+                pts: frame.timestamp / 1000000
             });
-            // Keep queue small (max 60 frames ~ 2 sec)
-            if (frameQueue.length > 60) {
+            // Buffer management
+            if (frameQueue.length > 30) { 
                 const old = frameQueue.shift();
                 old.frame.close();
             }
         },
-        error: (e) => console.error('[WorkerV2] Decoder Error:', e)
+        error: (e) => {
+            console.error('[WorkerV2] Decoder Error:', e);
+            isConfigured = false;
+        }
     });
 
-    // Tesla Browser typically supports H.264 Baseline/Main
-    decoder.configure({
-        codec: 'avc1.42E01E', // Baseline 3.0
-        optimizeForLatency: true
-    });
+    configureDecoder();
+}
+
+function configureDecoder() {
+    try {
+        // avc1.42E01E = Baseline 3.0
+        // avc1.4D401F = Main 3.1
+        decoder.configure({
+            codec: 'avc1.42E01E', 
+            optimizeForLatency: true,
+            hardwareAcceleration: 'prefer-hardware'
+        });
+        isConfigured = true;
+    } catch (err) {
+        console.error('[WorkerV2] Config Fail:', err);
+    }
 }
 
 function decodeChunk(data, pts) {
+    if (!isConfigured) return;
+
     try {
+        // In Annex B stream, the first few bytes usually contain SPS/PPS
+        // We treat every chunk as a potential keyframe because our FFmpeg GOP=1
         const chunk = new EncodedVideoChunk({
-            type: isFirstFrame ? 'key' : 'delta',
-            timestamp: pts * 1000000, // to microseconds
+            type: (data[4] & 0x1f) === 7 || (data[4] & 0x1f) === 5 ? 'key' : 'key', // Force key for GOP=1
+            timestamp: pts * 1000000,
             data: data
         });
         decoder.decode(chunk);
-        isFirstFrame = false;
     } catch (err) {
-        // console.error('[WorkerV2] Decode fail:', err);
+        // silent error for partial chunks
     }
 }
 
 function renderLoop() {
     if (!ctx || frameQueue.length === 0) return;
 
-    // Find the best frame for current masterClock
-    // We want the frame whose pts is closest to but not greater than masterClock
+    // Direct Sync logic
+    let bestFrame = null;
     let bestIndex = -1;
+
     for (let i = 0; i < frameQueue.length; i++) {
         if (frameQueue[i].pts <= masterClock) {
+            bestFrame = frameQueue[i].frame;
             bestIndex = i;
         } else {
             break;
         }
     }
 
-    if (bestIndex !== -1) {
-        const item = frameQueue[bestIndex];
+    if (bestFrame) {
+        ctx.drawImage(bestFrame, 0, 0, canvas.width, canvas.height);
         
-        // Draw to OffscreenCanvas
-        ctx.drawImage(item.frame, 0, 0, canvas.width, canvas.height);
-        
-        // Add subtle bypass noise (optional heuristic bypass)
-        if (Math.random() > 0.99) {
-            ctx.fillStyle = 'rgba(255,255,255,0.01)';
-            ctx.fillRect(Math.random()*canvas.width, Math.random()*canvas.height, 1, 1);
+        // Anti-Detection Noise (Bery subtle)
+        if (Math.random() > 0.98) {
+            ctx.fillStyle = 'rgba(0,0,0,0.01)';
+            ctx.fillRect(0,0,1,1);
         }
 
-        // Clean up older frames
+        // Cleanup
         for (let j = 0; j <= bestIndex; j++) {
             frameQueue[j].frame.close();
         }

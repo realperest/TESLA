@@ -60,17 +60,16 @@ async function handleStreamConnectionV2(ws, req) {
             '-tune', 'zerolatency',
             '-profile:v', 'baseline',
             '-level', '3.1',
-            '-b:v', '2500k',
-            '-maxrate', '3000k',
-            '-bufsize', '6000k',
+            '-b:v', '1500k',
+            '-maxrate', '2000k',
+            '-bufsize', '4000k',
             '-pix_fmt', 'yuv420p',
-            '-g', '30',          // GOP size
-            '-bf', '0',          // B-frames = 0 (low latency)
-            '-f', 'h264',        // Raw H.264 bitstream
-            '-x264-params', 'annexb=1', 
+            '-g', '1',           // Every frame is a keyframe for perfect sync
+            '-bf', '0',          // No B-frames
+            '-f', 'h264',
+            '-x264-params', 'annexb=1:keyint=1', 
+            '-flvflags', 'no_duration_filesize',
             'pipe:1',
-            // Ses için ayrı bir stream (isteğe bağlı ama dünkü plana sadık kalarak PCM/MP3 denenebilir)
-            // Ancak şimdilik ses player'da ayrı <audio> olarak çözüleceği için videoyu odaklıyoruz.
             '-an'
         ];
 
@@ -110,13 +109,49 @@ async function handleStreamConnectionV2(ws, req) {
     ws.on('close', () => _cleanupV2(ws));
 }
 
-function _cleanupV2(ws) {
-    const entry = ACTIVE_V2.get(ws);
-    if (entry) {
-        if (entry.yt) try { entry.yt.kill(); } catch {}
-        if (entry.ff) try { entry.ff.kill(); } catch {}
-        ACTIVE_V2.delete(ws);
-    }
 }
 
-module.exports = { handleStreamConnectionV2 };
+/**
+ * Audio Streaming for V2 (Master Clock)
+ */
+async function handleAudioRequestV2(req, res) {
+    const query = req.query;
+    const url = query.url;
+    const startTime = query.t || '0';
+
+    if (!url) return res.status(400).end();
+    const targetUrl = decodeURIComponent(url);
+
+    res.setHeader('Content-Type', 'audio/mpeg');
+
+    const ytArgs = [
+        ..._ytCookieArgs(),
+        '--no-playlist', '--no-warnings', '--force-ipv4',
+        '--user-agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+        startTime !== '0' ? '--download-sections' : null,
+        startTime !== '0' ? `*${startTime}-inf` : null,
+        '--format', 'bestaudio/best',
+        '-o', '-', targetUrl
+    ].filter(Boolean);
+
+    const yt = spawn(YT_DLP, ytArgs);
+    
+    const ffArgs = [
+        '-i', 'pipe:0',
+        '-acodec', 'libmp3lame',
+        '-ab', '128k',
+        '-ar', '44100',
+        '-f', 'mp3',
+        'pipe:1'
+    ];
+
+    const ff = spawn(FFMPEG_PATH, ffArgs);
+    yt.stdout.pipe(ff.stdin);
+    ff.stdout.pipe(res);
+
+    req.on('close', () => {
+        try { yt.kill(); ff.kill(); } catch {}
+    });
+}
+
+module.exports = { handleStreamConnectionV2, handleAudioRequestV2 };
