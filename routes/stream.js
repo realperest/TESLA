@@ -62,20 +62,17 @@ async function handleStreamConnection(ws, req) {
     let ff, yt;
     let playUrl = targetUrl;
 
-    if (isYouTube && startTime !== '0') {
-      // Append YouTube time parameter for native seeking
-      playUrl = targetUrl.includes('?') ? `${targetUrl}&t=${startTime}` : `${targetUrl}?t=${startTime}`;
-    }
-
-    console.log(`[Stream] Loading: ${playUrl}`);
+    console.log(`[Stream] Loading: ${targetUrl} (Seek: ${startTime}s)`);
     
     const ytArgs = [
       '--no-playlist', '--no-warnings', '--force-ipv4', '--geo-bypass',
       '--user-agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
       '--extractor-args', isYouTube ? 'youtube:player_client=tv,android' : `generic:referer=https://www.trtizle.com/`,
+      isYouTube && startTime !== '0' ? '--download-sections' : null, 
+      isYouTube && startTime !== '0' ? `*${startTime}-inf` : null, // Modern yt-dlp seek syntax
       '--format', 'bestvideo[height<=720]+bestaudio/best[height<=720]/best[height<=720]',
-      '-o', '-', playUrl
-    ];
+      '-o', '-', targetUrl
+    ].filter(Boolean);
     
     yt = spawn(YT_DLP, ytArgs, { stdio: ['ignore', 'pipe', 'pipe'] });
     
