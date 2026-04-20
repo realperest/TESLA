@@ -115,6 +115,16 @@ async function init() {
   ytPlayer = window.ytPlayer;
   iptvPlayer = window.iptvPlayer;
 
+  // Ekrana tıklayınca duraklat/devam et özelliği
+  [
+    { id: 'video-canvas', toggle: () => typeof togglePlay === 'function' && togglePlay() },
+    { id: 'yt-canvas', toggle: () => typeof toggleYtPlay === 'function' && toggleYtPlay() },
+    { id: 'iptv-video-canvas', toggle: () => typeof toggleIptvPlay === 'function' && toggleIptvPlay() }
+  ].forEach(item => {
+    const el = document.getElementById(item.id);
+    if (el) el.addEventListener('click', () => item.toggle());
+  });
+
   try {
     const [meData, chData] = await Promise.all([API.get('/me'), API.get('/channels')]);
     renderUser(meData.user);
