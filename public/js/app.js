@@ -48,6 +48,7 @@ let _interestTagsFetchedAt = 0;
 let _userLanguage = 'tr';
 let _tvOverlayTimer = null;
 const TV_OVERLAY_HIDE_MS = 3500;
+let _ytSeekingDrag = false;
 
 const YT_PROFILE_KEYWORDS_KEY = 'yt-profile-keywords';
 const YT_SEARCH_HISTORY_KEY = 'yt-search-history';
@@ -79,6 +80,57 @@ function updateYtVariantBadge() {
   const reconnectInfo = (diag && typeof diag.reconnectAttempts === 'number') ? ` | rc:${diag.reconnectAttempts}` : '';
   const recoveringInfo = (diag && diag.recovering) ? ' | rec' : '';
   badge.textContent = `${base}${reconnectInfo}${recoveringInfo}`;
+}
+
+function pauseYtSectionPlayer(section) {
+  const p = getYtPlayerBySection(section);
+  if (!p) return;
+  if (!p.paused && typeof p.togglePlay === 'function') {
+    p.togglePlay();
+  }
+}
+
+function setupYtSeekGestures() {
+  const wrap = document.getElementById('yt-progress-wrap');
+  if (!wrap) return;
+
+  const applySeekFromClientX = (clientX) => {
+    const rect = wrap.getBoundingClientRect();
+    const pct = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+    const activeYt = getYtPlayerBySection(_activeSection);
+    if (!activeYt || !activeYt.video || !activeYt.video.duration) return;
+    const seconds = pct * activeYt.video.duration;
+    activeYt.seekTo(seconds);
+  };
+
+  wrap.addEventListener('pointerdown', (e) => {
+    _ytSeekingDrag = true;
+    applySeekFromClientX(e.clientX);
+  });
+
+  wrap.addEventListener('pointermove', (e) => {
+    if (!_ytSeekingDrag) return;
+    applySeekFromClientX(e.clientX);
+  });
+
+  const stopDrag = () => { _ytSeekingDrag = false; };
+  wrap.addEventListener('pointerup', stopDrag);
+  wrap.addEventListener('pointercancel', stopDrag);
+  wrap.addEventListener('lostpointercapture', stopDrag);
+
+  wrap.addEventListener('touchstart', (e) => {
+    if (!e.touches || !e.touches.length) return;
+    _ytSeekingDrag = true;
+    applySeekFromClientX(e.touches[0].clientX);
+  }, { passive: true });
+
+  wrap.addEventListener('touchmove', (e) => {
+    if (!_ytSeekingDrag || !e.touches || !e.touches.length) return;
+    applySeekFromClientX(e.touches[0].clientX);
+  }, { passive: true });
+
+  wrap.addEventListener('touchend', stopDrag, { passive: true });
+  wrap.addEventListener('touchcancel', stopDrag, { passive: true });
 }
 
 function applyPlayerLocale() {
@@ -291,6 +343,7 @@ async function init() {
     }
   });
 
+  setupYtSeekGestures();
   setYtInputMode('search');
 }
 
@@ -1605,14 +1658,9 @@ function stopInactiveSectionPlayback(nextSection) {
     if (ib) ib.innerHTML = TV_ICONS.play;
   }
 
-  // YouTube sekmesinden çıkınca stream'i düşürme: sadece duraklat (geri dönüşte tek tuşla devam etsin)
+  // YouTube varyantlarından çıkınca stream'i düşürme: sadece duraklat (geri dönüşte tek tuşla devam etsin)
   if (_activeSection === 'youtube' && nextSection !== 'youtube' && ytPlayer) {
-    try {
-      ytPlayer.video.pause();
-      ytPlayer.isPlaying = false;
-    } catch (e) {
-      console.warn('[YouTube] duraklatma', e.message);
-    }
+    try { pauseYtSectionPlayer('youtube'); } catch (e) { console.warn('[YouTube] duraklatma', e.message); }
     try { cancelAnimationFrame(_ytProgressRaf); } catch (e2) {
       console.warn('[YouTube] raf', e2.message);
     }
@@ -1621,31 +1669,22 @@ function stopInactiveSectionPlayback(nextSection) {
   }
 
   if (_activeSection === 'youtube_v2' && nextSection !== 'youtube_v2' && ytPlayerV2) {
-    try {
-      ytPlayerV2.stop();
-    } catch (e) {
-      console.warn('[YouTubeV2] duraklatma', e.message);
-    }
+    try { pauseYtSectionPlayer('youtube_v2'); } catch (e) { console.warn('[YouTubeV2] duraklatma', e.message); }
+    try { cancelAnimationFrame(_ytProgressRaf); } catch (e2) { console.warn('[YouTubeV2] raf', e2.message); }
+    const btn = document.getElementById('yt-btn-play');
+    if (btn) btn.innerHTML = YC_ICONS.play;
   }
 
   if (_activeSection === 'youtube_v3' && nextSection !== 'youtube_v3' && ytPlayerV3) {
-    try {
-      ytPlayerV3.video.pause();
-      ytPlayerV3.isPlaying = false;
-    } catch (e) {
-      console.warn('[YouTubeV3] duraklatma', e.message);
-    }
+    try { pauseYtSectionPlayer('youtube_v3'); } catch (e) { console.warn('[YouTubeV3] duraklatma', e.message); }
+    try { cancelAnimationFrame(_ytProgressRaf); } catch (e2) { console.warn('[YouTubeV3] raf', e2.message); }
     const btn = document.getElementById('yt-btn-play');
     if (btn) btn.innerHTML = YC_ICONS.play;
   }
 
   if (_activeSection === 'youtube_v4' && nextSection !== 'youtube_v4' && ytPlayerV4) {
-    try {
-      ytPlayerV4.video.pause();
-      ytPlayerV4.isPlaying = false;
-    } catch (e) {
-      console.warn('[YouTubeV4] duraklatma', e.message);
-    }
+    try { pauseYtSectionPlayer('youtube_v4'); } catch (e) { console.warn('[YouTubeV4] duraklatma', e.message); }
+    try { cancelAnimationFrame(_ytProgressRaf); } catch (e2) { console.warn('[YouTubeV4] raf', e2.message); }
     const btn = document.getElementById('yt-btn-play');
     if (btn) btn.innerHTML = YC_ICONS.play;
   }
