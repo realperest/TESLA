@@ -62,11 +62,11 @@ async function handleStreamConnectionV2(ws, req) {
             '-bufsize', '10000k',
             '-pix_fmt', 'yuv420p',
             '-g', '30',
-            '-bf', '0', 
+            '-bf', '0',
+            '-an',
             '-f', 'h264',
             '-x264-params', 'annexb=1:repeat-headers=1', // Repeat SPS/PPS for decoder stability
-            'pipe:1',
-            '-an'
+            'pipe:1'
         ];
 
         const ff = spawn(FFMPEG_PATH, ffArgs, { stdio: ['pipe', 'pipe', 'pipe'] });
@@ -75,49 +75,16 @@ async function handleStreamConnectionV2(ws, req) {
         ACTIVE_V2.set(ws, { ff, yt });
 
         const streamStartAt = Date.now();
-        let buffer = Buffer.alloc(0);
 
         ff.stdout.on('data', (chunk) => {
             if (ws.readyState !== 1) return;
-            
-            buffer = Buffer.concat([buffer, chunk]);
 
-            // Simple Packetizer: Look for NAL Start Codes
-            while (buffer.length > 4) {
-                let nextCodeIdx = -1;
-                // Find next NALU start (skipping current index 0)
-                for (let i = 4; i < buffer.length - 4; i++) {
-                    if (buffer[i] === 0 && buffer[i+1] === 0 && buffer[i+2] === 0 && buffer[i+3] === 1) {
-                        nextCodeIdx = i; break;
-                    }
-                    if (buffer[i] === 0 && buffer[i+1] === 0 && buffer[i+2] === 1) {
-                        nextCodeIdx = i; break;
-                    }
-                }
-
-                if (nextCodeIdx !== -1) {
-                    // Extract NAL unit
-                    const nal = buffer.slice(0, nextCodeIdx);
-                    buffer = buffer.slice(nextCodeIdx);
-
-                    const now = Date.now();
-                    const pts = startSec + (now - streamStartAt) / 1000;
-                    
-                    const header = Buffer.alloc(8);
-                    header.writeDoubleLE(pts);
-                    ws.send(Buffer.concat([header, nal]));
-                } else {
-                    // If buffer is too large, push it anyway to avoid black screen
-                    if (buffer.length > 512 * 1024) {
-                        const pts = startSec + (Date.now() - streamStartAt) / 1000;
-                        const header = Buffer.alloc(8);
-                        header.writeDoubleLE(pts);
-                        ws.send(Buffer.concat([header, buffer]));
-                        buffer = Buffer.alloc(0);
-                    }
-                    break;
-                }
-            }
+            // V2 için chunk'ı olduğu gibi gönder: over-packetize etmek WebCodecs tarafında
+            // siyah ekran üretebiliyor. Decoder, Annex-B chunk'ları frame bazında daha stabil alıyor.
+            const pts = startSec + (Date.now() - streamStartAt) / 1000;
+            const header = Buffer.alloc(8);
+            header.writeDoubleLE(pts);
+            ws.send(Buffer.concat([header, chunk]));
         });
 
         ff.on('close', () => {
