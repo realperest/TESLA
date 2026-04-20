@@ -1270,8 +1270,9 @@ function ytSeek(e) {
   const wrap = document.getElementById('yt-progress-wrap');
   const rect = wrap.getBoundingClientRect();
   const pct = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
-  if (ytPlayer.video.duration) {
-    ytPlayer.video.currentTime = pct * ytPlayer.video.duration;
+  if (ytPlayer && ytPlayer.video.duration) {
+    const seconds = pct * ytPlayer.video.duration;
+    ytPlayer.seekTo(seconds);
   }
 }
 

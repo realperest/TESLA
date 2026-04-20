@@ -112,12 +112,17 @@ class TeslaPlayer {
     }
   }
 
+  seekTo(seconds) {
+    if (!this.currentChannel) return;
+    const newTime = Math.max(0, seconds);
+    console.log(`[Player] Seeking to absolute: ${newTime}s`);
+    this.load(this.currentChannel, { startTime: newTime });
+  }
+
   seekRelative(seconds) {
     if (!this.mpegPlayer || !this.currentChannel) return;
     const current = this.mpegPlayer.currentTime || 0;
-    const newTime = Math.max(0, current + seconds);
-    console.log(`[Player] Seeking to: ${newTime}s`);
-    this.load(this.currentChannel, { startTime: newTime });
+    this.seekTo(current + seconds);
   }
 
   togglePlay() {
