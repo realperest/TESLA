@@ -22,6 +22,7 @@ const { authenticate, verifyForWs } = require('./middleware/authenticate');
 const { ipLock } = require('./middleware/ipLock');
 const { startChannelUpdater } = require('./services/channelUpdater');
 const { handleStreamConnection, handleAudioRequest } = require('./routes/stream');
+const { handleStreamConnectionV2 } = require('./routes/stream_v2');
 
 const app = express();
 app.set('trust proxy', 1); // Reverse proxy arkasında gerçek IP için
@@ -109,7 +110,7 @@ initDB().then(() => {
 
   server.on('upgrade', (req, socket, head) => {
     const pathname = new URL('http://x' + (req.url || '')).pathname;
-    if (pathname !== '/stream/ws') {
+    if (pathname !== '/stream/ws' && pathname !== '/stream/ws_v2') {
       socket.write('HTTP/1.1 404 Not Found\r\n\r\n');
       socket.destroy();
       return;
@@ -124,7 +125,11 @@ initDB().then(() => {
       }
       req.user = user;
       wss.handleUpgrade(req, socket, head, (ws) => {
-        handleStreamConnection(ws, req);
+        if (pathname === '/stream/ws_v2') {
+          handleStreamConnectionV2(ws, req);
+        } else {
+          handleStreamConnection(ws, req);
+        }
       });
     });
   });

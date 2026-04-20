@@ -25,6 +25,7 @@ const API = {
 
 let player;
 let ytPlayer;
+let ytPlayerV2;
 let channels = [];
 let allChannels = [];
 let tvCategoryFilter = 'all';
@@ -117,6 +118,7 @@ async function init() {
 
   window.player = new TeslaPlayer('video-canvas');
   window.ytPlayer = new TeslaPlayer('yt-canvas', { spinnerId: 'yt-spinner', containerId: 'yt-player-area' });
+  window.ytPlayerV2 = new TeslaPlayerV2('yt-canvas-v2', { spinnerId: 'yt-spinner' });
   window.iptvPlayer = new TeslaPlayer('iptv-video-canvas', {
     spinnerId: 'iptv-spinner',
     containerId: 'iptv-player-area',
@@ -125,6 +127,7 @@ async function init() {
 
   player = window.player;
   ytPlayer = window.ytPlayer;
+  ytPlayerV2 = window.ytPlayerV2;
   iptvPlayer = window.iptvPlayer;
 
   // Ekrana tıklayınca duraklat/devam et özelliği + Görsel Bildirim
@@ -454,6 +457,7 @@ function updateDockBackButton() {
   if (!btn) return;
   let show = false;
   if (_activeSection === 'youtube' && _ytCurrentView === 'player') show = true;
+  else if (_activeSection === 'youtube_v2' && _ytCurrentView === 'player') show = true;
   else if (_activeSection === 'iptv' && iptvPlayer && iptvPlayer.hasActiveSource) {
     show = true;
   }
@@ -464,7 +468,7 @@ function updateDockBackButton() {
 }
 
 function dockSectionBack() {
-  if (_activeSection === 'youtube' && _ytCurrentView === 'player') {
+  if ((_activeSection === 'youtube' || _activeSection === 'youtube_v2') && _ytCurrentView === 'player') {
     ytGoSectionHome();
     return;
   }
@@ -857,7 +861,8 @@ async function ytStartPlay(data) {
     ? `/proxy/hls?url=${encodeURIComponent(data.streamUrl)}`
     : data.streamUrl;
 
-  const ok = await ytPlayer.load({
+  const activeP = (_activeSection === 'youtube_v2') ? ytPlayerV2 : ytPlayer;
+  const ok = await activeP.load({
     url: streamUrl,
     name: data.title || (typeof AppI18n !== 'undefined' ? AppI18n.t('ytVideoTitle') : 'Video'),
     isHls: data.isHls,
@@ -1317,25 +1322,27 @@ function toggleYtFullscreen() {
 let _ytProgressRaf;
 function _startYtProgress() {
   cancelAnimationFrame(_ytProgressRaf);
-  const video = ytPlayer.video;
+  // Aktif oynatıcıyı seç
+  const activeP = (_activeSection === 'youtube_v2') ? ytPlayerV2 : ytPlayer;
+  const pObj = activeP.video || activeP; // V2'de player'ın kendisi getter'lara sahip
   const fill   = document.getElementById('yt-progress-fill');
   const buf    = document.getElementById('yt-progress-buf');
   const thumb  = document.getElementById('yt-progress-thumb');
   const time   = document.getElementById('yt-time');
 
   function tick() {
-    if (!video.duration) { _ytProgressRaf = requestAnimationFrame(tick); return; }
-    const pct = (video.currentTime / video.duration) * 100;
+    if (!pObj.duration) { _ytProgressRaf = requestAnimationFrame(tick); return; }
+    const pct = (pObj.currentTime / pObj.duration) * 100;
     fill.style.width  = pct + '%';
     thumb.style.left  = pct + '%';
 
-    // Buffer
-    if (video.buffered.length > 0) {
-      const bufPct = (video.buffered.end(video.buffered.length - 1) / video.duration) * 100;
+    // Buffer (V2 modunda audio buffered kullanılır, pObj.video v1'de kalsın)
+    if (pObj && pObj.buffered && pObj.buffered.length > 0) {
+      const bufPct = (pObj.buffered.end(pObj.buffered.length - 1) / pObj.duration) * 100;
       buf.style.width = bufPct + '%';
     }
 
-    time.textContent = fmtDuration(Math.floor(video.currentTime)) + ' / ' + fmtDuration(Math.floor(video.duration));
+    time.textContent = fmtDuration(Math.floor(pObj.currentTime)) + ' / ' + fmtDuration(Math.floor(pObj.duration));
     _ytProgressRaf = requestAnimationFrame(tick);
   }
   tick();
@@ -1555,10 +1562,18 @@ function stopInactiveSectionPlayback(nextSection) {
     const btn = document.getElementById('yt-btn-play');
     if (btn) btn.innerHTML = YC_ICONS.play;
   }
+
+  if (_activeSection === 'youtube_v2' && nextSection !== 'youtube_v2' && ytPlayerV2) {
+    try {
+      ytPlayerV2.stop();
+    } catch (e) {
+      console.warn('[YouTubeV2] duraklatma', e.message);
+    }
+  }
 }
 
 function dockNav(section) {
-  if (_activeSection === section && section === 'youtube') {
+  if (_activeSection === section && (section === 'youtube' || section === 'youtube_v2')) {
     ytGoSectionHome();
     return;
   }
@@ -1578,7 +1593,19 @@ function dockNav(section) {
   });
 
   document.querySelectorAll('.section').forEach(el => el.classList.remove('active'));
-  const target = document.getElementById('section-' + section);
+  
+  // youtube_v2 modu da youtube section'ını kullanır
+  const targetId = (section === 'youtube_v2') ? 'section-youtube' : 'section-' + section;
+  const target = document.getElementById(targetId);
+  
+  // Canvas Toggle
+  const c1 = document.getElementById('yt-canvas');
+  const c2 = document.getElementById('yt-canvas-v2');
+  if (c1 && c2) {
+    c1.style.display = (section === 'youtube_v2') ? 'none' : '';
+    c2.style.display = (section === 'youtube_v2') ? '' : 'none';
+  }
+
   if (target) {
     target.classList.add('active');
     target.style.opacity = '0';
@@ -1624,6 +1651,7 @@ function initVersionBadge() {
 function toggleActivePlayerPlay() {
   if (_activeSection === 'tv' && window.player) togglePlay();
   else if (_activeSection === 'youtube' && window.ytPlayer) toggleYtPlay();
+  else if (_activeSection === 'youtube_v2' && window.ytPlayerV2) toggleYtPlay();
   else if (_activeSection === 'iptv' && window.iptvPlayer) toggleIptvPlay();
   showMediaStatusFeedback('section-' + _activeSection);
 }
@@ -1654,6 +1682,7 @@ function showMediaStatusFeedback(sectionId) {
 function getActivePlayer() {
   if (_activeSection === 'tv') return window.player;
   if (_activeSection === 'youtube') return window.ytPlayer;
+  if (_activeSection === 'youtube_v2') return window.ytPlayerV2;
   if (_activeSection === 'iptv') return window.iptvPlayer;
   return null;
 }
