@@ -18,6 +18,7 @@ class TeslaPlayerV2 {
         this._clockBaseMs = 0;
         this._lastVideoPts = 0;
         this._audioStarted = false;
+        this._audioStartFallback = null;
 
         // Sync helper
         this._syncTimer = null;
@@ -57,6 +58,9 @@ class TeslaPlayerV2 {
                 }
                 this._startAudioWhenVideoReady();
                 this._resyncAudioToVideo();
+            } else if (state === 'decode_error') {
+                // Decode hatalarında sesi tamamen kilitlemeyelim.
+                this._startAudioWhenVideoReady();
             }
         };
         
@@ -106,6 +110,9 @@ class TeslaPlayerV2 {
         this.ws.binaryType = 'arraybuffer';
         this._clockBaseMs = Date.now();
         this._lastVideoPts = this.ptsOffset || 0;
+        this._audioStartFallback = setTimeout(() => {
+            this._startAudioWhenVideoReady();
+        }, 2500);
 
         this.ws.onmessage = (e) => {
             if (!(e.data instanceof ArrayBuffer)) return;
@@ -119,6 +126,7 @@ class TeslaPlayerV2 {
 
     stop() {
         if (this._syncTimer) clearInterval(this._syncTimer);
+        if (this._audioStartFallback) { clearTimeout(this._audioStartFallback); this._audioStartFallback = null; }
         if (this.ws) { this.ws.close(); this.ws = null; }
         if (this.audio) { this.audio.pause(); this.audio.src = ''; }
         this._audioStarted = false;

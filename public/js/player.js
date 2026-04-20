@@ -21,6 +21,7 @@ class TeslaPlayer {
     this._dummyVideo  = document.createElement('video');
     this._dummyTimer  = null;
     this._audioRetry  = null;
+    this._startTimeout = null;
   }
 
   get video() { return this._dummyVideo; }
@@ -36,13 +37,18 @@ class TeslaPlayer {
 
     try {
       this._startJsmpeg(channel, this.startTime);
+      // Çok yavaş ağda kullanıcıya sürekli spinner göstermeyelim.
+      this._startTimeout = setTimeout(() => {
+        if (spinner && spinner.classList.contains('active') && this.isPlaying) {
+          spinner.classList.remove('active');
+        }
+      }, 12000);
       return true;
     } catch (err) {
       console.error('[Player] Start Error:', err);
       this._showError(channel, err.toString());
-      return false;
-    } finally {
       if (spinner) spinner.classList.remove('active');
+      return false;
     }
   }
 
@@ -60,11 +66,13 @@ class TeslaPlayer {
       autoplay: true,
       disableGl: true, // Stealth mode for Tesla
       audioBufferSize: 4 * 1024 * 1024,
-      videoBufferSize: 8 * 1024 * 1024,
-      maxAudioLag: 1.0, // Tighter sync
+      videoBufferSize: 12 * 1024 * 1024,
+      maxAudioLag: 1.4,
       onPlay: () => {
         this.isPlaying = true;
         if (this.mpegPlayer.audioOut) this.mpegPlayer.volume = 1;
+        const spinner = document.getElementById(this.spinnerId);
+        if (spinner) spinner.classList.remove('active');
       }
     });
 
@@ -88,6 +96,7 @@ class TeslaPlayer {
   }
 
   stop() {
+    if (this._startTimeout) { clearTimeout(this._startTimeout); this._startTimeout = null; }
     if (this._audioRetry) { clearInterval(this._audioRetry); this._audioRetry = null; }
     if (this._dummyTimer) { clearInterval(this._dummyTimer); this._dummyTimer = null; }
 
