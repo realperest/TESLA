@@ -109,8 +109,6 @@ async function handleStreamConnectionV2(ws, req) {
     ws.on('close', () => _cleanupV2(ws));
 }
 
-}
-
 /**
  * Audio Streaming for V2 (Master Clock)
  */
