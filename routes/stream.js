@@ -47,108 +47,79 @@ function _ffmpegOutputs() {
   ];
 }
 
-function _setupOutputs(ws, ff) {
-  ff.stdout.on('data', (chunk) => {
-    if (ws.readyState === 1) ws.send(chunk);
-  });
-
-  ff.stderr.on('data', (c) => {
-    const msg = c.toString();
-    if (msg.includes('Error') || msg.includes('Failed')) {
-      console.warn('[FMMPEG-ERR]', msg.trim());
-    }
-  });
-
-  ff.on('close', (code) => {
-    console.log('[Stream] FFmpeg exit code:', code);
-    ACTIVE.delete(ws);
-    if (ws.readyState <= 1) ws.close(1001);
-  });
-}
-
-function _sendWsPacket(ws, type, data, startTs) {
-  // Not used in Multiplex mode, but kept for legacy
-}
-
 async function handleStreamConnection(ws, req) {
   const url = new URL('http://x' + (req.url || '')).searchParams.get('url');
   if (!url) return ws.close(1008);
   
   const targetUrl = decodeURIComponent(url);
+  const isYouTube = targetUrl.includes('youtube.com') || targetUrl.includes('youtu.be');
+
   try {
-    if (_isYouTubeUrl(targetUrl)) {
-      console.log('[Stream] yt-dlp:', targetUrl);
+    let ff, yt;
+
+    if (isYouTube) {
+      console.log('[Stream] YouTube HD Mode:', targetUrl);
       const ytArgs = [
-        _ytCookieArgs(), 
-        '--no-playlist', 
-        '--no-warnings', 
-        '--force-ipv4', 
-        '--geo-bypass', 
+        '--no-playlist', '--no-warnings', '--force-ipv4', '--geo-bypass',
         '--extractor-args', 'youtube:player_client=tv,android',
-        '-f', '18/22/best', 
-        '-o', '-', 
-        targetUrl
-      ].flat().filter(Boolean);
-      const yt = spawn(YT_DLP, ytArgs, { stdio: ['ignore', 'pipe', 'pipe'] });
+        '-f', '18/22/best', '-o', '-', targetUrl
+      ];
+      yt = spawn(YT_DLP, ytArgs, { stdio: ['ignore', 'pipe', 'pipe'] });
       
-      // thread_queue_size MUST be an INPUT option (before -i)
-      const args = ['-thread_queue_size', '1024', '-re', '-i', 'pipe:0', '-map', '0:v:0', '-map', '0:a:0'].concat(_ffmpegOutputs());
-      const ff = spawn(FFMPEG_PATH, args, { stdio: ['pipe', 'pipe', 'pipe'] });
-      
-      // Prevent EPIPE crash
-      yt.stdout.on('error', (e) => console.warn('[YT-STDOUT-ERR]', e.message));
-      ff.stdin.on('error', (e) => {
-         if (e.code === 'EPIPE') {
-           console.warn('[FF-STDIN-EPIPE] FFmpeg input closed unexpectedly');
-         } else {
-           console.warn('[FF-STDIN-ERR]', e.message);
-         }
-      });
+      const ffArgs = ['-thread_queue_size', '1024', '-re', '-i', 'pipe:0', '-map', '0:v:0', '-map', '0:a:0'].concat(_ffmpegOutputs());
+      ff = spawn(FFMPEG_PATH, ffArgs, { stdio: ['pipe', 'pipe', 'pipe'] });
 
       yt.stdout.pipe(ff.stdin);
       
-      yt.stderr.on('data', (d) => {
-         const m = d.toString();
-         if (m.includes('ERROR')) console.warn('[YT-ERR]', m.trim());
-      });
-
-      ACTIVE.set(ws, { ff, yt });
-      _setupOutputs(ws, ff);
+      // Hata yakalayıcılar
+      ff.stdin.on('error', (e) => { if (e.code === 'EPIPE') console.warn('[FF] Input pipe closed'); });
+      yt.stderr.on('data', (d) => { if (d.toString().includes('ERROR')) console.error('[YT] error:', d.toString().trim()); });
     } else {
-      console.log('[Stream] Direct:', targetUrl);
-      const args = [
-        '-reconnect', '1',
-        '-reconnect_at_eof', '1',
-        '-reconnect_streamed', '1',
-        '-reconnect_delay_max', '2',
+      console.log('[Stream] Direct IPTV Mode:', targetUrl);
+      const ffArgs = [
+        '-reconnect', '1', '-reconnect_at_eof', '1', '-reconnect_streamed', '1', '-reconnect_delay_max', '2',
         '-user-agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
         '-headers', 'Referer: https://www.trtizle.com/\r\n',
-        '-i', targetUrl, 
-        '-map', '0:v:0?', 
-        '-map', '0:a:0?'
+        '-i', targetUrl, '-map', '0:v:0?', '-map', '0:a:0?'
       ].concat(_ffmpegOutputs());
-      const ff = spawn(FFMPEG_PATH, args, { stdio: ['ignore', 'pipe', 'pipe'] });
-      ACTIVE.set(ws, { ff });
-      _setupOutputs(ws, ff);
+      ff = spawn(FFMPEG_PATH, ffArgs, { stdio: ['ignore', 'pipe', 'pipe'] });
     }
-  } catch (e) {
-    console.error('[Stream] App Error:', e.message);
+
+    ACTIVE.set(ws, { ff, yt });
+
+    // Stream çıktısını WebSocket'e aktar
+    ff.stdout.on('data', (data) => {
+      if (ws.readyState === 1) ws.send(data);
+    });
+
+    ff.stderr.on('data', (d) => {
+      // Sadece kritik hataları uyar, istatistikleri gizle
+      if (d.toString().includes('Error')) console.warn('[FF-ERR]', d.toString().trim());
+    });
+
+    ff.on('close', () => {
+      if (ws.readyState === 1) ws.close();
+      _cleanupSession(ws);
+    });
+
+  } catch (err) {
+    console.error('[Stream] App Error:', err.message);
     ws.close(1011);
   }
 
-  ws.on('close', () => {
-    const entry = ACTIVE.get(ws);
-    if (entry) {
-      if (entry.yt) try { entry.yt.kill('SIGKILL'); } catch {}
-      if (entry.ff) try { entry.ff.kill('SIGKILL'); } catch {}
-      ACTIVE.delete(ws);
-    }
-  });
+  ws.on('close', () => _cleanupSession(ws));
+}
+
+function _cleanupSession(ws) {
+  const entry = ACTIVE.get(ws);
+  if (entry) {
+    if (entry.yt) try { entry.yt.kill(); } catch {}
+    if (entry.ff) try { entry.ff.kill(); } catch {}
+    ACTIVE.delete(ws);
+  }
 }
 
 function handleAudioRequest(req, res) {
-  // We don't strictly need this endpoint anymore if using Multiplex WebSocket,
-  // but we keep it around just in case for older clients or fallback.
   res.status(404).end();
 }
 

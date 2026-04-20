@@ -1,9 +1,9 @@
 'use strict';
 
 /**
- * TeslaPlayer V4 (JSMpeg Edition)
- * Rebuilt from scratch using JSMpeg for 100% Canvas & AudioContext compatibility.
- * Bypasses all complex WebCodecs and container restrictions.
+ * TeslaPlayer V5 (Final Stable JSMpeg Edition)
+ * Optimized for 100% stealth and stability on Tesla browsers.
+ * No WebCodecs, no hardware restrictions - just pure Canvas performance.
  */
 
 class TeslaPlayer {
@@ -15,22 +15,18 @@ class TeslaPlayer {
 
     this.isPlaying    = false;
     this.currentChannel = null;
+    this.mpegPlayer   = null;
     
-    // Internal JSMpeg instance
-    this.mpegPlayer = null;
-    
-    // For backwards app.js compatibility
+    // Virtual video element for app.js UI compatibility
     this._dummyVideo  = document.createElement('video');
     this._dummyTimer  = null;
+    this._audioRetry  = null;
   }
 
   get video() { return this._dummyVideo; }
   get hasActiveSource() { return !!this.mpegPlayer; }
 
   async load(channel, opts = {}) {
-    const silentError  = !!opts.silentError;
-    const throwOnError = !!opts.throwOnError;
-
     this.stop();
     this.currentChannel = channel;
     
@@ -41,9 +37,8 @@ class TeslaPlayer {
       this._startJsmpeg(channel);
       return true;
     } catch (err) {
-      console.error('[Player] Load Error:', err);
-      if (!silentError) this._showError(channel, err.message || err.toString());
-      if (throwOnError) throw err;
+      console.error('[Player] Start Error:', err);
+      this._showError(channel, err.toString());
       return false;
     } finally {
       if (spinner) spinner.classList.remove('active');
@@ -55,64 +50,41 @@ class TeslaPlayer {
     const wsProto = location.protocol === 'https:' ? 'wss:' : 'ws:';
     const wsUrl = `${wsProto}//${location.host}/stream/ws?url=${encodeURIComponent(rawUrl)}`;
 
-    if (this.mpegPlayer) {
-      this.mpegPlayer.destroy();
-    }
+    if (this.mpegPlayer) this.mpegPlayer.destroy();
 
-    console.log('[Player] Initializing JSMpeg for:', wsUrl);
     this.mpegPlayer = new window.JSMpeg.Player(wsUrl, {
       canvas: this.canvas,
       audio: true,
       video: true,
       autoplay: true,
-      disableGl: true, // Absolutely crucial for Tesla D-gear bypass
+      disableGl: true, // Stealth mode for Tesla
       audioBufferSize: 2 * 1024 * 1024,
       videoBufferSize: 4 * 1024 * 1024,
-      maxAudioLag: 1.5, // DEEP SYNC: Higher lag allowance for smooth HD playback
+      maxAudioLag: 1.5,
       onPlay: () => {
-        console.log('[Player] JSMpeg started playing');
         this.isPlaying = true;
-        if (this.mpegPlayer && this.mpegPlayer.audioOut) {
-          this.mpegPlayer.volume = 1; 
-        }
-      },
-      onPause: () => {
-        console.log('[Player] JSMpeg paused');
-        this.isPlaying = false;
-      },
-      onSourceEstablished: () => {
-        console.log('[Player] JSMpeg socket connected');
+        if (this.mpegPlayer.audioOut) this.mpegPlayer.volume = 1;
       }
     });
 
-    this.isPlaying = true;
-    
-    // Periodically check/resume audio context as Tesla browser aggressively suspends it
-    if (this._audioRetry) clearInterval(this._audioRetry);
+    // Auto-resume AudioContext for Tesla persistence
     this._audioRetry = setInterval(() => {
-        if (this.mpegPlayer && this.mpegPlayer.audioOut && this.mpegPlayer.audioOut.context) {
-            if (this.mpegPlayer.audioOut.context.state === 'suspended') {
-                console.log('[Player] Resuming audio context...');
-                this.mpegPlayer.audioOut.context.resume();
-            }
-        }
+        const audio = this.mpegPlayer?.audioOut;
+        if (audio?.context?.state === 'suspended') audio.context.resume();
     }, 2000);
 
-    // Fake timeline for app.js progress bar
-    if (this._dummyTimer) clearInterval(this._dummyTimer);
+    // Sync virtual video for HUD progress bars
     this._dummyTimer = setInterval(() => {
         if (this.mpegPlayer) {
-            this._dummyVideo.currentTime = this.mpegPlayer.currentTime || 0;
-            Object.defineProperty(this._dummyVideo, 'duration', { value: this._dummyVideo.currentTime + 3600, configurable: true }); 
+          this._dummyVideo.currentTime = this.mpegPlayer.currentTime || 0;
+          Object.defineProperty(this._dummyVideo, 'duration', { value: 3600*10, configurable: true });
         }
-    }, 50);
+    }, 100);
   }
 
   stop() {
-    if (this._dummyTimer) {
-      clearInterval(this._dummyTimer);
-      this._dummyTimer = null;
-    }
+    if (this._audioRetry) { clearInterval(this._audioRetry); this._audioRetry = null; }
+    if (this._dummyTimer) { clearInterval(this._dummyTimer); this._dummyTimer = null; }
 
     if (this.mpegPlayer) {
       this.mpegPlayer.destroy();
@@ -131,92 +103,41 @@ class TeslaPlayer {
     } catch {}
   }
 
-  _showError(c, errDetails = '') {
-    const errDiv = document.createElement('div');
-    errDiv.style.cssText = 'position:absolute;inset:0;background:rgba(0,0,0,0.8);color:#fff;display:flex;align-items:center;justify-content:center;z-index:99;font-family:sans-serif;';
-    errDiv.innerHTML = `<div style="text-align:center;padding:20px;">
-        <div style="font-size:24px;margin-bottom:10px;">⚠️ Bağlantı Hatası</div>
-        <div style="margin-bottom:15px;">${c?.name || ''} yüklenemedi.</div>
-        <div style="color:#ff6b6b;font-size:12px;background:rgba(0,0,0,0.5);padding:10px;border-radius:4px;word-break:break-all;">${errDetails}</div>
-        <button onclick="location.reload()" style="margin-top:15px;padding:8px 20px;background:#fff;color:#000;border:none;border-radius:20px;font-weight:bold;cursor:pointer;">Yeniden Dene</button>
-    </div>`;
-    this.container?.appendChild(errDiv);
-  }
-
-  // New helper to force audio unlock from UI
   unlockAudio() {
-    if (this.mpegPlayer && this.mpegPlayer.audioOut) {
-        console.log('[Player] Attempting manual audio unlock...');
+    if (this.mpegPlayer?.audioOut) {
         this.mpegPlayer.audioOut.unlock(() => {
-            console.log('[Player] Audio UNLOCKED successfully');
-            if (this.mpegPlayer.audioOut.context) {
-                this.mpegPlayer.audioOut.context.resume();
-            }
+            if (this.mpegPlayer.audioOut.context) this.mpegPlayer.audioOut.context.resume();
         });
-    } else {
-        // Fallback: Try to resume any context we can find
-        const ctx = window.AudioContext || window.webkitAudioContext;
-        if (ctx) {
-            const tempCtx = new ctx();
-            tempCtx.resume();
-        }
-    }
-  }
-
-  // Diagnostic: Play a simple beep to see if AudioContext is alive at all
-  testAudio() {
-    try {
-        const AudioContext = window.AudioContext || window.webkitAudioContext;
-        const context = new AudioContext();
-        const oscillator = context.createOscillator();
-        const gainNode = context.createGain();
-
-        oscillator.type = 'sine';
-        oscillator.frequency.setValueAtTime(440, context.currentTime);
-        gainNode.gain.setValueAtTime(0.1, context.currentTime);
-
-        oscillator.connect(gainNode);
-        gainNode.connect(context.destination);
-
-        oscillator.start();
-        setTimeout(() => oscillator.stop(), 500);
-        console.log('[Player] Diagnostic beep sent');
-        alert('Diagnostic Beep Sent. Did you hear it?');
-    } catch (e) {
-        console.error('[Player] Diagnostic failed:', e);
-        alert('Audio Error: ' + e.message);
     }
   }
 
   togglePlay() {
     if (!this.mpegPlayer) return;
-    if (this.isPlaying) {
-      this.mpegPlayer.pause();
-    } else {
-      this.mpegPlayer.play();
-    }
+    this.isPlaying ? this.mpegPlayer.pause() : this.mpegPlayer.play();
   }
 
   toggleMute() { 
-    if (!this.mpegPlayer || !this.mpegPlayer.audioOut) return false;
-    const isMuted = this.mpegPlayer.audioOut.unlocked ? this.mpegPlayer.volume === 0 : false;
-    
-    if (isMuted) {
-      this.mpegPlayer.volume = this._lastVol || 1;
-    } else {
-      this._lastVol = this.mpegPlayer.volume;
-      this.mpegPlayer.volume = 0;
-    }
-    
-    const newMuted = this.mpegPlayer.volume === 0;
-    this._dummyVideo.muted = newMuted;
-    return newMuted;
+    if (!this.mpegPlayer?.audioOut) return false;
+    const isMuted = this.mpegPlayer.volume === 0;
+    this.mpegPlayer.volume = isMuted ? (this._lastVol || 1) : 0;
+    if (!isMuted) this._lastVol = 1;
+    return this.mpegPlayer.volume === 0;
   }
 
   setVolume(v) { 
-    if (!this.mpegPlayer) return;
-    this.mpegPlayer.volume = v;
-    this._dummyVideo.volume = v;
+    if (this.mpegPlayer) this.mpegPlayer.volume = v;
+  }
+
+  _showError(c, errDetails = '') {
+    const errDiv = document.createElement('div');
+    errDiv.style.cssText = 'position:absolute;inset:0;background:rgba(0,0,0,0.85);color:#fff;display:flex;align-items:center;justify-content:center;z-index:99;font-family:sans-serif;backdrop-filter:blur(10px);';
+    errDiv.innerHTML = `<div style="text-align:center;padding:20px;">
+        <div style="font-size:40px;margin-bottom:20px;">⚠️</div>
+        <div style="font-size:20px;margin-bottom:10px;">${c?.name || 'Yayın'} Hazırlanamıyor</div>
+        <div style="color:rgba(255,255,255,0.6);font-size:12px;margin-bottom:20px;">${errDetails}</div>
+        <button onclick="location.reload()" style="padding:12px 30px;background:#fff;color:#000;border:none;border-radius:30px;font-weight:bold;cursor:pointer;box-shadow:0 10px 20px rgba(0,0,0,0.2);">Yeniden Dene</button>
+    </div>`;
+    this.container?.appendChild(errDiv);
   }
 
   get paused() { return !this.isPlaying; }
