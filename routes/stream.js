@@ -28,21 +28,22 @@ function _isYouTubeUrl(url) {
 
 function _ffmpegOutputs() {
   return [
-    '-vf', 'scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2:color=black,unsharp=5:5:1.0:5:5:0.5,fps=30', // Ultra Sharper 720p @ 30fps
+    '-vf', 'scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2:color=black,unsharp=5:5:1.0:5:5:0.5,fps=30',
     '-f', 'mpegts',
     '-codec:v', 'mpeg1video',
     '-s', '1280x720',
-    '-b:v', '4000k', // Ultra High Bitrate
+    '-b:v', '4000k',
     '-maxrate', '5000k',
     '-bufsize', '10000k',
     '-g', '15',
     '-acodec', 'mp2',
-    '-af', 'volume=2.0',
+    '-af', 'volume=2.0,aresample=async=1:min_hard_comp=0.100000:first_pts=0', // Force audio sync
     '-ar', '44100',
     '-ac', '2',
-    '-b:a', '256k', // Professional Audio Quality
-    '-mpegts_flags', '+initial_discontinuity+system_b',
-    '-muxdelay', '0.001',
+    '-b:a', '256k',
+    '-mpegts_flags', '+initial_discontinuity+system_b+latm',
+    '-fflags', '+genpts+discardcorrupt+igndts', // Better timestamp generation
+    '-muxdelay', '0',
     'pipe:1'
   ];
 }
