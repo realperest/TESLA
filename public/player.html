@@ -79,6 +79,9 @@
           <div id="yt-player-container">
             <canvas id="yt-canvas"></canvas>
             <canvas id="yt-canvas-v2" style="display:none"></canvas>
+            <canvas id="yt-canvas-v3" style="display:none"></canvas>
+            <canvas id="yt-canvas-v4" style="display:none"></canvas>
+            <div id="yt-version-badge"></div>
             <div class="spinner" id="yt-spinner"><div class="spinner-ring"></div></div>
             <div id="yt-overlay">
               <div id="yt-overlay-title">
@@ -312,6 +315,30 @@
         <div class="dock-dot"></div>
       </div>
 
+      <div class="dock-item" data-id="youtube_v3" onclick="dockNav('youtube_v3')">
+        <div class="dock-icon" style="color: #4ea1ff;">
+          <svg viewBox="0 0 24 24">
+            <rect x="2" y="5" width="20" height="14" rx="4" stroke="currentColor" fill="none" stroke-width="1.5"/>
+            <polygon points="10,9 16,12 10,15" fill="currentColor"/>
+            <circle cx="18" cy="8" r="1.3" fill="currentColor"/>
+          </svg>
+        </div>
+        <div class="dock-label" style="color: #4ea1ff;">YT V3</div>
+        <div class="dock-dot"></div>
+      </div>
+
+      <div class="dock-item" data-id="youtube_v4" onclick="dockNav('youtube_v4')">
+        <div class="dock-icon" style="color: #f4b942;">
+          <svg viewBox="0 0 24 24">
+            <rect x="2" y="5" width="20" height="14" rx="4" stroke="currentColor" fill="none" stroke-width="1.5"/>
+            <polygon points="10,9 16,12 10,15" fill="currentColor"/>
+            <path d="M5 19h14" stroke="currentColor" stroke-width="1.6"/>
+          </svg>
+        </div>
+        <div class="dock-label" style="color: #f4b942;">YT V4</div>
+        <div class="dock-dot"></div>
+      </div>
+
       <div class="dock-item" data-id="tv" onclick="dockNav('tv')">
         <div class="dock-icon">
           <svg viewBox="0 0 24 24">
@@ -365,7 +392,7 @@
     </div>
     </div>
     <div class="dock-bar-user">
-      <span id="app-version-badge" data-version="260420.0074">260420.0074</span>
+      <span id="app-version-badge" data-version="260420.0076">260420.0076</span>
       <div class="user-menu" id="user-menu">
         <div class="user-pill" id="user-pill" onclick="toggleUserMenu(event)">
           <img src="" alt="" id="user-avatar" referrerpolicy="no-referrer" style="display:none">
@@ -391,7 +418,9 @@
   <script src="/js/jsmpeg.min.js"></script>
   <script src="/js/player.js"></script>
   <script src="/js/player_v2.js"></script>
-  <script src="/js/app.js?v=7"></script>
+  <script src="/js/player_v3.js"></script>
+  <script src="/js/player_v4.js"></script>
+  <script src="/js/app.js?v=8"></script>
   <script src="/js/dock.js"></script>
 </body>
 </html>
