@@ -57,7 +57,7 @@ class TeslaPlayerV2 {
         
         this.audio = new Audio(`/stream/audio_v2?url=${encodeURIComponent(channel.ytUrl || channel.url)}&t=${t}`);
         this.audio.crossOrigin = 'anonymous';
-        this.audio.autoplay = true;
+        this.audio.autoplay = false; // Video ile senkron için bekleteceğiz
         
         this.audio.onplay = () => {
             this.isPlaying = true;
@@ -82,7 +82,19 @@ class TeslaPlayerV2 {
         this.ws = new WebSocket(url);
         this.ws.binaryType = 'arraybuffer';
 
-        this.ws.onmessage = (e) => {
+        let firstBinaryReceived = false;
+
+        this.ws.onmessage = async (e) => {
+            if (!(e.data instanceof ArrayBuffer)) return;
+            
+            // ATOMIC START: İlk veri geldiğinde sesi uyandır
+            if (!firstBinaryReceived) {
+                firstBinaryReceived = true;
+                if (this.audio && this.audio.paused) {
+                    this.audio.play().catch(() => {});
+                }
+            }
+
             if (this.worker) {
                 this.worker.postMessage({
                     type: 'video',

@@ -56,14 +56,14 @@ async function handleStreamConnectionV2(ws, req) {
             '-re',
             '-i', 'pipe:0',
             '-c:v', 'libx264',
-            '-preset', 'ultrafast',
+            '-preset', 'veryfast',  // Better quality than ultrafast
             '-tune', 'zerolatency',
             '-profile:v', 'baseline',
             '-level', '3.1',
-            '-vf', 'scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2,fps=30', // 16:9 Forced & 30 FPS
-            '-b:v', '2000k',
-            '-maxrate', '2500k',
-            '-bufsize', '8000k', // Increased bufsize for smoother stream
+            '-vf', 'scale=1280:720:force_original_aspect_ratio=decrease:flags=lanczos,pad=1280:720:(ow-iw)/2:(oh-ih)/2,fps=30', // High Quality Scale
+            '-b:v', '4500k',
+            '-maxrate', '5000k',
+            '-bufsize', '10000k',
             '-pix_fmt', 'yuv420p',
             '-g', '30',          // GOP 30 for better network efficiency
             '-bf', '0', 
