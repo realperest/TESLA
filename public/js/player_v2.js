@@ -25,6 +25,7 @@ class TeslaPlayerV2 {
         this._fallbackPlayer = null;
         this._fallbackCanvas = null;
         this._pausedAt = 0;
+        this._pausedChannel = null;
 
         // Sync helper
         this._syncTimer = null;
@@ -176,11 +177,14 @@ class TeslaPlayerV2 {
             const fromAudio = this.audio && Number.isFinite(this.audio.currentTime) ? this.audio.currentTime : 0;
             const fromVideo = Number.isFinite(this._lastVideoPts) ? this._lastVideoPts : 0;
             this._pausedAt = Math.max(0, fromAudio || fromVideo || this.ptsOffset || 0);
+            this._pausedChannel = this.currentChannel;
             this.stop();
             return;
         }
-        if (this.currentChannel) {
-            this.load(this.currentChannel, { startTime: this._pausedAt || this.ptsOffset || 0 });
+        const ch = this._pausedChannel || this.currentChannel;
+        if (ch) {
+            this.load(ch, { startTime: this._pausedAt || this.ptsOffset || 0 });
+            this._pausedChannel = null;
         }
     }
 
@@ -257,6 +261,7 @@ class TeslaPlayerV2 {
     get duration() { return this._forcedDuration || (this.audio ? this.audio.duration : 0); }
     get paused() { return this.audio ? this.audio.paused : true; }
     get hasActiveSource() { return !!(this.ws || this._fallbackPlayer); }
+    get hasPendingResume() { return !!(this._pausedChannel && Number.isFinite(this._pausedAt)); }
     getBufferedEnd() {
         const dur = Number(this.duration || 0);
         const end = Number(this._estimatedBufferedEnd || this.currentTime || 0);

@@ -28,6 +28,7 @@ class TeslaPlayer {
 
   get video() { return this._dummyVideo; }
   get hasActiveSource() { return !!this.mpegPlayer; }
+  get hasPendingResume() { return !!(this._pausedChannel && Number.isFinite(this._pausedAtAbs)); }
 
   async load(channel, opts = {}) {
     this.stop();
@@ -145,7 +146,9 @@ class TeslaPlayer {
   togglePlay() {
     // Hard pause: akışı gerçekten durdur, resume'da aynı saniyeden yeniden bağlan.
     if (this.mpegPlayer && this.isPlaying) {
-      this._pausedAtAbs = Math.max(0, (this.startTime || 0) + Number(this.mpegPlayer.currentTime || 0));
+      const fromDummy = Number(this._dummyVideo?.currentTime || 0);
+      const fromPlayer = Number(this.mpegPlayer?.currentTime || 0);
+      this._pausedAtAbs = Math.max(0, fromDummy || ((this.startTime || 0) + fromPlayer));
       this._pausedChannel = this.currentChannel;
       if (this._startTimeout) { clearTimeout(this._startTimeout); this._startTimeout = null; }
       if (this._audioRetry) { clearInterval(this._audioRetry); this._audioRetry = null; }
@@ -159,7 +162,10 @@ class TeslaPlayer {
     if (!this.mpegPlayer) {
       const ch = this._pausedChannel || this.currentChannel;
       const t = this._pausedAtAbs || (this.startTime || 0);
-      if (ch) this.load(ch, { startTime: t });
+      if (ch) {
+        this.load(ch, { startTime: t });
+        this._pausedChannel = null;
+      }
     }
   }
 

@@ -1425,7 +1425,8 @@ async function toggleYtPlay() {
   const activeYt = getYtPlayerBySection(_activeSection);
   if (!activeYt) return;
   const hasActiveSource = !!activeYt.hasActiveSource;
-  if (!hasActiveSource && resolvedVideo) {
+  const hasPendingResume = !!activeYt.hasPendingResume;
+  if (!hasActiveSource && !hasPendingResume && resolvedVideo) {
     await playResolved();
     return;
   }
