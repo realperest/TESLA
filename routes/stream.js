@@ -58,47 +58,35 @@ async function handleStreamConnection(ws, req) {
   try {
     let ff, yt;
 
-    if (isYouTube) {
-      console.log('[Stream] YouTube HD Mode:', targetUrl);
-      const ytArgs = [
-        '--no-playlist', '--no-warnings', '--force-ipv4', '--geo-bypass',
-        '--extractor-args', 'youtube:player_client=tv,android',
-        '--format', 'bestvideo[height<=720]+bestaudio/best[height<=720]',
-        '-o', '-', targetUrl
-      ];
-      yt = spawn(YT_DLP, ytArgs, { stdio: ['ignore', 'pipe', 'pipe'] });
-      
-      const ffArgs = ['-thread_queue_size', '1024', '-re', '-i', 'pipe:0', '-map', '0:v:0', '-map', '0:a:0'].concat(_ffmpegOutputs());
-      ff = spawn(FFMPEG_PATH, ffArgs, { stdio: ['pipe', 'pipe', 'pipe'] });
+    console.log('[Stream] Unified Loader:', targetUrl);
+    
+    // Use yt-dlp as a universal fetcher for both YT and IPTV/HLS to bypass security/geo-blocks
+    const ytArgs = [
+      '--no-playlist', '--no-warnings', '--force-ipv4', '--geo-bypass',
+      '--user-agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+      '--extractor-args', isYouTube ? 'youtube:player_client=tv,android' : 'generic:referer=https://www.trtizle.com/',
+      '--format', 'bestvideo[height<=720]+bestaudio/best[height<=720]/best[height<=720]',
+      '-o', '-', targetUrl
+    ];
+    
+    yt = spawn(YT_DLP, ytArgs, { stdio: ['ignore', 'pipe', 'pipe'] });
+    
+    const ffArgs = ['-thread_queue_size', '1024', '-re', '-i', 'pipe:0', '-map', '0:v:0?', '-map', '0:a:0?'].concat(_ffmpegOutputs());
+    ff = spawn(FFMPEG_PATH, ffArgs, { stdio: ['pipe', 'pipe', 'pipe'] });
 
-      yt.stdout.pipe(ff.stdin);
-      
-      // Hata yakalayıcılar
-      ff.stdin.on('error', (e) => { if (e.code === 'EPIPE') console.warn('[FF] Input pipe closed'); });
-      yt.stderr.on('data', (d) => { if (d.toString().includes('ERROR')) console.error('[YT] error:', d.toString().trim()); });
-    } else {
-      console.log('[Stream] Direct IPTV Mode:', targetUrl);
-      const ffArgs = [
-        '-reconnect', '1', '-reconnect_at_eof', '1', '-reconnect_streamed', '1', '-reconnect_delay_max', '2',
-        '-user-agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
-        '-headers', 'Referer: https://www.trtizle.com/\r\nOrigin: https://www.trtizle.com\r\n',
-        '-i', targetUrl, '-map', '0:v:0?', '-map', '0:a:0?'
-      ].concat(_ffmpegOutputs());
-      ff = spawn(FFMPEG_PATH, ffArgs, { stdio: ['ignore', 'pipe', 'pipe'] });
-    }
+    yt.stdout.pipe(ff.stdin);
+    
+    // Pipe and error handling
+    ff.stdin.on('error', (e) => { if (e.code === 'EPIPE') console.warn('[FF] Pipe closed'); });
+    yt.stderr.on('data', (d) => { 
+      const m = d.toString();
+      if (m.includes('ERROR')) console.error('[Fetcher-ERR]', m.trim());
+    });
 
     ACTIVE.set(ws, { ff, yt });
 
-    // Stream çıktısını WebSocket'e aktar
-    ff.stdout.on('data', (data) => {
-      if (ws.readyState === 1) ws.send(data);
-    });
-
-    ff.stderr.on('data', (d) => {
-      // Sadece kritik hataları uyar, istatistikleri gizle
-      if (d.toString().includes('Error')) console.warn('[FF-ERR]', d.toString().trim());
-    });
-
+    // Pipe outputs to WS
+    ff.stdout.on('data', (d) => { if (ws.readyState === 1) ws.send(d); });
     ff.on('close', () => {
       if (ws.readyState === 1) ws.close();
       _cleanupSession(ws);
