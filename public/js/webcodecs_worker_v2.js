@@ -115,25 +115,28 @@ function decodeNal(nal, pts) {
         const ts = baseTs <= lastTimestampUs ? (lastTimestampUs + 1) : baseTs;
         lastTimestampUs = ts;
 
+        const isKeyLike = (unitType === 5 || unitType === 7 || unitType === 8);
         const chunk = new EncodedVideoChunk({
-            type: unitType === 5 ? 'key' : 'delta',
+            type: isKeyLike ? 'key' : 'delta',
             timestamp: ts,
             data: nal
         });
         decoder.decode(chunk);
     } catch (err) {
-        // decoder'a bozuk nal yollamamak için yutuyoruz
+        self.postMessage({ type: 'status', payload: { state: 'decode_error' } });
     }
 }
 
 function findStartCodes(data) {
     const out = [];
-    for (let i = 0; i < data.length - 3; i++) {
-        if (data[i] === 0 && data[i + 1] === 0 && data[i + 2] === 1) {
+    for (let i = 0; i < data.length - 3;) {
+        const len = getStartCodeLength(data, i);
+        if (len > 0) {
             out.push({ index: i });
-        } else if (i < data.length - 4 && data[i] === 0 && data[i + 1] === 0 && data[i + 2] === 0 && data[i + 3] === 1) {
-            out.push({ index: i });
+            i += len; // 4-byte start code içinde tekrar 3-byte eşleşmeyi engelle
+            continue;
         }
+        i += 1;
     }
     return out;
 }
