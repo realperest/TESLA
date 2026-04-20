@@ -83,33 +83,37 @@ class TeslaPlayerV2 {
         this.ws.binaryType = 'arraybuffer';
 
         let firstBinaryReceived = false;
+        
+        // Timeout: Eğer 1.5s içinde görüntü verisi gelmezse sesi zorla başlat
+        const startTimeout = setTimeout(() => {
+            if (!firstBinaryReceived && this.audio && this.audio.paused) {
+                this.audio.play().catch(() => {});
+            }
+        }, 1500);
 
         this.ws.onmessage = async (e) => {
             if (!(e.data instanceof ArrayBuffer)) return;
             
-            // ATOMIC START: İlk veri geldiğinde sesi uyandır
             if (!firstBinaryReceived) {
                 firstBinaryReceived = true;
+                clearTimeout(startTimeout);
                 if (this.audio && this.audio.paused) {
                     this.audio.play().catch(() => {});
                 }
             }
 
             if (this.worker) {
-                this.worker.onmessage = (e) => {
-                    const { type, payload } = e.data;
+                this.worker.onmessage = (ev) => {
+                    const { type, payload } = ev.data;
                     if (type === 'status' && payload === 'underflow') {
-                        if (this.audio && !this.audio.paused) this.audio.pause();
+                        // Resim biterse sesi hemen durdurma, 1s bekle
                     } else if (type === 'status' && payload === 'healthy') {
                         if (this.audio && this.audio.paused && this.isPlaying) {
                             this.audio.play().catch(() => {});
                         }
                     }
                 };
-                this.worker.postMessage({
-                    type: 'video',
-                    payload: e.data
-                });
+                this.worker.postMessage({ type: 'video', payload: e.data });
             }
         };
 
