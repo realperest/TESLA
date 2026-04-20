@@ -8,7 +8,8 @@
   },
   "scripts": {
     "start": "sh -c 'echo nameserver 8.8.8.8 > /etc/resolv.conf 2>/dev/null; echo nameserver 1.1.1.1 >> /etc/resolv.conf 2>/dev/null; node server.js'",
-    "dev": "nodemon server.js"
+    "dev": "nodemon server.js",
+    "bump:app-version": "node scripts/bump-app-version.js"
   },
   "dependencies": {
     "cookie-parser": "^1.4.6",

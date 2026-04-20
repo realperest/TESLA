@@ -82,6 +82,12 @@ function updateYtVariantBadge() {
   badge.textContent = `${base}${reconnectInfo}${recoveringInfo}`;
 }
 
+function getAppVersion() {
+  const badge = document.getElementById('app-version-badge');
+  if (badge && badge.dataset && badge.dataset.version) return String(badge.dataset.version);
+  return 'unknown';
+}
+
 function pauseYtSectionPlayer(section) {
   const p = getYtPlayerBySection(section);
   if (!p) return;
@@ -178,7 +184,7 @@ function hideTvOverlay() {
 // ─────────────────────────────────────────────
 
 async function init() {
-  console.log('[App] v260420.0075 initializing...');
+  console.log(`[App] v${getAppVersion()} initializing...`);
   const unlock = () => {
     if (window.player) window.player.unlockAudio();
     if (window.ytPlayer) window.ytPlayer.unlockAudio();

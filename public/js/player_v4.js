@@ -1,8 +1,8 @@
 'use strict';
 
 /**
- * TeslaPlayer V4 (Silent Canvas)
- * Amaç: Sesi kapalı, sadece video akışıyla farklı bir Tesla davranış profili test etmek.
+ * TeslaPlayer V4 (Audio+Canvas Variant)
+ * Amaç: V1 tabanlı ama farklı buffer profiliyle alternatif Tesla davranışı test etmek.
  */
 class TeslaPlayerV4 extends TeslaPlayer {
   _startJsmpeg(channel, t = 0) {
@@ -14,15 +14,24 @@ class TeslaPlayerV4 extends TeslaPlayer {
 
     this.mpegPlayer = new window.JSMpeg.Player(wsUrl, {
       canvas: this.canvas,
-      audio: false,
+      audio: true,
       video: true,
       autoplay: true,
       disableGl: true,
+      audioBufferSize: 2 * 1024 * 1024,
       videoBufferSize: 6 * 1024 * 1024,
+      maxAudioLag: 1.2,
       onPlay: () => {
         this.isPlaying = true;
+        if (this.mpegPlayer.audioOut) this.mpegPlayer.volume = 1;
       }
     });
+
+    // Tesla tarayıcılarında suspend olabilen AudioContext'i canlı tut
+    this._audioRetry = setInterval(() => {
+      const audio = this.mpegPlayer?.audioOut;
+      if (audio?.context?.state === 'suspended') audio.context.resume();
+    }, 2000);
 
     this._dummyTimer = setInterval(() => {
       if (!this.mpegPlayer) return;
@@ -33,17 +42,9 @@ class TeslaPlayerV4 extends TeslaPlayer {
     }, 120);
   }
 
-  toggleMute() {
-    return true;
-  }
-
-  setVolume() {
-    return;
-  }
-
   getDiagnostics() {
     return {
-      silentMode: true,
+      audioEnabled: true,
       currentTime: Number(this.mpegPlayer?.currentTime || 0)
     };
   }
