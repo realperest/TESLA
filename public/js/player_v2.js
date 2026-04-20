@@ -29,6 +29,7 @@ class TeslaPlayerV2 {
         this._lastKnownTime = 0;
         this._isManuallyPaused = false;
         this._pausedClockTime = 0;
+        this._workerInitialized = false;
 
         // Sync helper
         this._syncTimer = null;
@@ -49,6 +50,7 @@ class TeslaPlayerV2 {
 
         try {
             this._initWorker();
+            if (this.worker) this.worker.postMessage({ type: 'reset' });
             this._initAudio(channel, this.ptsOffset);
             this._initWebSocket(channel, this.ptsOffset);
             return true;
@@ -59,10 +61,7 @@ class TeslaPlayerV2 {
     }
 
     _initWorker() {
-        if (this.worker) {
-            try { this.worker.terminate(); } catch {}
-            this.worker = null;
-        }
+        if (this.worker) return;
 
         this.worker = new Worker('/js/webcodecs_worker_v2.js');
         this.worker.onmessage = (ev) => {
@@ -89,11 +88,14 @@ class TeslaPlayerV2 {
         };
         
         // Transfer Canvas control to Worker
-        const offscreen = this.canvas.transferControlToOffscreen();
-        this.worker.postMessage({
-            type: 'init',
-            payload: { canvas: offscreen }
-        }, [offscreen]);
+        if (!this._workerInitialized) {
+            const offscreen = this.canvas.transferControlToOffscreen();
+            this.worker.postMessage({
+                type: 'init',
+                payload: { canvas: offscreen }
+            }, [offscreen]);
+            this._workerInitialized = true;
+        }
     }
 
     _initAudio(channel, t) {
@@ -172,10 +174,7 @@ class TeslaPlayerV2 {
             try { this._fallbackCanvas.remove(); } catch {}
             this._fallbackCanvas = null;
         }
-        if (this.worker) {
-            try { this.worker.terminate(); } catch {}
-            this.worker = null;
-        }
+        // Worker'i ayakta tutuyoruz; OffscreenCanvas tekrar transfer edilemez.
         if (this.ws) { this.ws.close(); this.ws = null; }
         if (this.audio) { this.audio.pause(); this.audio.src = ''; }
         this._audioStarted = false;

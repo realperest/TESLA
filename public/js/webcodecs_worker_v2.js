@@ -39,7 +39,32 @@ self.onmessage = async (e) => {
         const data = new Uint8Array(payload, 8);
         decodeAnnexB(data, pts);
     }
+    else if (type === 'reset') {
+        resetDecoderState();
+    }
 };
+
+function resetDecoderState() {
+    annexBuffer = new Uint8Array(0);
+    spsNal = null;
+    ppsNal = null;
+    currentAuNals = [];
+    currentAuHasVcl = false;
+    currentAuHasIdr = false;
+    currentAuPts = 0;
+    lastAuAppendMs = 0;
+    lastTimestampUs = 0;
+    for (let i = 0; i < frameQueue.length; i++) {
+        try { frameQueue[i].frame.close(); } catch {}
+    }
+    frameQueue = [];
+    try {
+        if (decoder && decoder.state === 'configured') {
+            decoder.reset();
+            configureDecoder();
+        }
+    } catch {}
+}
 
 function initDecoder() {
     decoder = new VideoDecoder({
