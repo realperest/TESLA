@@ -360,17 +360,18 @@ async function playChannel(ch) {
   );
   setNowPlaying(ch.name, ch.category || '');
 
-  // Aynı kanalın alternatif URL'lerini sırayla dene.
+  // Hide empty state
+  const empty = document.getElementById('empty-state');
+  if (empty) empty.remove();
+
   const candidates = getChannelCandidates(ch);
   let lastErr = null;
   for (let i = 0; i < candidates.length; i++) {
     const cand = candidates[i];
     const isLast = i === candidates.length - 1;
     try {
-      const url = cand.url.includes('.m3u8')
-        ? `/proxy/hls?url=${encodeURIComponent(cand.url)}`
-        : cand.url;
-      await player.load({ url, name: ch.name }, { silentError: !isLast, throwOnError: true });
+      // Use direct URL, TeslaPlayer will handle the WebSocket conversion
+      await player.load({ url: cand.url, name: ch.name }, { silentError: !isLast, throwOnError: true });
       showTvOverlay();
       updateDockBackButton();
       return;
@@ -380,15 +381,27 @@ async function playChannel(ch) {
   }
 
   if (lastErr) {
-    console.warn('[TV] Kanal fallback denemeleri başarısız:', ch.name, lastErr.message);
-    if (typeof player._showError === 'function') {
-      const userMsg = typeof player._toUserError === 'function'
-        ? player._toUserError(lastErr.message || '', ch)
-        : 'Yayın açılamadı. TV Ayarları bölümünde yayın kaynağını güncellemeyi deneyebilirsiniz.';
-      player._showError(userMsg);
+    console.warn('[TV] Playback failed:', ch.name, lastErr.message);
+    if (player && typeof player._showError === 'function') {
+      player._showError({ name: ch.name }, lastErr.message);
     }
   }
   updateDockBackButton();
+}
+
+function showTvOverlay() {
+  const overlay = document.getElementById('player-overlay');
+  if (overlay) {
+    overlay.classList.add('visible');
+    setTimeout(() => overlay.classList.remove('visible'), 3000);
+  }
+  const empty = document.getElementById('empty-state');
+  if (empty) empty.remove();
+}
+
+function hideTvOverlay() {
+  const overlay = document.getElementById('player-overlay');
+  if (overlay) overlay.classList.remove('visible');
 }
 
 function tvEnsureEmptyState() {
