@@ -51,53 +51,55 @@ function _ffmpegOutputs() {
 async function handleStreamConnection(ws, req) {
   const query = new URL('http://x' + (req.url || '')).searchParams;
   const url = query.get('url');
-  let startTime = query.get('t') || '0'; 
+  const startTime = query.get('t') || '0'; 
   
   if (!url) return ws.close(1008);
   
   const targetUrl = decodeURIComponent(url);
-  const isYouTube = targetUrl.includes('youtube.com') || targetUrl.includes('youtu.be');
+  const isYouTube = _isYouTubeUrl(targetUrl);
 
   try {
     let ff, yt;
-    console.log(`[Stream] Loading: ${targetUrl} (Seek: ${startTime}s)`);
+    console.log(`[Stream] Fast-Start: ${targetUrl} (Seek: ${startTime}s)`);
     
-    if (isYouTube) {
-      // Get direct stream URL for native seek
-      const ytDiscovery = spawn(YT_DLP, ['--no-playlist', '--geo-bypass', '--force-ipv4', '-g', targetUrl], { stdio: ['ignore', 'pipe', 'pipe'] });
-      let directUrl = '';
-      ytDiscovery.stdout.on('data', (d) => directUrl += d.toString());
-      
-      ytDiscovery.on('close', (code) => {
-        if (code !== 0 || !directUrl.trim()) return ws.close(1011);
-        const streamUrl = directUrl.trim().split('\n')[0];
-        
-        console.log(`[Stream] Native Seek to ${startTime}s`);
-        const ffArgs = [
-          '-ss', startTime, // Seek BEFORE input
-          '-reconnect', '1', '-reconnect_at_eof', '1', '-reconnect_streamed', '1',
-          '-user_agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
-          '-i', streamUrl, 
-          '-avoid_negative_ts', 'make_zero', // CRITICAL: Fixes the freezing frame issue
-          '-fflags', '+genpts+discardcorrupt+igndts',
-          '-map', '0:v:0?', '-map', '0:a:0?'
-        ].concat(_ffmpegOutputs());
+    // Core Engine: Standardize transport for Tesla
+    const ytArgs = [
+      '--no-playlist', '--no-warnings', '--force-ipv4', '--geo-bypass',
+      '--user-agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+      '--extractor-args', isYouTube ? 'youtube:player_client=tv,android' : `generic:referer=https://www.trtizle.com/`,
+      isYouTube && startTime !== '0' ? '--download-sections' : null, 
+      isYouTube && startTime !== '0' ? `*${startTime}-inf` : null,
+      '--format', 'bestvideo[height<=720]+bestaudio/best[height<=720]/best[height<=720]',
+      '-o', '-', targetUrl
+    ].filter(Boolean);
+    
+    yt = spawn(YT_DLP, ytArgs, { stdio: ['ignore', 'pipe', 'pipe'] });
+    
+    // FFmpeg Optimization for Tesla Seeking:
+    // -g 1 makes every frame a keyframe (instant sync)
+    // -bf 0 removes B-frames for zero-latency
+    const ffArgs = [
+      '-thread_queue_size', '1024', '-re', '-i', 'pipe:0',
+      '-g', '1', '-bf', '0', 
+      '-map', '0:v:0?', '-map', '0:a:0?'
+    ].concat(_ffmpegOutputs());
 
-        ff = spawn(FFMPEG_PATH, ffArgs, { stdio: ['ignore', 'pipe', 'pipe'] });
-        ACTIVE.set(ws, { ff });
-        ff.stdout.on('data', (d) => { if (ws.readyState === 1) ws.send(d); });
-        ff.on('close', () => { if (ws.readyState === 1) ws.close(); _cleanupSession(ws); });
-      });
-    } else {
-      // Generic/IPTV: Direct pipe
-      const ffArgs = ['-reconnect', '1', '-reconnect_at_eof', '1', '-reconnect_streamed', '1', '-i', targetUrl, '-map', '0:v:0?', '-map', '0:a:0?'].concat(_ffmpegOutputs());
-      ff = spawn(FFMPEG_PATH, ffArgs, { stdio: ['ignore', 'pipe', 'pipe'] });
-      ACTIVE.set(ws, { ff });
-      ff.stdout.on('data', (d) => { if (ws.readyState === 1) ws.send(d); });
-      ff.on('close', () => { if (ws.readyState === 1) ws.close(); _cleanupSession(ws); });
-    }
+    ff = spawn(FFMPEG_PATH, ffArgs, { stdio: ['pipe', 'pipe', 'pipe'] });
+    yt.stdout.pipe(ff.stdin);
+    
+    ACTIVE.set(ws, { ff, yt });
+
+    ff.stdout.on('data', (d) => { if (ws.readyState === 1) ws.send(d); });
+    ff.on('close', () => { if (ws.readyState === 1) ws.close(); _cleanupSession(ws); });
+    
+    // Monitor yt-dlp potential errors
+    yt.stderr.on('data', (d) => { 
+      const msg = d.toString();
+      if (msg.includes('ERROR')) console.error('[YT-ERR]', msg.trim());
+    });
+
   } catch (err) {
-    console.error('[Stream] App Error:', err.message);
+    console.error('[Stream] Fatal Error:', err.message);
     ws.close(1011);
   }
 
