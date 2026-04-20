@@ -24,6 +24,9 @@ class TeslaPlayer {
     this._startTimeout = null;
     this._pausedAtAbs = 0;
     this._pausedChannel = null;
+    this._progressTimer = null;
+    this._lastKnownAbsTime = 0;
+    this._sessionStartedAtMs = 0;
   }
 
   get video() { return this._dummyVideo; }
@@ -36,6 +39,8 @@ class TeslaPlayer {
     this.startTime = opts.startTime || 0;
     this._pausedChannel = null;
     this._pausedAtAbs = 0;
+    this._lastKnownAbsTime = this.startTime || 0;
+    this._sessionStartedAtMs = 0;
     
     const spinner = document.getElementById(this.spinnerId);
     if (spinner) spinner.classList.add('active');
@@ -75,6 +80,7 @@ class TeslaPlayer {
       maxAudioLag: 1.8,
       onPlay: () => {
         this.isPlaying = true;
+        this._sessionStartedAtMs = Date.now();
         if (this.mpegPlayer.audioOut) this.mpegPlayer.volume = 1;
         const spinner = document.getElementById(this.spinnerId);
         if (spinner) spinner.classList.remove('active');
@@ -93,17 +99,32 @@ class TeslaPlayer {
           // absolute position = current offset + stream time
           const abs = (this.mpegPlayer.currentTime || 0) + (this.startTime || 0);
           this._dummyVideo.currentTime = abs;
+          this._lastKnownAbsTime = Math.max(this._lastKnownAbsTime || 0, abs || 0);
           
           const dur = channel.duration || 3600; 
           Object.defineProperty(this._dummyVideo, 'duration', { value: dur, configurable: true });
         }
     }, 100);
+
+    this._progressTimer = setInterval(() => {
+      if (!this.isPlaying) return;
+      const rel = Number(this.mpegPlayer?.currentTime || 0);
+      if (rel > 0) {
+        this._lastKnownAbsTime = Math.max(this._lastKnownAbsTime || 0, (this.startTime || 0) + rel);
+        return;
+      }
+      if (this._sessionStartedAtMs > 0) {
+        const wall = (this.startTime || 0) + ((Date.now() - this._sessionStartedAtMs) / 1000);
+        this._lastKnownAbsTime = Math.max(this._lastKnownAbsTime || 0, wall);
+      }
+    }, 250);
   }
 
   stop() {
     if (this._startTimeout) { clearTimeout(this._startTimeout); this._startTimeout = null; }
     if (this._audioRetry) { clearInterval(this._audioRetry); this._audioRetry = null; }
     if (this._dummyTimer) { clearInterval(this._dummyTimer); this._dummyTimer = null; }
+    if (this._progressTimer) { clearInterval(this._progressTimer); this._progressTimer = null; }
 
     if (this.mpegPlayer) {
       this.mpegPlayer.destroy();
@@ -148,11 +169,12 @@ class TeslaPlayer {
     if (this.mpegPlayer && this.isPlaying) {
       const fromDummy = Number(this._dummyVideo?.currentTime || 0);
       const fromPlayer = Number(this.mpegPlayer?.currentTime || 0);
-      this._pausedAtAbs = Math.max(0, fromDummy || ((this.startTime || 0) + fromPlayer));
+      this._pausedAtAbs = Math.max(0, this._lastKnownAbsTime || 0, fromDummy || 0, ((this.startTime || 0) + fromPlayer));
       this._pausedChannel = this.currentChannel;
       if (this._startTimeout) { clearTimeout(this._startTimeout); this._startTimeout = null; }
       if (this._audioRetry) { clearInterval(this._audioRetry); this._audioRetry = null; }
       if (this._dummyTimer) { clearInterval(this._dummyTimer); this._dummyTimer = null; }
+      if (this._progressTimer) { clearInterval(this._progressTimer); this._progressTimer = null; }
       try { this.mpegPlayer.destroy(); } catch {}
       this.mpegPlayer = null;
       this.isPlaying = false;

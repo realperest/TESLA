@@ -26,6 +26,7 @@ class TeslaPlayerV2 {
         this._fallbackCanvas = null;
         this._pausedAt = 0;
         this._pausedChannel = null;
+        this._lastKnownTime = 0;
 
         // Sync helper
         this._syncTimer = null;
@@ -38,6 +39,7 @@ class TeslaPlayerV2 {
         this._forcedDuration = channel.duration || 0;
         this._videoHealthy = false;
         this._estimatedBufferedEnd = this.ptsOffset;
+        this._lastKnownTime = this.ptsOffset;
 
         if (this.spinner) this.spinner.classList.add('active');
 
@@ -68,6 +70,7 @@ class TeslaPlayerV2 {
                 if (payload && typeof payload.pts === 'number') {
                     this._lastVideoPts = payload.pts;
                     this._estimatedBufferedEnd = Math.max(this._estimatedBufferedEnd, payload.pts + 20);
+                    this._lastKnownTime = Math.max(this._lastKnownTime || 0, payload.pts);
                 }
                 this._videoHealthy = true;
                 if (this._videoFallbackTimer) { clearTimeout(this._videoFallbackTimer); this._videoFallbackTimer = null; }
@@ -106,6 +109,13 @@ class TeslaPlayerV2 {
         this.audio.onpause = () => {
             this._audioStarted = false;
             this.isPlaying = false;
+        };
+
+        this.audio.ontimeupdate = () => {
+            const tNow = Number(this.audio?.currentTime || 0);
+            if (Number.isFinite(tNow) && tNow > 0) {
+                this._lastKnownTime = Math.max(this._lastKnownTime || 0, tNow);
+            }
         };
 
         // Master Clock Loop
@@ -176,7 +186,7 @@ class TeslaPlayerV2 {
         if (!this.paused) {
             const fromAudio = this.audio && Number.isFinite(this.audio.currentTime) ? this.audio.currentTime : 0;
             const fromVideo = Number.isFinite(this._lastVideoPts) ? this._lastVideoPts : 0;
-            this._pausedAt = Math.max(0, fromAudio || fromVideo || this.ptsOffset || 0);
+            this._pausedAt = Math.max(0, this._lastKnownTime || 0, fromAudio || 0, fromVideo || 0, this.ptsOffset || 0);
             this._pausedChannel = this.currentChannel;
             this.stop();
             return;
