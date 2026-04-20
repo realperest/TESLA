@@ -58,9 +58,9 @@ class TeslaPlayer {
       video: true,
       autoplay: true,
       disableGl: true, // Stealth mode for Tesla
-      audioBufferSize: 2 * 1024 * 1024,
-      videoBufferSize: 4 * 1024 * 1024,
-      maxAudioLag: 1.5,
+      audioBufferSize: 4 * 1024 * 1024,
+      videoBufferSize: 8 * 1024 * 1024,
+      maxAudioLag: 3.0, // MAX STABILITY: 3 seconds deep buffer
       onPlay: () => {
         this.isPlaying = true;
         if (this.mpegPlayer.audioOut) this.mpegPlayer.volume = 1;

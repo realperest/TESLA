@@ -28,19 +28,19 @@ function _isYouTubeUrl(url) {
 
 function _ffmpegOutputs() {
   return [
-    '-vf', 'scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2:color=black,unsharp=3:3:1.5:3:3:0.5,fps=24', // Sharper 720p
+    '-vf', 'scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2:color=black,unsharp=5:5:1.0:5:5:0.5,fps=30', // Ultra Sharper 720p @ 30fps
     '-f', 'mpegts',
     '-codec:v', 'mpeg1video',
     '-s', '1280x720',
-    '-b:v', '2800k', // Bitrate boost for crispness
-    '-maxrate', '3500k',
-    '-bufsize', '6000k',
-    '-g', '12',
+    '-b:v', '4000k', // Ultra High Bitrate
+    '-maxrate', '5000k',
+    '-bufsize', '10000k',
+    '-g', '15',
     '-acodec', 'mp2',
     '-af', 'volume=2.0',
     '-ar', '44100',
     '-ac', '2',
-    '-b:a', '160k',
+    '-b:a', '256k', // Professional Audio Quality
     '-mpegts_flags', '+initial_discontinuity+system_b',
     '-muxdelay', '0.001',
     'pipe:1'
@@ -62,7 +62,8 @@ async function handleStreamConnection(ws, req) {
       const ytArgs = [
         '--no-playlist', '--no-warnings', '--force-ipv4', '--geo-bypass',
         '--extractor-args', 'youtube:player_client=tv,android',
-        '-f', '18/22/best', '-o', '-', targetUrl
+        '--format', 'bestvideo[height<=720]+bestaudio/best[height<=720]',
+        '-o', '-', targetUrl
       ];
       yt = spawn(YT_DLP, ytArgs, { stdio: ['ignore', 'pipe', 'pipe'] });
       
@@ -78,8 +79,8 @@ async function handleStreamConnection(ws, req) {
       console.log('[Stream] Direct IPTV Mode:', targetUrl);
       const ffArgs = [
         '-reconnect', '1', '-reconnect_at_eof', '1', '-reconnect_streamed', '1', '-reconnect_delay_max', '2',
-        '-user-agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        '-headers', 'Referer: https://www.trtizle.com/\r\n',
+        '-user-agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+        '-headers', 'Referer: https://www.trtizle.com/\r\nOrigin: https://www.trtizle.com\r\n',
         '-i', targetUrl, '-map', '0:v:0?', '-map', '0:a:0?'
       ].concat(_ffmpegOutputs());
       ff = spawn(FFMPEG_PATH, ffArgs, { stdio: ['ignore', 'pipe', 'pipe'] });
