@@ -49,6 +49,8 @@ let _userLanguage = 'tr';
 let _tvOverlayTimer = null;
 const TV_OVERLAY_HIDE_MS = 3500;
 let _ytSeekingDrag = false;
+const _resumeOnSectionReturn = Object.create(null);
+const _resumeOnVisibilityReturn = Object.create(null);
 
 const YT_PROFILE_KEYWORDS_KEY = 'yt-profile-keywords';
 const YT_SEARCH_HISTORY_KEY = 'yt-search-history';
@@ -94,6 +96,41 @@ function pauseYtSectionPlayer(section) {
   if (!p.paused && typeof p.togglePlay === 'function') {
     p.togglePlay();
   }
+}
+
+function pausePlayerAndRemember(key, playerObj) {
+  if (!playerObj || typeof playerObj.paused === 'undefined') return;
+  if (!playerObj.paused && typeof playerObj.togglePlay === 'function') {
+    _resumeOnSectionReturn[key] = true;
+    playerObj.togglePlay();
+    return;
+  }
+  _resumeOnSectionReturn[key] = false;
+}
+
+function resumePlayerIfNeeded(key, playerObj) {
+  if (!_resumeOnSectionReturn[key]) return;
+  if (!playerObj || typeof playerObj.togglePlay !== 'function') return;
+  if (playerObj.paused) playerObj.togglePlay();
+  _resumeOnSectionReturn[key] = false;
+}
+
+function pauseForVisibility(key, playerObj) {
+  if (!playerObj || typeof playerObj.paused === 'undefined') return;
+  if (!playerObj.paused && typeof playerObj.togglePlay === 'function') {
+    _resumeOnVisibilityReturn[key] = true;
+    playerObj.togglePlay();
+  } else {
+    _resumeOnVisibilityReturn[key] = false;
+  }
+}
+
+function resumeFromVisibilityIfNeeded(key, playerObj) {
+  if (!_resumeOnVisibilityReturn[key]) return;
+  if (playerObj && playerObj.paused && typeof playerObj.togglePlay === 'function') {
+    playerObj.togglePlay();
+  }
+  _resumeOnVisibilityReturn[key] = false;
 }
 
 function setupYtSeekGestures() {
@@ -261,22 +298,22 @@ async function init() {
     return;
   }
 
-  // Akıllı Sekme Yönetimi: Sekme gizlendiğinde durdur, açıldığında en güncel yerden devam et
+  // Akıllı Sekme Yönetimi: Sekme gizlenince pause, görünür olunca kaldığı yerden devam
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'hidden') {
-      if (typeof player !== 'undefined' && player.isPlaying) { window._lastChannel = player.currentChannel; player.stop(); }
-      if (typeof ytPlayer !== 'undefined' && ytPlayer.isPlaying) { window._lastYtChannel = ytPlayer.currentChannel; ytPlayer.stop(); }
-      if (typeof ytPlayerV2 !== 'undefined' && ytPlayerV2.isPlaying) { window._lastYtChannelV2 = ytPlayerV2.currentChannel; ytPlayerV2.stop(); }
-      if (typeof ytPlayerV3 !== 'undefined' && ytPlayerV3.isPlaying) { window._lastYtChannelV3 = ytPlayerV3.currentChannel; ytPlayerV3.stop(); }
-      if (typeof ytPlayerV4 !== 'undefined' && ytPlayerV4.isPlaying) { window._lastYtChannelV4 = ytPlayerV4.currentChannel; ytPlayerV4.stop(); }
-      if (typeof iptvPlayer !== 'undefined' && iptvPlayer.isPlaying) { window._lastIptvChannel = iptvPlayer.currentChannel; iptvPlayer.stop(); }
+      pauseForVisibility('tv', player);
+      pauseForVisibility('youtube', ytPlayer);
+      pauseForVisibility('youtube_v2', ytPlayerV2);
+      pauseForVisibility('youtube_v3', ytPlayerV3);
+      pauseForVisibility('youtube_v4', ytPlayerV4);
+      pauseForVisibility('iptv', iptvPlayer);
     } else if (document.visibilityState === 'visible') {
-      if (window._lastChannel) { player.load(window._lastChannel); window._lastChannel = null; }
-      if (window._lastYtChannel) { ytPlayer.load(window._lastYtChannel); window._lastYtChannel = null; }
-      if (window._lastYtChannelV2) { ytPlayerV2.load(window._lastYtChannelV2); window._lastYtChannelV2 = null; }
-      if (window._lastYtChannelV3) { ytPlayerV3.load(window._lastYtChannelV3); window._lastYtChannelV3 = null; }
-      if (window._lastYtChannelV4) { ytPlayerV4.load(window._lastYtChannelV4); window._lastYtChannelV4 = null; }
-      if (window._lastIptvChannel) { iptvPlayer.load(window._lastIptvChannel); window._lastIptvChannel = null; }
+      resumeFromVisibilityIfNeeded('tv', player);
+      resumeFromVisibilityIfNeeded('youtube', ytPlayer);
+      resumeFromVisibilityIfNeeded('youtube_v2', ytPlayerV2);
+      resumeFromVisibilityIfNeeded('youtube_v3', ytPlayerV3);
+      resumeFromVisibilityIfNeeded('youtube_v4', ytPlayerV4);
+      resumeFromVisibilityIfNeeded('iptv', iptvPlayer);
     }
   });
 
@@ -1641,24 +1678,14 @@ let _ytTrendingLoaded = false;
 function stopInactiveSectionPlayback(nextSection) {
   // TV sekmesinden çıkınca stream'i düşürme: sadece duraklat (geri dönüşte tek tuşla devam etsin)
   if (_activeSection === 'tv' && nextSection !== 'tv' && player) {
-    try {
-      player.video.pause();
-      player.isPlaying = false;
-    } catch (e) {
-      console.warn('[TV] duraklatma', e.message);
-    }
+    try { pausePlayerAndRemember('tv', player); } catch (e) { console.warn('[TV] duraklatma', e.message); }
     hideTvOverlay();
     const btn = document.getElementById('btn-play');
     if (btn) btn.innerHTML = TV_ICONS.play;
   }
 
   if (_activeSection === 'iptv' && nextSection !== 'iptv' && iptvPlayer) {
-    try {
-      iptvPlayer.video.pause();
-      iptvPlayer.isPlaying = false;
-    } catch (e) {
-      console.warn('[IPTV] duraklatma', e.message);
-    }
+    try { pausePlayerAndRemember('iptv', iptvPlayer); } catch (e) { console.warn('[IPTV] duraklatma', e.message); }
     hideIptvOverlay();
     const ib = document.getElementById('iptv-btn-play');
     if (ib) ib.innerHTML = TV_ICONS.play;
@@ -1666,7 +1693,7 @@ function stopInactiveSectionPlayback(nextSection) {
 
   // YouTube varyantlarından çıkınca stream'i düşürme: sadece duraklat (geri dönüşte tek tuşla devam etsin)
   if (_activeSection === 'youtube' && nextSection !== 'youtube' && ytPlayer) {
-    try { pauseYtSectionPlayer('youtube'); } catch (e) { console.warn('[YouTube] duraklatma', e.message); }
+    try { pausePlayerAndRemember('youtube', ytPlayer); } catch (e) { console.warn('[YouTube] duraklatma', e.message); }
     try { cancelAnimationFrame(_ytProgressRaf); } catch (e2) {
       console.warn('[YouTube] raf', e2.message);
     }
@@ -1675,21 +1702,21 @@ function stopInactiveSectionPlayback(nextSection) {
   }
 
   if (_activeSection === 'youtube_v2' && nextSection !== 'youtube_v2' && ytPlayerV2) {
-    try { pauseYtSectionPlayer('youtube_v2'); } catch (e) { console.warn('[YouTubeV2] duraklatma', e.message); }
+    try { pausePlayerAndRemember('youtube_v2', ytPlayerV2); } catch (e) { console.warn('[YouTubeV2] duraklatma', e.message); }
     try { cancelAnimationFrame(_ytProgressRaf); } catch (e2) { console.warn('[YouTubeV2] raf', e2.message); }
     const btn = document.getElementById('yt-btn-play');
     if (btn) btn.innerHTML = YC_ICONS.play;
   }
 
   if (_activeSection === 'youtube_v3' && nextSection !== 'youtube_v3' && ytPlayerV3) {
-    try { pauseYtSectionPlayer('youtube_v3'); } catch (e) { console.warn('[YouTubeV3] duraklatma', e.message); }
+    try { pausePlayerAndRemember('youtube_v3', ytPlayerV3); } catch (e) { console.warn('[YouTubeV3] duraklatma', e.message); }
     try { cancelAnimationFrame(_ytProgressRaf); } catch (e2) { console.warn('[YouTubeV3] raf', e2.message); }
     const btn = document.getElementById('yt-btn-play');
     if (btn) btn.innerHTML = YC_ICONS.play;
   }
 
   if (_activeSection === 'youtube_v4' && nextSection !== 'youtube_v4' && ytPlayerV4) {
-    try { pauseYtSectionPlayer('youtube_v4'); } catch (e) { console.warn('[YouTubeV4] duraklatma', e.message); }
+    try { pausePlayerAndRemember('youtube_v4', ytPlayerV4); } catch (e) { console.warn('[YouTubeV4] duraklatma', e.message); }
     try { cancelAnimationFrame(_ytProgressRaf); } catch (e2) { console.warn('[YouTubeV4] raf', e2.message); }
     const btn = document.getElementById('yt-btn-play');
     if (btn) btn.innerHTML = YC_ICONS.play;
@@ -1741,6 +1768,14 @@ function dockNav(section) {
   }
   _activeSection = section;
   updateYtVariantBadge();
+
+  // Bölüme geri dönünce kaldığı yerden otomatik devam et
+  if (section === 'tv') resumePlayerIfNeeded('tv', player);
+  if (section === 'iptv') resumePlayerIfNeeded('iptv', iptvPlayer);
+  if (section === 'youtube') resumePlayerIfNeeded('youtube', ytPlayer);
+  if (section === 'youtube_v2') resumePlayerIfNeeded('youtube_v2', ytPlayerV2);
+  if (section === 'youtube_v3') resumePlayerIfNeeded('youtube_v3', ytPlayerV3);
+  if (section === 'youtube_v4') resumePlayerIfNeeded('youtube_v4', ytPlayerV4);
 
   // YouTube sekmesine ilk girişte trending yükle
   if (isYoutubeSection(section) && !_ytTrendingLoaded) {

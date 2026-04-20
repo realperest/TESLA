@@ -69,7 +69,7 @@ function configureDecoder() {
         decoder.configure({
             codec: 'avc1.42E01E', 
             optimizeForLatency: true,
-            hardwareAcceleration: 'prefer-hardware'
+            hardwareAcceleration: 'prefer-software'
         });
         isConfigured = true;
         console.log('[WorkerV2] Decoder Configured');

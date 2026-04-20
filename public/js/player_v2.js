@@ -19,6 +19,7 @@ class TeslaPlayerV2 {
         this._lastVideoPts = 0;
         this._audioStarted = false;
         this._audioStartFallback = null;
+        this._videoHealthy = false;
 
         // Sync helper
         this._syncTimer = null;
@@ -29,6 +30,7 @@ class TeslaPlayerV2 {
         this.currentChannel = channel;
         this.ptsOffset = opts.startTime || 0;
         this._forcedDuration = channel.duration || 0;
+        this._videoHealthy = false;
 
         if (this.spinner) this.spinner.classList.add('active');
 
@@ -56,6 +58,8 @@ class TeslaPlayerV2 {
                 if (payload && typeof payload.pts === 'number') {
                     this._lastVideoPts = payload.pts;
                 }
+                this._videoHealthy = true;
+                if (this.spinner) this.spinner.classList.remove('active');
                 this._startAudioWhenVideoReady();
                 this._resyncAudioToVideo();
             } else if (state === 'decode_error') {
@@ -83,11 +87,11 @@ class TeslaPlayerV2 {
         this.audio.onplay = () => {
             this.isPlaying = true;
             this._audioStarted = true;
-            if (this.spinner) this.spinner.classList.remove('active');
         };
 
         this.audio.onpause = () => {
             this._audioStarted = false;
+            this.isPlaying = false;
         };
 
         // Master Clock Loop
