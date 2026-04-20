@@ -2,7 +2,7 @@
 
 /**
  * WebCodecs Worker V2
- * Optimized for Tesla/Chromium - Autosize & Smooth Sync
+ * Hard-Sync & Autosize
  */
 
 let canvas = null;
@@ -37,13 +37,11 @@ self.onmessage = async (e) => {
 function initDecoder() {
     decoder = new VideoDecoder({
         output: (frame) => {
-            // AUTOSIZE: Canvas boyutunu gelen ilk kareye göre ayarla
             if (frame.displayWidth !== lastWidth || frame.displayHeight !== lastHeight) {
                 lastWidth = frame.displayWidth;
                 lastHeight = frame.displayHeight;
                 canvas.width = lastWidth;
                 canvas.height = lastHeight;
-                console.log(`[WorkerV2] Resized to ${lastWidth}x${lastHeight}`);
             }
 
             frameQueue.push({
@@ -51,7 +49,8 @@ function initDecoder() {
                 pts: frame.timestamp / 1000000
             });
             
-            if (frameQueue.length > 60) { 
+            // Limit buffer to prevent memory issues
+            if (frameQueue.length > 50) { 
                 const old = frameQueue.shift();
                 old.frame.close();
             }
@@ -80,10 +79,9 @@ function configureDecoder() {
 
 function decodeChunk(data, pts) {
     if (!isConfigured) return;
-
     try {
         const chunk = new EncodedVideoChunk({
-            type: (data[4] & 0x1f) === 7 || (data[4] & 0x1f) === 5 ? 'key' : 'key',
+            type: (data[4] & 0x1f) === 7 || (data[4] & 0x1f) === 5 ? 'key' : 'delta',
             timestamp: pts * 1000000,
             data: data
         });
@@ -94,26 +92,30 @@ function decodeChunk(data, pts) {
 function renderLoop() {
     if (!ctx || frameQueue.length === 0) return;
 
-    let bestFrame = null;
-    let bestIndex = -1;
+    // Hard Sync: Master Clock (Ses) ile Video PTS arasındaki farkı kontrol et
+    let bestFrameIndex = -1;
 
-    // Bulunan karelerden masterClock'a en yakın olanı seç
+    // Geride kalan kareleri tara
     for (let i = 0; i < frameQueue.length; i++) {
-        if (frameQueue[i].pts <= masterClock) {
-            bestFrame = frameQueue[i].frame;
-            bestIndex = i;
+        const pts = frameQueue[i].pts;
+        
+        // Sesin zamanından daha eski (veya çok yakın) kareyi bul
+        if (pts <= masterClock + 0.05) { // 50ms tolerans
+            bestFrameIndex = i;
         } else {
-            break;
+            break; // Gelecekteki bir kareye ulaştık
         }
     }
 
-    if (bestFrame) {
-        ctx.drawImage(bestFrame, 0, 0, canvas.width, canvas.height);
-        
-        // Cleanup old frames
-        for (let j = 0; j <= bestIndex; j++) {
+    if (bestFrameIndex !== -1) {
+        const item = frameQueue[bestFrameIndex];
+        ctx.drawImage(item.frame, 0, 0, canvas.width, canvas.height);
+
+        // SYNC FIX: Çizilen kareden önceki tüm eski (geçmiş) kareleri temizle
+        // Bu sayede video sese tam yetişir (skip logic)
+        for (let j = 0; j <= bestFrameIndex; j++) {
             frameQueue[j].frame.close();
         }
-        frameQueue.splice(0, bestIndex + 1);
+        frameQueue.splice(0, bestFrameIndex + 1);
     }
 }

@@ -53,7 +53,7 @@ async function handleStreamConnectionV2(ws, req) {
 
         // 2. FFmpeg: Convert to Raw H.264 Annex B with PTS metadata
         const ffArgs = [
-            '-re',               // Read at native frame rate to prevent flood
+            '-re',
             '-i', 'pipe:0',
             '-c:v', 'libx264',
             '-preset', 'ultrafast',
@@ -62,12 +62,12 @@ async function handleStreamConnectionV2(ws, req) {
             '-level', '3.1',
             '-b:v', '1500k',
             '-maxrate', '2000k',
-            '-bufsize', '4000k',
+            '-bufsize', '8000k', // Increased bufsize for smoother stream
             '-pix_fmt', 'yuv420p',
-            '-g', '1',           // Every frame is a keyframe
+            '-g', '30',          // GOP 30 for better network efficiency
             '-bf', '0', 
             '-f', 'h264',
-            '-x264-params', 'annexb=1:keyint=1', 
+            '-x264-params', 'annexb=1', 
             'pipe:1',
             '-an'
         ];
