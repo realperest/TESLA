@@ -80,7 +80,7 @@ async function handleStreamConnection(ws, req) {
     // -g 1 makes every frame a keyframe (instant sync)
     // -bf 0 removes B-frames for zero-latency
     const ffArgs = [
-      '-thread_queue_size', '4096', '-i', 'pipe:0',
+      '-thread_queue_size', '4096', '-re', '-i', 'pipe:0',
       '-g', '1', '-bf', '0', 
       '-map', '0:v:0?', '-map', '0:a:0?'
     ].concat(_ffmpegOutputs());

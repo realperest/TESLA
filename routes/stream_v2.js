@@ -51,6 +51,7 @@ async function handleStreamConnectionV2(ws, req) {
 
         const ffArgs = [
             '-thread_queue_size', '4096',
+            '-re',
             '-i', 'pipe:0',
             '-c:v', 'libx264',
             '-preset', 'veryfast',
@@ -138,6 +139,7 @@ async function handleAudioRequestV2(req, res) {
     const yt = spawn(YT_DLP, ytArgs);
     
     const ffArgs = [
+        '-re',
         '-i', 'pipe:0',
         '-acodec', 'libmp3lame',
         '-ab', '128k',

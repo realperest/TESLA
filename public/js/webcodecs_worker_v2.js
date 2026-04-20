@@ -100,11 +100,6 @@ function decodeAnnexB(data, pts) {
     const tailStart = starts[starts.length - 1].index;
     annexBuffer = annexBuffer.slice(tailStart);
 
-    // Bazı kaynaklarda AU sinyali düzensiz gelebilir.
-    // Chunk sonunda elde VCL varsa decoder'a iterek görüntünün hiç başlamamasını engeller.
-    if (currentAuHasVcl) {
-        flushCurrentAccessUnit();
-    }
 }
 
 function pushNalToAccessUnit(nal, pts) {

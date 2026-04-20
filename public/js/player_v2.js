@@ -21,6 +21,8 @@ class TeslaPlayerV2 {
         this._audioStartFallback = null;
         this._videoHealthy = false;
         this._estimatedBufferedEnd = 0;
+        this._startupGuardTimer = null;
+        this._startupRetryCount = 0;
 
         // Sync helper
         this._syncTimer = null;
@@ -33,6 +35,7 @@ class TeslaPlayerV2 {
         this._forcedDuration = channel.duration || 0;
         this._videoHealthy = false;
         this._estimatedBufferedEnd = this.ptsOffset;
+        this._startupRetryCount = 0;
 
         if (this.spinner) this.spinner.classList.add('active');
 
@@ -62,12 +65,10 @@ class TeslaPlayerV2 {
                     this._estimatedBufferedEnd = Math.max(this._estimatedBufferedEnd, payload.pts + 20);
                 }
                 this._videoHealthy = true;
+                if (this._startupGuardTimer) { clearTimeout(this._startupGuardTimer); this._startupGuardTimer = null; }
                 if (this.spinner) this.spinner.classList.remove('active');
                 this._startAudioWhenVideoReady();
                 this._resyncAudioToVideo();
-            } else if (state === 'decode_error') {
-                // Decode hatalarında sesi tamamen kilitlemeyelim.
-                this._startAudioWhenVideoReady();
             }
         };
         
@@ -86,6 +87,7 @@ class TeslaPlayerV2 {
         this.audio.crossOrigin = 'anonymous';
         this.audio.autoplay = false; // Video ile senkron için bekleteceğiz
         this.audio.preload = 'auto';
+        this.audio.playbackRate = 1.0;
         
         this.audio.onplay = () => {
             this.isPlaying = true;
@@ -120,6 +122,13 @@ class TeslaPlayerV2 {
         this._audioStartFallback = setTimeout(() => {
             this._startAudioWhenVideoReady();
         }, 2500);
+        this._startupGuardTimer = setTimeout(() => {
+            if (this._videoHealthy) return;
+            if (!this.currentChannel) return;
+            if (this._startupRetryCount >= 1) return;
+            this._startupRetryCount += 1;
+            this.load(this.currentChannel, { startTime: this.ptsOffset || 0 }).catch(() => {});
+        }, 6500);
 
         this.ws.onmessage = (e) => {
             if (!(e.data instanceof ArrayBuffer)) return;
@@ -134,6 +143,7 @@ class TeslaPlayerV2 {
     stop() {
         if (this._syncTimer) clearInterval(this._syncTimer);
         if (this._audioStartFallback) { clearTimeout(this._audioStartFallback); this._audioStartFallback = null; }
+        if (this._startupGuardTimer) { clearTimeout(this._startupGuardTimer); this._startupGuardTimer = null; }
         if (this.ws) { this.ws.close(); this.ws = null; }
         if (this.audio) { this.audio.pause(); this.audio.src = ''; }
         this._audioStarted = false;
