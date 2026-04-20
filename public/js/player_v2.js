@@ -24,6 +24,7 @@ class TeslaPlayerV2 {
         this._videoFallbackTimer = null;
         this._fallbackPlayer = null;
         this._fallbackCanvas = null;
+        this._pausedAt = 0;
 
         // Sync helper
         this._syncTimer = null;
@@ -170,14 +171,17 @@ class TeslaPlayerV2 {
     }
 
     togglePlay() {
-        if (!this.audio) return;
-        if (this.audio.paused) {
-            this.audio.play();
-            this.isPlaying = true;
+        // Hard pause/resume: ses+görüntü akışını birlikte durdurup aynı andan devam et.
+        if (!this.paused) {
+            const fromAudio = this.audio && Number.isFinite(this.audio.currentTime) ? this.audio.currentTime : 0;
+            const fromVideo = Number.isFinite(this._lastVideoPts) ? this._lastVideoPts : 0;
+            this._pausedAt = Math.max(0, fromAudio || fromVideo || this.ptsOffset || 0);
+            this.stop();
             return;
         }
-        this.audio.pause();
-        this.isPlaying = false;
+        if (this.currentChannel) {
+            this.load(this.currentChannel, { startTime: this._pausedAt || this.ptsOffset || 0 });
+        }
     }
 
     setVolume(v) {

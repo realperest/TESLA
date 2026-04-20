@@ -22,6 +22,8 @@ class TeslaPlayer {
     this._dummyTimer  = null;
     this._audioRetry  = null;
     this._startTimeout = null;
+    this._pausedAtAbs = 0;
+    this._pausedChannel = null;
   }
 
   get video() { return this._dummyVideo; }
@@ -31,6 +33,8 @@ class TeslaPlayer {
     this.stop();
     this.currentChannel = channel;
     this.startTime = opts.startTime || 0;
+    this._pausedChannel = null;
+    this._pausedAtAbs = 0;
     
     const spinner = document.getElementById(this.spinnerId);
     if (spinner) spinner.classList.add('active');
@@ -139,14 +143,24 @@ class TeslaPlayer {
   }
 
   togglePlay() {
-    if (!this.mpegPlayer) return;
-    if (this.isPlaying) {
-      this.mpegPlayer.pause();
+    // Hard pause: akışı gerçekten durdur, resume'da aynı saniyeden yeniden bağlan.
+    if (this.mpegPlayer && this.isPlaying) {
+      this._pausedAtAbs = Math.max(0, (this.startTime || 0) + Number(this.mpegPlayer.currentTime || 0));
+      this._pausedChannel = this.currentChannel;
+      if (this._startTimeout) { clearTimeout(this._startTimeout); this._startTimeout = null; }
+      if (this._audioRetry) { clearInterval(this._audioRetry); this._audioRetry = null; }
+      if (this._dummyTimer) { clearInterval(this._dummyTimer); this._dummyTimer = null; }
+      try { this.mpegPlayer.destroy(); } catch {}
+      this.mpegPlayer = null;
       this.isPlaying = false;
       return;
     }
-    this.mpegPlayer.play();
-    this.isPlaying = true;
+
+    if (!this.mpegPlayer) {
+      const ch = this._pausedChannel || this.currentChannel;
+      const t = this._pausedAtAbs || (this.startTime || 0);
+      if (ch) this.load(ch, { startTime: t });
+    }
   }
 
   toggleMute() { 
