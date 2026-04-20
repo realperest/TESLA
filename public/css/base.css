@@ -224,6 +224,33 @@ html, body {
 }
 
 /* ── Spinner ───────────────────────────────────────────── */
+/* Media Feedback Flash Icon (YouTube Style) */
+.media-feedback-flash {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%) scale(0.5);
+  width: 80px;
+  height: 80px;
+  background: rgba(0, 0, 0, 0.5);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+  pointer-events: none;
+  opacity: 1;
+  transition: opacity 0.8s ease, transform 0.5s ease;
+}
+.media-feedback-flash svg {
+  width: 40px;
+  height: 40px;
+}
+.media-feedback-flash.fade-out {
+  opacity: 0;
+  transform: translate(-50%, -50%) scale(1.5);
+}
+
 .spinner {
   position: absolute; inset: 0;
   display: none;

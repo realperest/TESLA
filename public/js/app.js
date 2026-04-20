@@ -94,14 +94,26 @@ function hideTvOverlay() {
 // ─────────────────────────────────────────────
 
 async function init() {
-  console.log('[App] v260419.0038 initializing...');
+  console.log('[App] v260420.0063 initializing...');
   const unlock = () => {
     if (window.player) window.player.unlockAudio();
     if (window.ytPlayer) window.ytPlayer.unlockAudio();
     if (window.iptvPlayer) window.iptvPlayer.unlockAudio();
   };
-  document.addEventListener('touchstart', unlock);
-  document.addEventListener('mousedown', unlock);
+  document.addEventListener('touchstart', unlock, { once: true });
+  document.addEventListener('mousedown', unlock, { once: true });
+
+  // Global Klavye Kısa Yolu: SPACE
+  document.addEventListener('keydown', (e) => {
+    if (e.code === 'Space') {
+      // Eğer kullanıcı arama kutusu gibi bir girişte değilse videoyu duraklat/başlat
+      const target = e.target.tagName.toLowerCase();
+      if (target !== 'input' && target !== 'textarea') {
+        e.preventDefault();
+        toggleActivePlayerPlay();
+      }
+    }
+  });
 
   window.player = new TeslaPlayer('video-canvas');
   window.ytPlayer = new TeslaPlayer('yt-canvas', { spinnerId: 'yt-spinner', containerId: 'yt-player-area' });
@@ -115,14 +127,20 @@ async function init() {
   ytPlayer = window.ytPlayer;
   iptvPlayer = window.iptvPlayer;
 
-  // Ekrana tıklayınca duraklat/devam et özelliği
+  // Ekrana tıklayınca duraklat/devam et özelliği + Görsel Bildirim
   [
-    { id: 'video-canvas', toggle: () => typeof togglePlay === 'function' && togglePlay() },
-    { id: 'yt-canvas', toggle: () => typeof toggleYtPlay === 'function' && toggleYtPlay() },
-    { id: 'iptv-video-canvas', toggle: () => typeof toggleIptvPlay === 'function' && toggleIptvPlay() }
+    { id: 'section-tv', canvasId: 'video-canvas', toggle: () => typeof togglePlay === 'function' && togglePlay() },
+    { id: 'section-youtube', canvasId: 'yt-canvas', toggle: () => typeof toggleYtPlay === 'function' && toggleYtPlay() },
+    { id: 'section-iptv', canvasId: 'iptv-video-canvas', toggle: () => typeof toggleIptvPlay === 'function' && toggleIptvPlay() }
   ].forEach(item => {
-    const el = document.getElementById(item.id);
-    if (el) el.addEventListener('click', () => item.toggle());
+    const canvas = document.getElementById(item.canvasId);
+    if (canvas) {
+        canvas.addEventListener('click', (e) => {
+            e.stopPropagation();
+            item.toggle();
+            showMediaStatusFeedback(item.id);
+        });
+    }
   });
 
   try {
@@ -1601,6 +1619,43 @@ function initVersionBadge() {
     badge.style.color = '#888'; // Normal (White/Gray)
     badge.style.fontWeight = 'bold';
   }
+}
+
+function toggleActivePlayerPlay() {
+  if (_activeSection === 'tv' && window.player) togglePlay();
+  else if (_activeSection === 'youtube' && window.ytPlayer) toggleYtPlay();
+  else if (_activeSection === 'iptv' && window.iptvPlayer) toggleIptvPlay();
+  showMediaStatusFeedback('section-' + _activeSection);
+}
+
+function showMediaStatusFeedback(sectionId) {
+  const container = document.getElementById(sectionId);
+  if (!container) return;
+  
+  // Eski ikonu temizle
+  const old = container.querySelector('.media-feedback-flash');
+  if (old) old.remove();
+  
+  const icon = document.createElement('div');
+  icon.className = 'media-feedback-flash';
+  
+  const p = getActivePlayer();
+  const isPaused = p ? p.paused : false;
+  
+  icon.innerHTML = isPaused 
+    ? `<svg viewBox="0 0 24 24"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z" fill="#fff"/></svg>` // Pause icon (showing it IS paused)
+    : `<svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z" fill="#fff"/></svg>`; // Play icon
+
+  container.appendChild(icon);
+  setTimeout(() => icon.classList.add('fade-out'), 10);
+  setTimeout(() => icon.remove(), 800);
+}
+
+function getActivePlayer() {
+  if (_activeSection === 'tv') return window.player;
+  if (_activeSection === 'youtube') return window.ytPlayer;
+  if (_activeSection === 'iptv') return window.iptvPlayer;
+  return null;
 }
 
 document.addEventListener('DOMContentLoaded', init);
