@@ -20,6 +20,7 @@ class TeslaPlayerV2 {
         this._audioStarted = false;
         this._audioStartFallback = null;
         this._videoHealthy = false;
+        this._estimatedBufferedEnd = 0;
 
         // Sync helper
         this._syncTimer = null;
@@ -31,6 +32,7 @@ class TeslaPlayerV2 {
         this.ptsOffset = opts.startTime || 0;
         this._forcedDuration = channel.duration || 0;
         this._videoHealthy = false;
+        this._estimatedBufferedEnd = this.ptsOffset;
 
         if (this.spinner) this.spinner.classList.add('active');
 
@@ -57,6 +59,7 @@ class TeslaPlayerV2 {
             if (state === 'healthy') {
                 if (payload && typeof payload.pts === 'number') {
                     this._lastVideoPts = payload.pts;
+                    this._estimatedBufferedEnd = Math.max(this._estimatedBufferedEnd, payload.pts + 20);
                 }
                 this._videoHealthy = true;
                 if (this.spinner) this.spinner.classList.remove('active');
@@ -185,6 +188,11 @@ class TeslaPlayerV2 {
     get currentTime() { return this.audio ? this.audio.currentTime : 0; }
     get duration() { return this._forcedDuration || (this.audio ? this.audio.duration : 0); }
     get paused() { return this.audio ? this.audio.paused : true; }
+    getBufferedEnd() {
+        const dur = Number(this.duration || 0);
+        const end = Number(this._estimatedBufferedEnd || this.currentTime || 0);
+        return dur > 0 ? Math.min(dur, end) : end;
+    }
 }
 
 window.TeslaPlayerV2 = TeslaPlayerV2;

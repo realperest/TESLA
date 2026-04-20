@@ -65,9 +65,9 @@ class TeslaPlayer {
       video: true,
       autoplay: true,
       disableGl: true, // Stealth mode for Tesla
-      audioBufferSize: 4 * 1024 * 1024,
-      videoBufferSize: 12 * 1024 * 1024,
-      maxAudioLag: 1.4,
+      audioBufferSize: 8 * 1024 * 1024,
+      videoBufferSize: 20 * 1024 * 1024,
+      maxAudioLag: 1.8,
       onPlay: () => {
         this.isPlaying = true;
         if (this.mpegPlayer.audioOut) this.mpegPlayer.volume = 1;
@@ -153,6 +153,15 @@ class TeslaPlayer {
 
   setVolume(v) { 
     if (this.mpegPlayer) this.mpegPlayer.volume = v;
+  }
+
+  getBufferedEnd() {
+    if (!this.mpegPlayer) return 0;
+    const current = Number(this.mpegPlayer.currentTime || 0);
+    const dur = Number(this._dummyVideo.duration || 0);
+    const ahead = 35; // Hedef: daha agresif prebuffer hissi
+    const end = current + ahead;
+    return dur > 0 ? Math.min(dur, end) : end;
   }
 
   _showError(c, errDetails = '') {

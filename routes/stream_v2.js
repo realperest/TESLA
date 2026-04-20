@@ -38,6 +38,7 @@ async function handleStreamConnectionV2(ws, req) {
         const ytArgs = [
             ..._ytCookieArgs(),
             '--no-playlist', '--no-warnings', '--force-ipv4',
+            '--concurrent-fragments', '4',
             '--user-agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
             '--extractor-args', 'youtube:player_client=tv,android',
             startSec !== 0 ? '--download-sections' : null,
@@ -49,7 +50,7 @@ async function handleStreamConnectionV2(ws, req) {
         const yt = spawn(YT_DLP, ytArgs, { stdio: ['ignore', 'pipe', 'pipe'] });
 
         const ffArgs = [
-            '-re',
+            '-thread_queue_size', '4096',
             '-i', 'pipe:0',
             '-c:v', 'libx264',
             '-preset', 'veryfast',
@@ -126,6 +127,7 @@ async function handleAudioRequestV2(req, res) {
     const ytArgs = [
         ..._ytCookieArgs(),
         '--no-playlist', '--no-warnings', '--force-ipv4',
+        '--concurrent-fragments', '4',
         '--user-agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
         startSec !== 0 ? '--download-sections' : null,
         startSec !== 0 ? `*${startSec}-inf` : null,

@@ -1489,7 +1489,11 @@ function _startYtProgress() {
     thumb.style.left  = pct + '%';
 
     // Buffer (V2 modunda audio buffered kullanılır, pObj.video v1'de kalsın)
-    if (pObj && pObj.buffered && pObj.buffered.length > 0) {
+    if (activeP && typeof activeP.getBufferedEnd === 'function') {
+      const be = activeP.getBufferedEnd();
+      const bufPct = (be / pObj.duration) * 100;
+      buf.style.width = Math.max(pct, Math.min(100, bufPct)) + '%';
+    } else if (pObj && pObj.buffered && pObj.buffered.length > 0) {
       const bufPct = (pObj.buffered.end(pObj.buffered.length - 1) / pObj.duration) * 100;
       buf.style.width = bufPct + '%';
     }

@@ -18,9 +18,9 @@ class TeslaPlayerV4 extends TeslaPlayer {
       video: true,
       autoplay: true,
       disableGl: true,
-      audioBufferSize: 2 * 1024 * 1024,
-      videoBufferSize: 6 * 1024 * 1024,
-      maxAudioLag: 1.2,
+      audioBufferSize: 8 * 1024 * 1024,
+      videoBufferSize: 20 * 1024 * 1024,
+      maxAudioLag: 1.8,
       onPlay: () => {
         this.isPlaying = true;
         if (this.mpegPlayer.audioOut) this.mpegPlayer.volume = 1;

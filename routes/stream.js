@@ -65,6 +65,7 @@ async function handleStreamConnection(ws, req) {
     // Core Engine: Standardize transport for Tesla
     const ytArgs = [
       '--no-playlist', '--no-warnings', '--force-ipv4', '--geo-bypass',
+      '--concurrent-fragments', '4',
       '--user-agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
       '--extractor-args', isYouTube ? 'youtube:player_client=tv,android' : `generic:referer=https://www.trtizle.com/`,
       isYouTube && startTime !== '0' ? '--download-sections' : null, 
@@ -79,7 +80,7 @@ async function handleStreamConnection(ws, req) {
     // -g 1 makes every frame a keyframe (instant sync)
     // -bf 0 removes B-frames for zero-latency
     const ffArgs = [
-      '-thread_queue_size', '1024', '-re', '-i', 'pipe:0',
+      '-thread_queue_size', '4096', '-i', 'pipe:0',
       '-g', '1', '-bf', '0', 
       '-map', '0:v:0?', '-map', '0:a:0?'
     ].concat(_ffmpegOutputs());
