@@ -27,6 +27,8 @@ class TeslaPlayerV2 {
         this._pausedAt = 0;
         this._pausedChannel = null;
         this._lastKnownTime = 0;
+        this._isManuallyPaused = false;
+        this._pausedClockTime = 0;
 
         // Sync helper
         this._syncTimer = null;
@@ -40,6 +42,8 @@ class TeslaPlayerV2 {
         this._videoHealthy = false;
         this._estimatedBufferedEnd = this.ptsOffset;
         this._lastKnownTime = this.ptsOffset;
+        this._isManuallyPaused = false;
+        this._pausedClockTime = this.ptsOffset || 0;
 
         if (this.spinner) this.spinner.classList.add('active');
 
@@ -177,25 +181,25 @@ class TeslaPlayerV2 {
         this._audioStarted = false;
         this._lastVideoPts = 0;
         this._clockBaseMs = 0;
+        this._isManuallyPaused = false;
         this.isPlaying = false;
         if (this.spinner) this.spinner.classList.remove('active');
     }
 
     togglePlay() {
-        // Hard pause/resume: ses+görüntü akışını birlikte durdurup aynı andan devam et.
-        if (!this.paused) {
-            const fromAudio = this.audio && Number.isFinite(this.audio.currentTime) ? this.audio.currentTime : 0;
-            const fromVideo = Number.isFinite(this._lastVideoPts) ? this._lastVideoPts : 0;
-            this._pausedAt = Math.max(0, this._lastKnownTime || 0, fromAudio || 0, fromVideo || 0, this.ptsOffset || 0);
-            this._pausedChannel = this.currentChannel;
-            this.stop();
+        if (!this.audio) return;
+        if (!this.audio.paused) {
+            const fromAudio = Number(this.audio.currentTime || 0);
+            const fromVideo = Number(this._lastVideoPts || 0);
+            this._pausedClockTime = Math.max(0, this._lastKnownTime || 0, fromAudio || 0, fromVideo || 0);
+            this._isManuallyPaused = true;
+            this.audio.pause();
+            this.isPlaying = false;
             return;
         }
-        const ch = this._pausedChannel || this.currentChannel;
-        if (ch) {
-            this.load(ch, { startTime: this._pausedAt || this.ptsOffset || 0 });
-            this._pausedChannel = null;
-        }
+        this._isManuallyPaused = false;
+        this.audio.play().catch(() => {});
+        this.isPlaying = true;
     }
 
     setVolume(v) {
@@ -207,6 +211,9 @@ class TeslaPlayerV2 {
     }
 
     _getMasterClock() {
+        if (this._isManuallyPaused) {
+            return Number(this._pausedClockTime || this._lastKnownTime || this.ptsOffset || 0);
+        }
         if (this.audio && !this.audio.paused && Number.isFinite(this.audio.currentTime)) {
             return this.audio.currentTime;
         }
@@ -271,7 +278,7 @@ class TeslaPlayerV2 {
     get duration() { return this._forcedDuration || (this.audio ? this.audio.duration : 0); }
     get paused() { return this.audio ? this.audio.paused : true; }
     get hasActiveSource() { return !!(this.ws || this._fallbackPlayer); }
-    get hasPendingResume() { return !!(this._pausedChannel && Number.isFinite(this._pausedAt)); }
+    get hasPendingResume() { return false; }
     getBufferedEnd() {
         const dur = Number(this.duration || 0);
         const end = Number(this._estimatedBufferedEnd || this.currentTime || 0);

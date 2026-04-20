@@ -165,30 +165,14 @@ class TeslaPlayer {
   }
 
   togglePlay() {
-    // Hard pause: akışı gerçekten durdur, resume'da aynı saniyeden yeniden bağlan.
-    if (this.mpegPlayer && this.isPlaying) {
-      const fromDummy = Number(this._dummyVideo?.currentTime || 0);
-      const fromPlayer = Number(this.mpegPlayer?.currentTime || 0);
-      this._pausedAtAbs = Math.max(0, this._lastKnownAbsTime || 0, fromDummy || 0, ((this.startTime || 0) + fromPlayer));
-      this._pausedChannel = this.currentChannel;
-      if (this._startTimeout) { clearTimeout(this._startTimeout); this._startTimeout = null; }
-      if (this._audioRetry) { clearInterval(this._audioRetry); this._audioRetry = null; }
-      if (this._dummyTimer) { clearInterval(this._dummyTimer); this._dummyTimer = null; }
-      if (this._progressTimer) { clearInterval(this._progressTimer); this._progressTimer = null; }
-      try { this.mpegPlayer.destroy(); } catch {}
-      this.mpegPlayer = null;
+    if (!this.mpegPlayer) return;
+    if (this.isPlaying) {
+      this.mpegPlayer.pause();
       this.isPlaying = false;
       return;
     }
-
-    if (!this.mpegPlayer) {
-      const ch = this._pausedChannel || this.currentChannel;
-      const t = this._pausedAtAbs || (this.startTime || 0);
-      if (ch) {
-        this.load(ch, { startTime: t });
-        this._pausedChannel = null;
-      }
-    }
+    this.mpegPlayer.play();
+    this.isPlaying = true;
   }
 
   toggleMute() { 
