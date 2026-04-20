@@ -1614,7 +1614,7 @@ function dockNav(section) {
   _activeSection = section;
 
   // YouTube sekmesine ilk girişte trending yükle
-  if (section === 'youtube' && !_ytTrendingLoaded) {
+  if ((section === 'youtube' || section === 'youtube_v2') && !_ytTrendingLoaded) {
     _ytTrendingLoaded = true;
     ytLoadTrending();
   }
