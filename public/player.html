@@ -95,6 +95,13 @@
                     <button class="yc-btn" id="yt-btn-play" onclick="toggleYtPlay()">
                       <svg viewBox="0 0 24 24"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
                     </button>
+                    <!-- Seek Buttons -->
+                    <button class="yc-btn" onclick="if(window.ytPlayer) window.ytPlayer.seekRelative(-10)" title="10sn Geri">
+                      <span style="font-size:12px;font-weight:bold;color:#fff;">-10s</span>
+                    </button>
+                    <button class="yc-btn" onclick="if(window.ytPlayer) window.ytPlayer.seekRelative(10)" title="10sn İleri">
+                      <span style="font-size:12px;font-weight:bold;color:#fff;">+10s</span>
+                    </button>
                     <button class="yc-btn" id="yt-btn-mute" onclick="toggleYtMute()">
                       <svg viewBox="0 0 24 24"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02z"/></svg>
                     </button>
@@ -352,7 +359,7 @@
     </div>
     </div>
     <div class="dock-bar-user">
-      <span id="app-version-badge" data-version="260420.0054">260420.0054</span>
+      <span id="app-version-badge" data-version="260420.0055">260420.0055</span>
       <div class="user-menu" id="user-menu">
         <div class="user-pill" id="user-pill" onclick="toggleUserMenu(event)">
           <img src="" alt="" id="user-avatar" referrerpolicy="no-referrer" style="display:none">

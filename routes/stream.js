@@ -49,7 +49,10 @@ function _ffmpegOutputs() {
 }
 
 async function handleStreamConnection(ws, req) {
-  const url = new URL('http://x' + (req.url || '')).searchParams.get('url');
+  const query = new URL('http://x' + (req.url || '')).searchParams;
+  const url = query.get('url');
+  const startTime = query.get('t') || '0'; // seconds
+  
   if (!url) return ws.close(1008);
   
   const targetUrl = decodeURIComponent(url);
@@ -57,17 +60,17 @@ async function handleStreamConnection(ws, req) {
 
   try {
     let ff, yt;
-
-    console.log('[Stream] Unified Loader:', targetUrl);
+    console.log(`[Stream] Loading: ${targetUrl} (Start: ${startTime}s)`);
     
-    // Use yt-dlp as a universal fetcher for both YT and IPTV/HLS to bypass security/geo-blocks
+    // Unified Loader with Seek support
     const ytArgs = [
       '--no-playlist', '--no-warnings', '--force-ipv4', '--geo-bypass',
       '--user-agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
       '--extractor-args', isYouTube ? 'youtube:player_client=tv,android' : 'generic:referer=https://www.trtizle.com/',
+      isYouTube ? `--start-time` : null, isYouTube ? startTime : null, 
       '--format', 'bestvideo[height<=720]+bestaudio/best[height<=720]/best[height<=720]',
       '-o', '-', targetUrl
-    ];
+    ].filter(Boolean);
     
     yt = spawn(YT_DLP, ytArgs, { stdio: ['ignore', 'pipe', 'pipe'] });
     

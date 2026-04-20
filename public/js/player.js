@@ -29,12 +29,13 @@ class TeslaPlayer {
   async load(channel, opts = {}) {
     this.stop();
     this.currentChannel = channel;
+    this.startTime = opts.startTime || 0;
     
     const spinner = document.getElementById(this.spinnerId);
     if (spinner) spinner.classList.add('active');
 
     try {
-      this._startJsmpeg(channel);
+      this._startJsmpeg(channel, this.startTime);
       return true;
     } catch (err) {
       console.error('[Player] Start Error:', err);
@@ -45,10 +46,10 @@ class TeslaPlayer {
     }
   }
 
-  _startJsmpeg(channel) {
+  _startJsmpeg(channel, t = 0) {
     const rawUrl = channel.ytUrl || channel.url;
     const wsProto = location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const wsUrl = `${wsProto}//${location.host}/stream/ws?url=${encodeURIComponent(rawUrl)}`;
+    const wsUrl = `${wsProto}//${location.host}/stream/ws?url=${encodeURIComponent(rawUrl)}&t=${t}`;
 
     if (this.mpegPlayer) this.mpegPlayer.destroy();
 
@@ -109,6 +110,14 @@ class TeslaPlayer {
             if (this.mpegPlayer.audioOut.context) this.mpegPlayer.audioOut.context.resume();
         });
     }
+  }
+
+  seekRelative(seconds) {
+    if (!this.mpegPlayer || !this.currentChannel) return;
+    const current = this.mpegPlayer.currentTime || 0;
+    const newTime = Math.max(0, current + seconds);
+    console.log(`[Player] Seeking to: ${newTime}s`);
+    this.load(this.currentChannel, { startTime: newTime });
   }
 
   togglePlay() {
