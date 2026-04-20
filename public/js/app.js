@@ -1349,10 +1349,12 @@ function setYtFeedMode(mode) {
 
 
 function fmtDuration(secs) {
-  if (!secs) return '';
-  const h = Math.floor(secs / 3600);
-  const m = Math.floor((secs % 3600) / 60);
-  const s = String(secs % 60).padStart(2, '0');
+  const n = Number(secs);
+  if (!Number.isFinite(n) || n < 0) return '0:00';
+  const whole = Math.floor(n);
+  const h = Math.floor(whole / 3600);
+  const m = Math.floor((whole % 3600) / 60);
+  const s = String(whole % 60).padStart(2, '0');
   return h ? `${h}:${String(m).padStart(2,'0')}:${s}` : `${m}:${s}`;
 }
 
@@ -1483,22 +1485,29 @@ function _startYtProgress() {
   const time   = document.getElementById('yt-time');
 
   function tick() {
-    if (!pObj.duration) { _ytProgressRaf = requestAnimationFrame(tick); return; }
-    const pct = (pObj.currentTime / pObj.duration) * 100;
+    const dur = Number(pObj.duration || 0);
+    const cur = Number(pObj.currentTime || 0);
+    if (!Number.isFinite(dur) || dur <= 0) {
+      time.textContent = '0:00 / 0:00';
+      _ytProgressRaf = requestAnimationFrame(tick);
+      return;
+    }
+    const safeCur = Number.isFinite(cur) && cur >= 0 ? cur : 0;
+    const pct = (safeCur / dur) * 100;
     fill.style.width  = pct + '%';
     thumb.style.left  = pct + '%';
 
     // Buffer (V2 modunda audio buffered kullanılır, pObj.video v1'de kalsın)
     if (activeP && typeof activeP.getBufferedEnd === 'function') {
       const be = activeP.getBufferedEnd();
-      const bufPct = (be / pObj.duration) * 100;
+      const bufPct = (be / dur) * 100;
       buf.style.width = Math.max(pct, Math.min(100, bufPct)) + '%';
     } else if (pObj && pObj.buffered && pObj.buffered.length > 0) {
-      const bufPct = (pObj.buffered.end(pObj.buffered.length - 1) / pObj.duration) * 100;
+      const bufPct = (pObj.buffered.end(pObj.buffered.length - 1) / dur) * 100;
       buf.style.width = bufPct + '%';
     }
 
-    time.textContent = fmtDuration(Math.floor(pObj.currentTime)) + ' / ' + fmtDuration(Math.floor(pObj.duration));
+    time.textContent = fmtDuration(safeCur) + ' / ' + fmtDuration(dur);
     updateYtVariantBadge();
     _ytProgressRaf = requestAnimationFrame(tick);
   }

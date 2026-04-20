@@ -21,6 +21,8 @@ class TeslaPlayerV2 {
         this._audioStartFallback = null;
         this._videoHealthy = false;
         this._estimatedBufferedEnd = 0;
+        this._videoFallbackTimer = null;
+        this._fallbackPlayer = null;
 
         // Sync helper
         this._syncTimer = null;
@@ -62,6 +64,11 @@ class TeslaPlayerV2 {
                     this._estimatedBufferedEnd = Math.max(this._estimatedBufferedEnd, payload.pts + 20);
                 }
                 this._videoHealthy = true;
+                if (this._videoFallbackTimer) { clearTimeout(this._videoFallbackTimer); this._videoFallbackTimer = null; }
+                if (this._fallbackPlayer) {
+                    try { this._fallbackPlayer.destroy(); } catch {}
+                    this._fallbackPlayer = null;
+                }
                 if (this.spinner) this.spinner.classList.remove('active');
                 this._startAudioWhenVideoReady();
                 this._resyncAudioToVideo();
@@ -115,6 +122,10 @@ class TeslaPlayerV2 {
         this.ws.binaryType = 'arraybuffer';
         this._clockBaseMs = Date.now();
         this._lastVideoPts = this.ptsOffset || 0;
+        this._videoFallbackTimer = setTimeout(() => {
+            if (this._videoHealthy) return;
+            this._startVideoFallback(channel, t);
+        }, 4500);
         this._audioStartFallback = setTimeout(() => {
             this._startAudioWhenVideoReady();
         }, 2500);
@@ -132,6 +143,11 @@ class TeslaPlayerV2 {
     stop() {
         if (this._syncTimer) clearInterval(this._syncTimer);
         if (this._audioStartFallback) { clearTimeout(this._audioStartFallback); this._audioStartFallback = null; }
+        if (this._videoFallbackTimer) { clearTimeout(this._videoFallbackTimer); this._videoFallbackTimer = null; }
+        if (this._fallbackPlayer) {
+            try { this._fallbackPlayer.destroy(); } catch {}
+            this._fallbackPlayer = null;
+        }
         if (this.ws) { this.ws.close(); this.ws = null; }
         if (this.audio) { this.audio.pause(); this.audio.src = ''; }
         this._audioStarted = false;
@@ -143,7 +159,13 @@ class TeslaPlayerV2 {
 
     togglePlay() {
         if (!this.audio) return;
-        this.audio.paused ? this.audio.play() : this.audio.pause();
+        if (this.audio.paused) {
+            this.audio.play();
+            this.isPlaying = true;
+            return;
+        }
+        this.audio.pause();
+        this.isPlaying = false;
     }
 
     setVolume(v) {
@@ -167,6 +189,26 @@ class TeslaPlayerV2 {
         this.audio.play().catch(() => {});
     }
 
+    _startVideoFallback(channel, t) {
+        if (this._fallbackPlayer || this._videoHealthy) return;
+        const rawUrl = channel.ytUrl || channel.url;
+        const wsProto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+        const wsUrl = `${wsProto}//${location.host}/stream/ws?url=${encodeURIComponent(rawUrl)}&t=${t}`;
+        try {
+            this._fallbackPlayer = new window.JSMpeg.Player(wsUrl, {
+                canvas: this.canvas,
+                audio: false,
+                video: true,
+                autoplay: true,
+                disableGl: true,
+                videoBufferSize: 8 * 1024 * 1024
+            });
+            if (this.spinner) this.spinner.classList.remove('active');
+        } catch (err) {
+            console.warn('[PlayerV2] Fallback video start failed:', err?.message || err);
+        }
+    }
+
     _resyncAudioToVideo() {
         if (!this.audio || this.audio.paused) return;
         if (!Number.isFinite(this._lastVideoPts) || this._lastVideoPts <= 0) return;
@@ -186,6 +228,7 @@ class TeslaPlayerV2 {
     get currentTime() { return this.audio ? this.audio.currentTime : 0; }
     get duration() { return this._forcedDuration || (this.audio ? this.audio.duration : 0); }
     get paused() { return this.audio ? this.audio.paused : true; }
+    get hasActiveSource() { return !!(this.ws || this._fallbackPlayer); }
     getBufferedEnd() {
         const dur = Number(this.duration || 0);
         const end = Number(this._estimatedBufferedEnd || this.currentTime || 0);

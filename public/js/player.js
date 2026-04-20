@@ -140,7 +140,13 @@ class TeslaPlayer {
 
   togglePlay() {
     if (!this.mpegPlayer) return;
-    this.isPlaying ? this.mpegPlayer.pause() : this.mpegPlayer.play();
+    if (this.isPlaying) {
+      this.mpegPlayer.pause();
+      this.isPlaying = false;
+      return;
+    }
+    this.mpegPlayer.play();
+    this.isPlaying = true;
   }
 
   toggleMute() { 
