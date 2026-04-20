@@ -15,6 +15,9 @@ class TeslaPlayerV2 {
         this.isPlaying = false;
         this.currentChannel = null;
         this.ptsOffset = 0;
+        this._clockBaseMs = 0;
+        this._lastVideoPts = 0;
+        this._audioStarted = false;
 
         // Sync helper
         this._syncTimer = null;
@@ -43,6 +46,19 @@ class TeslaPlayerV2 {
         if (this.worker) return;
 
         this.worker = new Worker('/js/webcodecs_worker_v2.js');
+        this.worker.onmessage = (ev) => {
+            const { type, payload } = ev.data || {};
+            if (type !== 'status') return;
+
+            const state = (typeof payload === 'string') ? payload : payload?.state;
+            if (state === 'healthy') {
+                if (payload && typeof payload.pts === 'number') {
+                    this._lastVideoPts = payload.pts;
+                }
+                this._startAudioWhenVideoReady();
+                this._resyncAudioToVideo();
+            }
+        };
         
         // Transfer Canvas control to Worker
         const offscreen = this.canvas.transferControlToOffscreen();
@@ -58,18 +74,25 @@ class TeslaPlayerV2 {
         this.audio = new Audio(`/stream/audio_v2?url=${encodeURIComponent(channel.ytUrl || channel.url)}&t=${t}`);
         this.audio.crossOrigin = 'anonymous';
         this.audio.autoplay = false; // Video ile senkron için bekleteceğiz
+        this.audio.preload = 'auto';
         
         this.audio.onplay = () => {
             this.isPlaying = true;
+            this._audioStarted = true;
             if (this.spinner) this.spinner.classList.remove('active');
+        };
+
+        this.audio.onpause = () => {
+            this._audioStarted = false;
         };
 
         // Master Clock Loop
         this._syncTimer = setInterval(() => {
-            if (this.audio && this.worker) {
+            if (this.worker) {
+                const clockTime = this._getMasterClock();
                 this.worker.postMessage({
                     type: 'clock',
-                    payload: { time: this.audio.currentTime }
+                    payload: { time: clockTime }
                 });
             }
         }, 16); // ~60fps sync
@@ -81,38 +104,12 @@ class TeslaPlayerV2 {
 
         this.ws = new WebSocket(url);
         this.ws.binaryType = 'arraybuffer';
+        this._clockBaseMs = Date.now();
+        this._lastVideoPts = this.ptsOffset || 0;
 
-        let firstBinaryReceived = false;
-        
-        // Timeout: Eğer 1.5s içinde görüntü verisi gelmezse sesi zorla başlat
-        const startTimeout = setTimeout(() => {
-            if (!firstBinaryReceived && this.audio && this.audio.paused) {
-                this.audio.play().catch(() => {});
-            }
-        }, 1500);
-
-        this.ws.onmessage = async (e) => {
+        this.ws.onmessage = (e) => {
             if (!(e.data instanceof ArrayBuffer)) return;
-            
-            if (!firstBinaryReceived) {
-                firstBinaryReceived = true;
-                clearTimeout(startTimeout);
-                if (this.audio && this.audio.paused) {
-                    this.audio.play().catch(() => {});
-                }
-            }
-
             if (this.worker) {
-                this.worker.onmessage = (ev) => {
-                    const { type, payload } = ev.data;
-                    if (type === 'status' && payload === 'underflow') {
-                        // Resim biterse sesi hemen durdurma, 1s bekle
-                    } else if (type === 'status' && payload === 'healthy') {
-                        if (this.audio && this.audio.paused && this.isPlaying) {
-                            this.audio.play().catch(() => {});
-                        }
-                    }
-                };
                 this.worker.postMessage({ type: 'video', payload: e.data });
             }
         };
@@ -124,6 +121,9 @@ class TeslaPlayerV2 {
         if (this._syncTimer) clearInterval(this._syncTimer);
         if (this.ws) { this.ws.close(); this.ws = null; }
         if (this.audio) { this.audio.pause(); this.audio.src = ''; }
+        this._audioStarted = false;
+        this._lastVideoPts = 0;
+        this._clockBaseMs = 0;
         this.isPlaying = false;
         if (this.spinner) this.spinner.classList.remove('active');
     }
@@ -139,6 +139,32 @@ class TeslaPlayerV2 {
 
     seekTo(seconds) {
         this.load(this.currentChannel, { startTime: seconds });
+    }
+
+    _getMasterClock() {
+        if (this.audio && !this.audio.paused && Number.isFinite(this.audio.currentTime)) {
+            return this.audio.currentTime;
+        }
+        const elapsed = this._clockBaseMs ? ((Date.now() - this._clockBaseMs) / 1000) : 0;
+        return (this.ptsOffset || 0) + elapsed;
+    }
+
+    _startAudioWhenVideoReady() {
+        if (!this.audio || !this.audio.paused) return;
+        this.audio.play().catch(() => {});
+    }
+
+    _resyncAudioToVideo() {
+        if (!this.audio || this.audio.paused) return;
+        if (!Number.isFinite(this._lastVideoPts) || this._lastVideoPts <= 0) return;
+        const drift = this.audio.currentTime - this._lastVideoPts;
+        if (Math.abs(drift) > 0.35) {
+            try {
+                this.audio.currentTime = Math.max(0, this._lastVideoPts);
+            } catch (err) {
+                // Bazı tarayıcılar sık seek'i engelleyebilir.
+            }
+        }
     }
 
     get currentTime() { return this.audio ? this.audio.currentTime : 0; }

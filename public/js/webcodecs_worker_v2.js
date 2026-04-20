@@ -11,8 +11,11 @@ let decoder = null;
 let frameQueue = [];
 let masterClock = 0;
 let isConfigured = false;
-let lastWidth = 0;
-let lastHeight = 0;
+let annexBuffer = new Uint8Array(0);
+let seenSps = false;
+let seenPps = false;
+let hasStartedDecoding = false;
+let lastTimestampUs = 0;
 
 self.onmessage = async (e) => {
     const { type, payload } = e.data;
@@ -30,7 +33,7 @@ self.onmessage = async (e) => {
         const view = new DataView(payload);
         const pts = view.getFloat64(0, true);
         const data = new Uint8Array(payload, 8);
-        decodeChunk(data, pts);
+        decodeAnnexB(data, pts);
     }
 };
 
@@ -72,28 +75,80 @@ function configureDecoder() {
     }
 }
 
-function decodeChunk(data, pts) {
+function decodeAnnexB(data, pts) {
     if (!isConfigured) return;
-    try {
-        // DYNAMIC NAL DETECTION
-        // Start code can be 3 or 4 bytes: 00 00 01 or 00 00 00 01
-        let headerOffset = 0;
-        if (data[0] === 0 && data[1] === 0 && data[2] === 1) headerOffset = 3;
-        else if (data[0] === 0 && data[1] === 0 && data[2] === 0 && data[3] === 1) headerOffset = 4;
-        
-        if (headerOffset === 0) return; // Not a valid NAL unit
+    annexBuffer = concatBytes(annexBuffer, data);
 
-        const unitType = data[headerOffset] & 0x1f;
-        // Types: 7=SPS, 8=PPS, 5=IDR (Key), 1=Coded slice (Non-key)
-        const isKey = (unitType === 7 || unitType === 8 || unitType === 5);
+    const starts = findStartCodes(annexBuffer);
+    if (starts.length < 2) {
+        if (annexBuffer.length > 2 * 1024 * 1024) {
+            annexBuffer = annexBuffer.slice(-512 * 1024);
+        }
+        return;
+    }
+
+    for (let i = 0; i < starts.length - 1; i++) {
+        const start = starts[i].index;
+        const end = starts[i + 1].index;
+        const nal = annexBuffer.slice(start, end);
+        decodeNal(nal, pts);
+    }
+
+    const tailStart = starts[starts.length - 1].index;
+    annexBuffer = annexBuffer.slice(tailStart);
+}
+
+function decodeNal(nal, pts) {
+    try {
+        const prefixLen = getStartCodeLength(nal, 0);
+        if (prefixLen === 0 || nal.length <= prefixLen) return;
+
+        const unitType = nal[prefixLen] & 0x1f;
+        if (unitType === 7) seenSps = true;
+        if (unitType === 8) seenPps = true;
+
+        if (unitType === 5) hasStartedDecoding = true;
+        if (!seenSps || !seenPps) return;
+        if (!hasStartedDecoding && unitType !== 5) return;
+
+        const baseTs = Math.floor(pts * 1000000);
+        const ts = baseTs <= lastTimestampUs ? (lastTimestampUs + 1) : baseTs;
+        lastTimestampUs = ts;
 
         const chunk = new EncodedVideoChunk({
-            type: isKey ? 'key' : 'delta',
-            timestamp: pts * 1000000,
-            data: data
+            type: unitType === 5 ? 'key' : 'delta',
+            timestamp: ts,
+            data: nal
         });
         decoder.decode(chunk);
-    } catch (err) {}
+    } catch (err) {
+        // decoder'a bozuk nal yollamamak için yutuyoruz
+    }
+}
+
+function findStartCodes(data) {
+    const out = [];
+    for (let i = 0; i < data.length - 3; i++) {
+        if (data[i] === 0 && data[i + 1] === 0 && data[i + 2] === 1) {
+            out.push({ index: i });
+        } else if (i < data.length - 4 && data[i] === 0 && data[i + 1] === 0 && data[i + 2] === 0 && data[i + 3] === 1) {
+            out.push({ index: i });
+        }
+    }
+    return out;
+}
+
+function getStartCodeLength(data, idx) {
+    if (idx + 3 < data.length && data[idx] === 0 && data[idx + 1] === 0 && data[idx + 2] === 0 && data[idx + 3] === 1) return 4;
+    if (idx + 2 < data.length && data[idx] === 0 && data[idx + 1] === 0 && data[idx + 2] === 1) return 3;
+    return 0;
+}
+
+function concatBytes(a, b) {
+    const out = new Uint8Array(a.length + b.length);
+    out.set(a, 0);
+    out.set(b, a.length);
+    return out;
 }
 
 function renderLoop() {
@@ -116,7 +171,7 @@ function renderLoop() {
     if (bestFrameIndex !== -1) {
         const item = frameQueue[bestFrameIndex];
         ctx.drawImage(item.frame, 0, 0, canvas.width, canvas.height);
-        self.postMessage({ type: 'status', payload: 'healthy' });
+        self.postMessage({ type: 'status', payload: { state: 'healthy', pts: item.pts } });
 
         for (let j = 0; j <= bestFrameIndex; j++) {
             frameQueue[j].frame.close();
