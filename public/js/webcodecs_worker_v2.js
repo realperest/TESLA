@@ -2,7 +2,7 @@
 
 /**
  * WebCodecs Worker V2
- * Hard-Sync & Autosize
+ * Hard-Sync (10ms tolerance) & Fixed 16:9 
  */
 
 let canvas = null;
@@ -37,11 +37,10 @@ self.onmessage = async (e) => {
 function initDecoder() {
     decoder = new VideoDecoder({
         output: (frame) => {
-            if (frame.displayWidth !== lastWidth || frame.displayHeight !== lastHeight) {
-                lastWidth = frame.displayWidth;
-                lastHeight = frame.displayHeight;
-                canvas.width = lastWidth;
-                canvas.height = lastHeight;
+            // Backend already forced 1280x720, so canvas size will be stable
+            if (canvas.width !== frame.displayWidth || canvas.height !== frame.displayHeight) {
+                canvas.width = frame.displayWidth;
+                canvas.height = frame.displayHeight;
             }
 
             frameQueue.push({
@@ -49,16 +48,13 @@ function initDecoder() {
                 pts: frame.timestamp / 1000000
             });
             
-            // Limit buffer to prevent memory issues
-            if (frameQueue.length > 50) { 
+            // Short buffer for low latency
+            if (frameQueue.length > 45) { 
                 const old = frameQueue.shift();
                 old.frame.close();
             }
         },
-        error: (e) => {
-            console.error('[WorkerV2] Decoder Error:', e);
-            isConfigured = false;
-        }
+        error: (e) => console.error('[WorkerV2] Decoder Error:', e)
     });
 
     configureDecoder();
@@ -72,9 +68,7 @@ function configureDecoder() {
             hardwareAcceleration: 'prefer-hardware'
         });
         isConfigured = true;
-    } catch (err) {
-        console.error('[WorkerV2] Config Fail:', err);
-    }
+    } catch (err) {}
 }
 
 function decodeChunk(data, pts) {
@@ -92,18 +86,14 @@ function decodeChunk(data, pts) {
 function renderLoop() {
     if (!ctx || frameQueue.length === 0) return;
 
-    // Hard Sync: Master Clock (Ses) ile Video PTS arasındaki farkı kontrol et
     let bestFrameIndex = -1;
 
-    // Geride kalan kareleri tara
+    // VERY HARD SYNC: 10ms tolerance
     for (let i = 0; i < frameQueue.length; i++) {
-        const pts = frameQueue[i].pts;
-        
-        // Sesin zamanından daha eski (veya çok yakın) kareyi bul
-        if (pts <= masterClock + 0.05) { // 50ms tolerans
+        if (frameQueue[i].pts <= masterClock + 0.01) {
             bestFrameIndex = i;
         } else {
-            break; // Gelecekteki bir kareye ulaştık
+            break;
         }
     }
 
@@ -111,8 +101,7 @@ function renderLoop() {
         const item = frameQueue[bestFrameIndex];
         ctx.drawImage(item.frame, 0, 0, canvas.width, canvas.height);
 
-        // SYNC FIX: Çizilen kareden önceki tüm eski (geçmiş) kareleri temizle
-        // Bu sayede video sese tam yetişir (skip logic)
+        // Clear all previous frames immediately
         for (let j = 0; j <= bestFrameIndex; j++) {
             frameQueue[j].frame.close();
         }

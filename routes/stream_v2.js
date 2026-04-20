@@ -60,8 +60,9 @@ async function handleStreamConnectionV2(ws, req) {
             '-tune', 'zerolatency',
             '-profile:v', 'baseline',
             '-level', '3.1',
-            '-b:v', '1500k',
-            '-maxrate', '2000k',
+            '-vf', 'scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2,fps=30', // 16:9 Forced & 30 FPS
+            '-b:v', '2000k',
+            '-maxrate', '2500k',
             '-bufsize', '8000k', // Increased bufsize for smoother stream
             '-pix_fmt', 'yuv420p',
             '-g', '30',          // GOP 30 for better network efficiency
