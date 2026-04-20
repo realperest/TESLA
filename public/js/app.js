@@ -866,6 +866,7 @@ async function ytStartPlay(data) {
     url: streamUrl,
     name: data.title || (typeof AppI18n !== 'undefined' ? AppI18n.t('ytVideoTitle') : 'Video'),
     isHls: data.isHls,
+    duration: data.duration || 0,
     ytUrl: data.videoId ? `https://www.youtube.com/watch?v=${data.videoId}` : null,
   });
   if (!ok) {

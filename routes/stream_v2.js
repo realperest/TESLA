@@ -52,8 +52,8 @@ async function handleStreamConnectionV2(ws, req) {
         const yt = spawn(YT_DLP, ytArgs, { stdio: ['ignore', 'pipe', 'pipe'] });
 
         // 2. FFmpeg: Convert to Raw H.264 Annex B with PTS metadata
-        // Tesla'da WebCodecs hardware acceleration için 'avc1' (h.264) en stabil olanıdır.
         const ffArgs = [
+            '-re',               // Read at native frame rate to prevent flood
             '-i', 'pipe:0',
             '-c:v', 'libx264',
             '-preset', 'ultrafast',
@@ -64,11 +64,10 @@ async function handleStreamConnectionV2(ws, req) {
             '-maxrate', '2000k',
             '-bufsize', '4000k',
             '-pix_fmt', 'yuv420p',
-            '-g', '1',           // Every frame is a keyframe for perfect sync
-            '-bf', '0',          // No B-frames
+            '-g', '1',           // Every frame is a keyframe
+            '-bf', '0', 
             '-f', 'h264',
             '-x264-params', 'annexb=1:keyint=1', 
-            '-flvflags', 'no_duration_filesize',
             'pipe:1',
             '-an'
         ];
@@ -78,20 +77,15 @@ async function handleStreamConnectionV2(ws, req) {
 
         ACTIVE_V2.set(ws, { ff, yt });
 
-        /**
-         * PTS INJECTION LOGIC:
-         * FFmpeg raw h264'te PTS bilgisi paket içinde gömülü değildir. 
-         * Ancak her frame'in (NAL unit) başına tarayıcıda senkron için 8-byte PTS ekleyeceğiz.
-         * Şimdilik gerçek zamanlı senkron için basitleştirilmiş bir paketleme yapıyoruz.
-         * (Daha kompleks bir TS/AVParser yerine, her buffer gönderiminde zaman damgası ekliyoruz)
-         */
         const startTimeMs = Date.now();
+        const startSec = parseFloat(startTime);
+
         ff.stdout.on('data', (chunk) => {
             if (ws.readyState === 1) {
-                // Header: [8-byte Timestamp (Double/Float64)] + [Original H.264 Data]
-                const timestamp = (Date.now() - startTimeMs) / 1000;
+                // ABSOLUTE PTS: Current Sec = Start Sec + Seconds since start
+                const currentSec = startSec + (Date.now() - startTimeMs) / 1000;
                 const header = Buffer.alloc(8);
-                header.writeDoubleLE(timestamp);
+                header.writeDoubleLE(currentSec);
                 ws.send(Buffer.concat([header, chunk]));
             }
         });

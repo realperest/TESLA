@@ -24,6 +24,7 @@ class TeslaPlayerV2 {
         this.stop();
         this.currentChannel = channel;
         this.ptsOffset = opts.startTime || 0;
+        this._forcedDuration = channel.duration || 0;
 
         if (this.spinner) this.spinner.classList.add('active');
 
@@ -115,7 +116,7 @@ class TeslaPlayerV2 {
     }
 
     get currentTime() { return this.audio ? this.audio.currentTime : 0; }
-    get duration() { return this.audio ? this.audio.duration : 0; }
+    get duration() { return this._forcedDuration || (this.audio ? this.audio.duration : 0); }
     get paused() { return this.audio ? this.audio.paused : true; }
 }
 
