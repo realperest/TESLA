@@ -21,10 +21,7 @@ function _ytCookieArgs() {
 const ACTIVE_V2 = new Map();
 
 /**
- * Tesla Bypass V2 Streamer
- * - H.264 Annex B Stream
- * - 8-byte PTS injection (Master Clock Sync için)
- * - Low latency / No B-frames
+ * Tesla Bypass V2 Streamer with Annex B Packetizer
  */
 async function handleStreamConnectionV2(ws, req) {
     const query = new URL('http://x' + (req.url || '')).searchParams;
@@ -35,9 +32,8 @@ async function handleStreamConnectionV2(ws, req) {
     const targetUrl = decodeURIComponent(url);
 
     try {
-        console.log(`[StreamV2] Starting Bypass Stream: ${targetUrl} (T: ${startTime}s)`);
+        console.log(`[StreamV2] Starting Bypass Stream: ${targetUrl}`);
 
-        // 1. YouTube/Media Stream Extract
         const ytArgs = [
             ..._ytCookieArgs(),
             '--no-playlist', '--no-warnings', '--force-ipv4',
@@ -51,21 +47,20 @@ async function handleStreamConnectionV2(ws, req) {
 
         const yt = spawn(YT_DLP, ytArgs, { stdio: ['ignore', 'pipe', 'pipe'] });
 
-        // 2. FFmpeg: Convert to Raw H.264 Annex B with PTS metadata
         const ffArgs = [
             '-re',
             '-i', 'pipe:0',
             '-c:v', 'libx264',
-            '-preset', 'veryfast',  // Better quality than ultrafast
+            '-preset', 'veryfast',
             '-tune', 'zerolatency',
             '-profile:v', 'baseline',
             '-level', '3.1',
-            '-vf', 'scale=1280:720:force_original_aspect_ratio=decrease:flags=lanczos,pad=1280:720:(ow-iw)/2:(oh-ih)/2,fps=30', // High Quality Scale
-            '-b:v', '4500k',
-            '-maxrate', '5000k',
-            '-bufsize', '10000k',
+            '-vf', 'scale=1280:720:force_original_aspect_ratio=decrease:flags=lanczos,pad=1280:720:(ow-iw)/2:(oh-ih)/2,fps=30',
+            '-b:v', '4000k',
+            '-maxrate', '4500k',
+            '-bufsize', '9000k',
             '-pix_fmt', 'yuv420p',
-            '-g', '30',          // GOP 30 for better network efficiency
+            '-g', '15',          // Keyframe every 0.5s for fast recovery
             '-bf', '0', 
             '-f', 'h264',
             '-x264-params', 'annexb=1', 
@@ -81,13 +76,26 @@ async function handleStreamConnectionV2(ws, req) {
         const startTimeMs = Date.now();
         const startSec = parseFloat(startTime);
 
+        /**
+         * Annex B Packetizer
+         * Finds [0,0,0,1] or [0,0,1] markers and ensures whole NAL units are sent
+         */
+        let buffer = Buffer.alloc(0);
         ff.stdout.on('data', (chunk) => {
-            if (ws.readyState === 1) {
-                // ABSOLUTE PTS: Current Sec = Start Sec + Seconds since start
-                const currentSec = startSec + (Date.now() - startTimeMs) / 1000;
-                const header = Buffer.alloc(8);
-                header.writeDoubleLE(currentSec);
-                ws.send(Buffer.concat([header, chunk]));
+            if (ws.readyState !== 1) return;
+            buffer = Buffer.concat([buffer, chunk]);
+
+            let pos;
+            while ((pos = _findNALStartCode(buffer, 4)) !== -1) {
+                const nal = buffer.slice(0, pos);
+                buffer = buffer.slice(pos);
+                
+                if (nal.length > 0) {
+                    const currentSec = startSec + (Date.now() - startTimeMs) / 1000;
+                    const header = Buffer.alloc(8);
+                    header.writeDoubleLE(currentSec);
+                    ws.send(Buffer.concat([header, nal]));
+                }
             }
         });
 
@@ -102,6 +110,28 @@ async function handleStreamConnectionV2(ws, req) {
     }
 
     ws.on('close', () => _cleanupV2(ws));
+}
+
+// FFmpeg raw h264'te start code arar [0,0,0,1]
+function _findNALStartCode(buf, offset) {
+    for (let i = offset; i < buf.length - 4; i++) {
+        if (buf[i] === 0 && buf[i+1] === 0 && buf[i+2] === 0 && buf[i+3] === 1) {
+            return i;
+        }
+        if (buf[i] === 0 && buf[i+1] === 0 && buf[i+2] === 1) {
+            return i;
+        }
+    }
+    return -1;
+}
+
+function _cleanupV2(ws) {
+    const entry = ACTIVE_V2.get(ws);
+    if (entry) {
+        if (entry.yt) try { entry.yt.kill(); } catch {}
+        if (entry.ff) try { entry.ff.kill(); } catch {}
+        ACTIVE_V2.delete(ws);
+    }
 }
 
 /**

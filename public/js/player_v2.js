@@ -96,6 +96,16 @@ class TeslaPlayerV2 {
             }
 
             if (this.worker) {
+                this.worker.onmessage = (e) => {
+                    const { type, payload } = e.data;
+                    if (type === 'status' && payload === 'underflow') {
+                        if (this.audio && !this.audio.paused) this.audio.pause();
+                    } else if (type === 'status' && payload === 'healthy') {
+                        if (this.audio && this.audio.paused && this.isPlaying) {
+                            this.audio.play().catch(() => {});
+                        }
+                    }
+                };
                 this.worker.postMessage({
                     type: 'video',
                     payload: e.data

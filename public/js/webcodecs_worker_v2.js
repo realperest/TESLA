@@ -2,7 +2,7 @@
 
 /**
  * WebCodecs Worker V2
- * Hard-Sync (10ms tolerance) & Fixed 16:9 
+ * Hard-Sync (10ms) & Full Buffer Contol
  */
 
 let canvas = null;
@@ -37,7 +37,6 @@ self.onmessage = async (e) => {
 function initDecoder() {
     decoder = new VideoDecoder({
         output: (frame) => {
-            // Backend already forced 1280x720, so canvas size will be stable
             if (canvas.width !== frame.displayWidth || canvas.height !== frame.displayHeight) {
                 canvas.width = frame.displayWidth;
                 canvas.height = frame.displayHeight;
@@ -48,8 +47,8 @@ function initDecoder() {
                 pts: frame.timestamp / 1000000
             });
             
-            // Short buffer for low latency
-            if (frameQueue.length > 45) { 
+            // Limit buffer
+            if (frameQueue.length > 90) { // Keep up to 3s buffer
                 const old = frameQueue.shift();
                 old.frame.close();
             }
@@ -74,8 +73,13 @@ function configureDecoder() {
 function decodeChunk(data, pts) {
     if (!isConfigured) return;
     try {
+        // Find NAL unit type to determine if it's a keyframe
+        // 0x07 = SPS, 0x05 = IDR
+        const unitType = data[4] & 0x1f;
+        const isKey = (unitType === 7 || unitType === 5);
+
         const chunk = new EncodedVideoChunk({
-            type: (data[4] & 0x1f) === 7 || (data[4] & 0x1f) === 5 ? 'key' : 'delta',
+            type: isKey ? 'key' : 'delta',
             timestamp: pts * 1000000,
             data: data
         });
@@ -84,11 +88,17 @@ function decodeChunk(data, pts) {
 }
 
 function renderLoop() {
-    if (!ctx || frameQueue.length === 0) return;
+    if (!ctx) return;
+
+    // UNDERFLOW CONTROL: Eğer görüntü biterse ana thread'e pause sinyali gönder
+    if (frameQueue.length === 0) {
+        self.postMessage({ type: 'status', payload: 'underflow' });
+        return;
+    }
 
     let bestFrameIndex = -1;
 
-    // VERY HARD SYNC: 10ms tolerance
+    // 10ms Hard Sync
     for (let i = 0; i < frameQueue.length; i++) {
         if (frameQueue[i].pts <= masterClock + 0.01) {
             bestFrameIndex = i;
@@ -101,7 +111,9 @@ function renderLoop() {
         const item = frameQueue[bestFrameIndex];
         ctx.drawImage(item.frame, 0, 0, canvas.width, canvas.height);
 
-        // Clear all previous frames immediately
+        // Notify main thread that we are healthy
+        self.postMessage({ type: 'status', payload: 'healthy' });
+
         for (let j = 0; j <= bestFrameIndex; j++) {
             frameQueue[j].frame.close();
         }
