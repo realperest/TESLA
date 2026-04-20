@@ -74,11 +74,15 @@ class TeslaPlayer {
         if (audio?.context?.state === 'suspended') audio.context.resume();
     }, 2000);
 
-    // Sync virtual video for HUD progress bars
+    // Sync virtual video for HUD progress bars with OFFSET support
     this._dummyTimer = setInterval(() => {
         if (this.mpegPlayer) {
-          this._dummyVideo.currentTime = this.mpegPlayer.currentTime || 0;
-          Object.defineProperty(this._dummyVideo, 'duration', { value: 3600*10, configurable: true });
+          // absolute position = current offset + stream time
+          const abs = (this.mpegPlayer.currentTime || 0) + (this.startTime || 0);
+          this._dummyVideo.currentTime = abs;
+          
+          const dur = channel.duration || 3600; 
+          Object.defineProperty(this._dummyVideo, 'duration', { value: dur, configurable: true });
         }
     }, 100);
   }
