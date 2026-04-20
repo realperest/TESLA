@@ -158,7 +158,10 @@ class TeslaPlayerV2 {
         if (!this.audio || this.audio.paused) return;
         if (!Number.isFinite(this._lastVideoPts) || this._lastVideoPts <= 0) return;
         const drift = this.audio.currentTime - this._lastVideoPts;
-        if (Math.abs(drift) > 0.35) {
+        // Sadece ses görüntünün ilerisine geçtiyse geri çek.
+        // Negatif drift'te (ses gerideyse) ileri zıplatma yapmıyoruz ki
+        // konuşma ortadan başlamasın.
+        if (drift > 0.35) {
             try {
                 this.audio.currentTime = Math.max(0, this._lastVideoPts);
             } catch (err) {

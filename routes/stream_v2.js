@@ -65,7 +65,7 @@ async function handleStreamConnectionV2(ws, req) {
             '-bf', '0',
             '-an',
             '-f', 'h264',
-            '-x264-params', 'annexb=1:repeat-headers=1', // Repeat SPS/PPS for decoder stability
+            '-x264-params', 'annexb=1:repeat-headers=1:aud=1', // AU boundary'leri icin AUD ekle
             'pipe:1'
         ];
 

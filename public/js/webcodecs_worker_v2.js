@@ -12,10 +12,13 @@ let frameQueue = [];
 let masterClock = 0;
 let isConfigured = false;
 let annexBuffer = new Uint8Array(0);
-let seenSps = false;
-let seenPps = false;
-let hasStartedDecoding = false;
 let lastTimestampUs = 0;
+let spsNal = null;
+let ppsNal = null;
+let currentAuNals = [];
+let currentAuHasVcl = false;
+let currentAuHasIdr = false;
+let currentAuPts = 0;
 
 self.onmessage = async (e) => {
     const { type, payload } = e.data;
@@ -91,40 +94,80 @@ function decodeAnnexB(data, pts) {
         const start = starts[i].index;
         const end = starts[i + 1].index;
         const nal = annexBuffer.slice(start, end);
-        decodeNal(nal, pts);
+        pushNalToAccessUnit(nal, pts);
     }
 
     const tailStart = starts[starts.length - 1].index;
     annexBuffer = annexBuffer.slice(tailStart);
 }
 
-function decodeNal(nal, pts) {
+function pushNalToAccessUnit(nal, pts) {
     try {
         const prefixLen = getStartCodeLength(nal, 0);
         if (prefixLen === 0 || nal.length <= prefixLen) return;
 
         const unitType = nal[prefixLen] & 0x1f;
-        if (unitType === 7) seenSps = true;
-        if (unitType === 8) seenPps = true;
+        if (unitType === 7) spsNal = nal;
+        if (unitType === 8) ppsNal = nal;
 
-        if (unitType === 5) hasStartedDecoding = true;
-        if (!seenSps || !seenPps) return;
-        if (!hasStartedDecoding && unitType !== 5) return;
+        if (unitType === 9) {
+            flushCurrentAccessUnit();
+            currentAuPts = pts;
+            currentAuNals.push(nal);
+            return;
+        }
 
-        const baseTs = Math.floor(pts * 1000000);
-        const ts = baseTs <= lastTimestampUs ? (lastTimestampUs + 1) : baseTs;
-        lastTimestampUs = ts;
+        const isVcl = (unitType === 1 || unitType === 5);
+        if (isVcl) {
+            if (currentAuHasVcl) {
+                flushCurrentAccessUnit();
+            }
+            if (!currentAuNals.length) currentAuPts = pts;
 
-        const isKeyLike = (unitType === 5 || unitType === 7 || unitType === 8);
+            if (unitType === 5) {
+                if (spsNal) currentAuNals.push(spsNal);
+                if (ppsNal) currentAuNals.push(ppsNal);
+                currentAuHasIdr = true;
+            }
+            currentAuHasVcl = true;
+            currentAuNals.push(nal);
+            return;
+        }
+
+        if (!currentAuNals.length) currentAuPts = pts;
+        currentAuNals.push(nal);
+    } catch (err) {
+        self.postMessage({ type: 'status', payload: { state: 'decode_error' } });
+    }
+}
+
+function flushCurrentAccessUnit() {
+    if (!currentAuHasVcl || currentAuNals.length === 0) {
+        currentAuNals = [];
+        currentAuHasVcl = false;
+        currentAuHasIdr = false;
+        return;
+    }
+
+    const au = concatMany(currentAuNals);
+    const baseTs = Math.floor((currentAuPts || 0) * 1000000);
+    const ts = baseTs <= lastTimestampUs ? (lastTimestampUs + 1) : baseTs;
+    lastTimestampUs = ts;
+
+    try {
         const chunk = new EncodedVideoChunk({
-            type: isKeyLike ? 'key' : 'delta',
+            type: currentAuHasIdr ? 'key' : 'delta',
             timestamp: ts,
-            data: nal
+            data: au
         });
         decoder.decode(chunk);
     } catch (err) {
         self.postMessage({ type: 'status', payload: { state: 'decode_error' } });
     }
+
+    currentAuNals = [];
+    currentAuHasVcl = false;
+    currentAuHasIdr = false;
 }
 
 function findStartCodes(data) {
@@ -151,6 +194,18 @@ function concatBytes(a, b) {
     const out = new Uint8Array(a.length + b.length);
     out.set(a, 0);
     out.set(b, a.length);
+    return out;
+}
+
+function concatMany(arr) {
+    let total = 0;
+    for (let i = 0; i < arr.length; i++) total += arr[i].length;
+    const out = new Uint8Array(total);
+    let off = 0;
+    for (let i = 0; i < arr.length; i++) {
+        out.set(arr[i], off);
+        off += arr[i].length;
+    }
     return out;
 }
 
