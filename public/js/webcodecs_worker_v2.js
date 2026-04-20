@@ -2,7 +2,7 @@
 
 /**
  * WebCodecs Worker V2
- * Hard-Sync (10ms) & Full Buffer Contol
+ * Dynamic NAL Detection & Atomic Start
  */
 
 let canvas = null;
@@ -47,8 +47,7 @@ function initDecoder() {
                 pts: frame.timestamp / 1000000
             });
             
-            // Limit buffer
-            if (frameQueue.length > 90) { // Keep up to 3s buffer
+            if (frameQueue.length > 90) { 
                 const old = frameQueue.shift();
                 old.frame.close();
             }
@@ -67,16 +66,26 @@ function configureDecoder() {
             hardwareAcceleration: 'prefer-hardware'
         });
         isConfigured = true;
-    } catch (err) {}
+        console.log('[WorkerV2] Decoder Configured');
+    } catch (err) {
+        console.error('[WorkerV2] Config Fail:', err);
+    }
 }
 
 function decodeChunk(data, pts) {
     if (!isConfigured) return;
     try {
-        // Find NAL unit type to determine if it's a keyframe
-        // 0x07 = SPS, 0x05 = IDR
-        const unitType = data[4] & 0x1f;
-        const isKey = (unitType === 7 || unitType === 5);
+        // DYNAMIC NAL DETECTION
+        // Start code can be 3 or 4 bytes: 00 00 01 or 00 00 00 01
+        let headerOffset = 0;
+        if (data[0] === 0 && data[1] === 0 && data[2] === 1) headerOffset = 3;
+        else if (data[0] === 0 && data[1] === 0 && data[2] === 0 && data[3] === 1) headerOffset = 4;
+        
+        if (headerOffset === 0) return; // Not a valid NAL unit
+
+        const unitType = data[headerOffset] & 0x1f;
+        // Types: 7=SPS, 8=PPS, 5=IDR (Key), 1=Coded slice (Non-key)
+        const isKey = (unitType === 7 || unitType === 8 || unitType === 5);
 
         const chunk = new EncodedVideoChunk({
             type: isKey ? 'key' : 'delta',
@@ -90,17 +99,14 @@ function decodeChunk(data, pts) {
 function renderLoop() {
     if (!ctx) return;
 
-    // UNDERFLOW CONTROL: Eğer görüntü biterse ana thread'e pause sinyali gönder
     if (frameQueue.length === 0) {
         self.postMessage({ type: 'status', payload: 'underflow' });
         return;
     }
 
     let bestFrameIndex = -1;
-
-    // 10ms Hard Sync
     for (let i = 0; i < frameQueue.length; i++) {
-        if (frameQueue[i].pts <= masterClock + 0.01) {
+        if (frameQueue[i].pts <= masterClock + 0.02) {
             bestFrameIndex = i;
         } else {
             break;
@@ -110,8 +116,6 @@ function renderLoop() {
     if (bestFrameIndex !== -1) {
         const item = frameQueue[bestFrameIndex];
         ctx.drawImage(item.frame, 0, 0, canvas.width, canvas.height);
-
-        // Notify main thread that we are healthy
         self.postMessage({ type: 'status', payload: 'healthy' });
 
         for (let j = 0; j <= bestFrameIndex; j++) {
