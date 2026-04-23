@@ -16,16 +16,6 @@
 }
 .home-logo span { color: var(--accent); }
 
-.home-center-text {
-  font-size: clamp(44px, 12vw, 120px);
-  font-weight: 900;
-  letter-spacing: 0.06em;
-  text-align: center;
-  line-height: 1;
-  color: rgba(255, 255, 255, 0.9);
-  text-shadow: 0 0 24px rgba(232, 33, 39, 0.35);
-}
-
 .home-welcome {
   text-align: center;
 }
