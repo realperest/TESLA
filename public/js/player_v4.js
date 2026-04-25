@@ -1,9 +1,10 @@
 'use strict';
 
 /**
- * TeslaPlayer V4 (Precise HUD + Sync Variant)
- * Amaç: Duraklatıldığında HUD araçlarının görünür kalmasını sağlamak 
- * ve Resume sırasında saniye atlamasını (offset ile) engellemek.
+ * TeslaPlayer V4 (HD + Precise Sync)
+ * - 6 Mbps HD Kalite desteği
+ * - Tam saniyede duraklatma/devam etme
+ * - Duraklatma anında HUD (kontroller) görünürlüğü
  */
 class TeslaPlayerV4 extends TeslaPlayer {
     constructor(canvasId, opts = {}) {
@@ -61,9 +62,10 @@ class TeslaPlayerV4 extends TeslaPlayer {
             autoplay: true,
             disableGl: true,
             preserveDrawingBuffer: true,
-            audioBufferSize: 2 * 1024 * 1024,
-            videoBufferSize: 4 * 1024 * 1024,
-            maxAudioLag: 0.8,
+            // Yüksek bitrate için buffer payı artırıldı
+            audioBufferSize: 4 * 1024 * 1024,
+            videoBufferSize: 8 * 1024 * 1024,
+            maxAudioLag: 0.7,
             onPlay: () => {
                 this.isPlaying = true;
                 this._sessionStartedAtMs = Date.now();
@@ -72,6 +74,10 @@ class TeslaPlayerV4 extends TeslaPlayer {
                 this.canvas.style.visibility = 'visible';
                 this._removeFreezeFrame();
                 this._removeResumingOverlay();
+
+                // Oynarken kontrollerin otomatik gizlenmesine izin ver
+                const overlay = document.getElementById('yt-overlay');
+                if (overlay) overlay.classList.remove('visible');
 
                 if (this.mpegPlayer.audioOut) this.mpegPlayer.volume = 1;
                 const spinner = document.getElementById(this.spinnerId);
@@ -94,7 +100,7 @@ class TeslaPlayerV4 extends TeslaPlayer {
             if (this._dummyVideo.duration !== dur) {
                 Object.defineProperty(this._dummyVideo, 'duration', { value: dur, configurable: true });
             }
-        }, 120);
+        }, 100);
 
         this._heartbeatTimer = setInterval(() => {
             if (this.mpegPlayer && this.mpegPlayer.source && this.mpegPlayer.source.socket) {
@@ -108,18 +114,20 @@ class TeslaPlayerV4 extends TeslaPlayer {
 
     togglePlay() {
         if (this.isPlaying) {
-            // Duraklatırken süreyi milisaniyelik hassasiyetle yakala
-            const exactTime = this._lastKnownAbsTime;
-            this._pausedAtAbs = exactTime;
+            this._pausedAtAbs = this._lastKnownAbsTime;
             this._pausedChannel = this.currentChannel;
-            this.stop(true); // Freeze frame aktif
+            this.stop(true); 
+            
+            // DURAKLATINCA KONTROLLERİ GÖRÜNÜR YAP
+            const overlay = document.getElementById('yt-overlay');
+            if (overlay) overlay.classList.add('visible');
+            
             return;
         }
 
         if (this._pausedChannel && this._pausedAtAbs > 0) {
-            // ATLAMA ÖNLEYİCİ: Durulan yerin 0.5 - 1 saniye gerisinden başla (Flow koruması)
-            const resumePoint = Math.max(0, this._pausedAtAbs - 0.5);
-            this.load(this._pausedChannel, { startTime: resumePoint });
+            // OFFSET KALDIRILDI: Tam durduğu saniyeden başlasın
+            this.load(this._pausedChannel, { startTime: this._pausedAtAbs });
         } else if (this.currentChannel) {
             this.load(this.currentChannel, { startTime: this.startTime || 0 });
         }
@@ -137,8 +145,7 @@ class TeslaPlayerV4 extends TeslaPlayer {
         freeze.id = 'v4-freeze-frame';
         freeze.width = this.canvas.width;
         freeze.height = this.canvas.height;
-        
-        // Z-INDEX: Kontrollerin (HUD) altında kalması için 2 yapıldı
+        // HUD (z-index: 10 civarı) altında kalsın diye 2 yaptık
         freeze.style.cssText = `position:absolute; top:${rect.top - containerRect.top}px; left:${rect.left - containerRect.left}px; width:${rect.width}px; height:${rect.height}px; z-index:2; pointer-events:none;`;
 
         const ctx = freeze.getContext('2d');
@@ -162,7 +169,6 @@ class TeslaPlayerV4 extends TeslaPlayer {
 
         const overlay = document.createElement('div');
         overlay.id = 'v4-resuming-overlay';
-        // Z-INDEX: Kontrollerin ve freeze-frame'in üzerinde olması için 15
         overlay.style.cssText = 'position:absolute; inset:0; display:flex; align-items:center; justify-content:center; z-index:15; pointer-events:none; backdrop-filter:blur(3px); background-color:rgba(0,0,0,0.1);';
 
         const text = (typeof AppI18n !== 'undefined' ? AppI18n.t('resuming') : 'DEVAM EDİLİYOR...').toUpperCase();
@@ -200,6 +206,9 @@ class TeslaPlayerV4 extends TeslaPlayer {
         if (!keepFrame) {
             this._removeFreezeFrame();
             this._removeResumingOverlay();
+            const overlay = document.getElementById('yt-overlay');
+            if (overlay) overlay.classList.remove('visible');
+
             try {
                 const ctx = this.canvas.getContext('2d');
                 if (ctx) {

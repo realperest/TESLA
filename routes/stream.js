@@ -32,9 +32,9 @@ function _ffmpegOutputs() {
     '-f', 'mpegts',
     '-codec:v', 'mpeg1video',
     '-s', '1280x720',
-    '-b:v', '4000k',
-    '-maxrate', '5000k',
-    '-bufsize', '10000k',
+    '-b:v', '6000k',
+    '-maxrate', '8000k',
+    '-bufsize', '12000k',
     '-g', '15',
     '-acodec', 'mp2',
     '-af', 'volume=2.0,aresample=async=1:min_hard_comp=0.100000:first_pts=0', // Force audio sync
