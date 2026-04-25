@@ -58,21 +58,32 @@
   gap: 10px;
 }
 
-#app-version-badge {
-  font-size: 11px;
-  font-family: monospace;
-  letter-spacing: 0.03em;
-  opacity: 0.55;
-  color: #aaa;
-  white-space: nowrap;
+#app-version-container {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 3px;
   pointer-events: none;
-  user-select: none;
-  transition: color 0.4s, opacity 0.4s;
+  margin-right: 4px;
+}
+
+.app-version-item {
+  font-size: 10px;
+  font-family: monospace;
+  color: #555;
+  line-height: 1.2;
+  opacity: 0.6;
+}
+
+.app-version-item.newest {
+  font-size: 11px;
+  opacity: 1;
+  color: #aaa;
 }
 
 #app-version-badge.is-new {
-  color: #4cde80;
-  opacity: 0.9;
+  color: #22c55e;
+  opacity: 1;
 }
 
 #dock-bar .user-menu {

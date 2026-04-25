@@ -1832,17 +1832,18 @@ function dockNav(section) {
 
 function initVersionBadge() {
   const badge = document.getElementById('app-version-badge');
-  if (!badge) return;
+  const newestItem = document.querySelector('.app-version-item.newest b');
+  if (!badge || !newestItem) return;
+
   const currentVersion = badge.dataset.version;
   const viewedKey = 'viewed-version-' + currentVersion;
   
   if (!localStorage.getItem(viewedKey)) {
-    badge.style.color = '#22c55e'; // Green
-    badge.style.fontWeight = 'bold';
+    newestItem.style.color = '#22c55e'; // Green
+    // Sayfa yüklendiğinde görüntülendi sayalım ki bir dahaki gelişte yeşil olmasın
     localStorage.setItem(viewedKey, 'true');
   } else {
-    badge.style.color = '#888'; // Normal (White/Gray)
-    badge.style.fontWeight = 'bold';
+    newestItem.style.color = '#aaa'; // Standard Bold
   }
 }
 
