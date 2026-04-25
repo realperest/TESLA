@@ -417,6 +417,7 @@ async function init() {
 
   setupYtSeekGestures();
   setYtInputMode('search');
+  if (typeof initKeyboardManager === 'function') initKeyboardManager();
 }
 
 // ─────────────────────────────────────────────
@@ -1845,6 +1846,7 @@ function dockNav(section) {
   }
 
   updateDockBackButton();
+  if (typeof applyKeyboardLockToInputs === 'function') applyKeyboardLockToInputs();
 }
 
 function initVersionBadge() {
@@ -1902,3 +1904,88 @@ function getActivePlayer() {
 }
 
 document.addEventListener('DOMContentLoaded', init);
+
+// ─────────────────────────────────────────────
+// Klavye Yardımcısı (Tesla Klavyeyi Kilitle/Aç)
+// ─────────────────────────────────────────────
+let _kbLockEnabled = localStorage.getItem('kb-lock-enabled') === 'true';
+
+function toggleKeyboardLock() {
+  _kbLockEnabled = !_kbLockEnabled;
+  localStorage.setItem('kb-lock-enabled', _kbLockEnabled);
+  updateKeyboardLockUI();
+  applyKeyboardLockToInputs();
+}
+
+function updateKeyboardLockUI() {
+  const label = document.getElementById('kb-lock-label');
+  if (!label) return;
+  label.textContent = _kbLockEnabled ? 'Klavye: Korumalı' : 'Klavye: Otomatik';
+  const card = label.closest('.home-card');
+  if (card) {
+    card.style.borderColor = _kbLockEnabled ? 'var(--accent)' : 'var(--border)';
+    card.style.background = _kbLockEnabled ? 'rgba(232, 33, 39, 0.1)' : 'var(--surface2)';
+  }
+}
+
+function applyKeyboardLockToInputs() {
+  const inputs = document.querySelectorAll('input[type="text"], input[type="search"], input[type="url"]');
+  inputs.forEach(input => {
+    // Zaten sarılmışsa sadece durum güncelle
+    if (_kbLockEnabled) {
+      if (!input.dataset.kbWrapped) {
+        wrapInputWithKbTrigger(input);
+      }
+      input.readOnly = true;
+      const trigger = input.parentElement.querySelector('.kb-trigger-btn');
+      if (trigger) trigger.style.display = 'flex';
+    } else {
+      input.readOnly = false;
+      const trigger = (input.parentElement && input.parentElement.classList.contains('kb-input-wrapper')) 
+          ? input.parentElement.querySelector('.kb-trigger-btn') : null;
+      if (trigger) trigger.style.display = 'none';
+    }
+  });
+}
+
+function wrapInputWithKbTrigger(input) {
+  // Bazı inputlar zaten sarılmış olabilir veya sarılmamalıdır
+  if (input.dataset.kbWrapped || input.closest('.kb-input-wrapper')) return;
+
+  const wrapper = document.createElement('div');
+  wrapper.className = 'kb-input-wrapper';
+  
+  // Input'un flex değerini koru
+  const style = window.getComputedStyle(input);
+  if (style.flex !== '0 1 auto') wrapper.style.flex = style.flex;
+  if (style.width.includes('%')) wrapper.style.width = style.width;
+
+  input.parentNode.insertBefore(wrapper, input);
+  wrapper.appendChild(input);
+  
+  const trigger = document.createElement('div');
+  trigger.className = 'kb-trigger-btn';
+  trigger.innerHTML = '⌨️';
+  trigger.onclick = (e) => {
+    e.stopPropagation();
+    input.readOnly = false;
+    input.focus();
+    trigger.classList.add('active');
+  };
+  
+  input.addEventListener('blur', () => {
+    if (_kbLockEnabled) input.readOnly = true;
+    trigger.classList.remove('active');
+  });
+  
+  input.dataset.kbWrapped = 'true';
+  wrapper.appendChild(trigger);
+}
+
+function initKeyboardManager() {
+  updateKeyboardLockUI();
+  applyKeyboardLockToInputs();
+  
+  // Dinamik olarak eklenen inputları yakalamak için periyodik kontrol (Tesla tarayıcı uyumluluğu için)
+  setInterval(applyKeyboardLockToInputs, 2000);
+}
