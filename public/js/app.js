@@ -1844,11 +1844,10 @@ function initVersionBadge() {
   const viewedKey = 'viewed-version-' + currentVersion;
   
   if (!localStorage.getItem(viewedKey)) {
-    newestItem.style.color = '#22c55e'; // Green
-    // Sayfa yüklendiğinde görüntülendi sayalım ki bir dahaki gelişte yeşil olmasın
+    // newestItem.style.color = '#22c55e'; // Green
     localStorage.setItem(viewedKey, 'true');
   } else {
-    newestItem.style.color = '#aaa'; // Standard Bold
+    // newestItem.style.color = '#aaa'; // Standard Bold
   }
 }
 

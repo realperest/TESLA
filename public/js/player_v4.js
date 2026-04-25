@@ -2,7 +2,7 @@
 
 /**
  * TeslaPlayer V4 (HD + Precise Sync + HUD Force)
- * - v260425.0108: HUD görünürlüğü garantilendi, önbellek kırıcı eklendi.
+ * - v260425.0109: HUD z-index 9999 !important yapıldı. Drift prevention eklendi.
  */
 class TeslaPlayerV4 extends TeslaPlayer {
     constructor(canvasId, opts = {}) {
@@ -127,10 +127,10 @@ class TeslaPlayerV4 extends TeslaPlayer {
             const controls = document.getElementById('yt-controls');
             const overlay = document.getElementById('yt-overlay');
             if (controls) {
-                controls.style.cssText = 'display: flex !important; background: linear-gradient(to top, rgba(0,0,0,0.9) 0%, transparent 100%) !important;';
+                controls.style.cssText = 'display: flex !important; background: linear-gradient(to top, rgba(0,0,0,0.95) 0%, transparent 100%) !important; z-index: 10000 !important;';
             }
             if (overlay) {
-                overlay.style.cssText = 'opacity: 1 !important; pointer-events: all !important;';
+                overlay.style.cssText = 'opacity: 1 !important; pointer-events: all !important; z-index: 9999 !important; display: flex !important;';
             }
             
             return;
