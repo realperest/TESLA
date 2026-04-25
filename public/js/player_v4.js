@@ -1,10 +1,10 @@
 'use strict';
 
 /**
- * TeslaPlayer V4 (Seamless Variant)
- * Amaç: Duraklatma ve Devam etme sırasında kullanıcıya hiçbir yükleme ekranı hissettirmemek.
- * Pause -> Freeze Frame
- * Play -> Invisible Reconnect (Spinner yok, gri ekran yok)
+ * TeslaPlayer V4 (Zero-Flash Variant)
+ * Amaç: Duraklatma ve Devam etme sırasında hiçbir beyaz/gri flaşlama olmaması.
+ * Pause -> Canvas'ın görüntüsünü al ve arka plana koy.
+ * Play -> Yayın gelene kadar Canvas'ı gizli tut, hazır olunca göster.
  */
 class TeslaPlayerV4 extends TeslaPlayer {
     constructor(canvasId, opts = {}) {
@@ -14,7 +14,7 @@ class TeslaPlayerV4 extends TeslaPlayer {
     }
 
     async load(channel, opts = {}) {
-        // Durdur ama ekranı karartma (freeze frame)
+        // Durdururken son kareyi arka plana sabitle (screenshot al)
         this.stop(true); 
         
         this.currentChannel = channel;
@@ -27,19 +27,16 @@ class TeslaPlayerV4 extends TeslaPlayer {
         
         if (this._spinnerDelayTimer) clearTimeout(this._spinnerDelayTimer);
 
-        // RESUME DURUMU: Spinner'ı tamamen gizli tut. 
-        // Kullanıcı sadece donmuş kareyi görsün, yayın hazır olunca kendiliğinden akmaya başlasın.
         if (isResume) {
             if (spinner) {
                 spinner.classList.remove('active');
-                spinner.style.background = 'transparent'; // Arka planı şeffaf yap
+                spinner.style.background = 'transparent';
             }
-            // Sadece çok uzun sürerse (10sn+) hata mesajı veya spinner gösterilebilir.
+            // Resume sırasında spinner'ı çok uzun süre beklet (10sn)
             this._spinnerDelayTimer = setTimeout(() => {
                 if (!this.isPlaying && spinner) spinner.classList.add('active');
             }, 10000); 
         } else {
-            // İlk açılışta spinner görünebilir.
             if (spinner) {
                 spinner.style.background = 'rgba(0,0,0,0.5)';
                 spinner.classList.add('active');
@@ -63,25 +60,36 @@ class TeslaPlayerV4 extends TeslaPlayer {
 
         if (this.mpegPlayer) this.mpegPlayer.destroy();
 
+        // Canvas'ı gizleyelim (arka plandaki screenshot görünsün)
+        if (t > 0) this.canvas.style.visibility = 'hidden';
+
         this.mpegPlayer = new window.JSMpeg.Player(wsUrl, {
             canvas: this.canvas,
             audio: true,
             video: true,
             autoplay: true,
-            disableGl: true, // Tesla için en stabil mod
-            preserveDrawingBuffer: true, // Frame kaybını önlemek için
+            disableGl: true,
+            preserveDrawingBuffer: true,
             audioBufferSize: 8 * 1024 * 1024,
             videoBufferSize: 20 * 1024 * 1024,
             maxAudioLag: 1.8,
             onPlay: () => {
                 this.isPlaying = true;
                 if (this._spinnerDelayTimer) clearTimeout(this._spinnerDelayTimer);
+                
+                // Yayın hazır! Canvas'ı göster ve arka plan resmini temizle
+                this.canvas.style.visibility = 'visible';
+                const container = document.getElementById(this.containerId);
+                if (container) {
+                    container.style.backgroundImage = 'none';
+                }
+
                 if (this.mpegPlayer.audioOut) this.mpegPlayer.volume = 1;
                 
                 const spinner = document.getElementById(this.spinnerId);
                 if (spinner) {
                     spinner.classList.remove('active');
-                    spinner.style.background = 'rgba(0,0,0,0.5)'; // Eski haline döndür
+                    spinner.style.background = 'rgba(0,0,0,0.5)';
                 }
             }
         });
@@ -96,8 +104,6 @@ class TeslaPlayerV4 extends TeslaPlayer {
             const abs = (this.mpegPlayer.currentTime || 0) + (this.startTime || 0);
             this._dummyVideo.currentTime = abs;
             this._lastKnownAbsTime = Math.max(this._lastKnownAbsTime || 0, abs || 0);
-            const dur = channel.duration || 3600;
-            Object.defineProperty(this._dummyVideo, 'duration', { value: dur, configurable: true });
         }, 120);
 
         this._heartbeatTimer = setInterval(() => {
@@ -114,7 +120,7 @@ class TeslaPlayerV4 extends TeslaPlayer {
         if (this.isPlaying) {
             this._pausedAtAbs = this._lastKnownAbsTime;
             this._pausedChannel = this.currentChannel;
-            this.stop(true); // freeze frame
+            this.stop(true); // freeze frame + screenshot
             return;
         }
 
@@ -131,8 +137,23 @@ class TeslaPlayerV4 extends TeslaPlayer {
         if (this._audioRetry) { clearInterval(this._audioRetry); this._audioRetry = null; }
         if (this._dummyTimer) { clearInterval(this._dummyTimer); this._dummyTimer = null; }
 
+        if (keepFrame && this.canvas) {
+            try {
+                // Ekran görüntüsü al ve container arka planına koy
+                const dataUrl = this.canvas.toDataURL('image/jpeg', 0.8);
+                const container = document.getElementById(this.containerId);
+                if (container) {
+                    container.style.backgroundImage = `url(${dataUrl})`;
+                    container.style.backgroundSize = 'cover';
+                    container.style.backgroundPosition = 'center';
+                }
+                this.canvas.style.visibility = 'hidden';
+            } catch (e) {
+                console.warn('[V4] Screenshot failed:', e);
+            }
+        }
+
         if (this.mpegPlayer) {
-            // Destroy etmeden önce frame'i korumaya çalışalım
             this.mpegPlayer.destroy();
             this.mpegPlayer = null;
         }
@@ -140,6 +161,10 @@ class TeslaPlayerV4 extends TeslaPlayer {
         this.isPlaying = false;
 
         if (!keepFrame) {
+            const container = document.getElementById(this.containerId);
+            if (container) container.style.backgroundImage = 'none';
+            this.canvas.style.visibility = 'visible';
+
             try {
                 const ctx = this.canvas.getContext('2d');
                 if (ctx) {
