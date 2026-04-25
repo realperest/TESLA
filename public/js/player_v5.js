@@ -124,11 +124,13 @@ class TeslaPlayerV5 extends TeslaPlayer {
                 socket.send(JSON.stringify({ type: 'pause' }));
             }
             
-            // FRONTEND OYNATICIYI DURDUR
-            this.mpegPlayer.pause();
+            // FRONTEND OYNATICIYI DURDURMA! Sadece backend'den gelen veri kesildiği için JSMpeg buffer'ı eritip doğal olarak donacak.
+            // Bu sayede tekrar play dendiğinde biriken ses/görüntü buffer'ı bir anda hızlıca çözülmeyecek (fast-forward olmayacak).
+            // this.mpegPlayer.pause(); 
             this.isPlaying = false;
             
-            this._createFreezeFrame();
+            // Çerçevenin son halini ekranda tutmak için freeze frame oluştur. (100ms gecikme ile alırsak buffer'ın son karesini yakalar)
+            setTimeout(() => this._createFreezeFrame(), 100);
             
             // KONTROLLERİ ZORLA GÖRÜNÜR YAP
             const controls = document.getElementById('yt-controls');
@@ -145,8 +147,8 @@ class TeslaPlayerV5 extends TeslaPlayer {
                 socket.send(JSON.stringify({ type: 'resume' }));
             }
             
-            // FRONTEND OYNATICIYI BAŞLAT
-            this.mpegPlayer.play();
+            // FRONTEND OYNATICIYI BAŞLATMAYA GEREK YOK! (Çünkü pause yapmadık, sadece veri akışını kesmiştik)
+            // this.mpegPlayer.play();
             this.isPlaying = true;
             
             this._removeFreezeFrame();
