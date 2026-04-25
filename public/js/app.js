@@ -61,19 +61,21 @@ function isYoutubeSection(section) {
 }
 
 function getYtPlayerBySection(section = _activeSection) {
-  if (section === 'youtube_v2') return ytPlayerV2;
-  if (section === 'youtube_v3') return ytPlayerV3;
-  if (section === 'youtube_v1') return ytPlayer; // Eski V1 motoruna erişim
+  if (section === 'youtube_v5') return ytPlayerV5;
   if (section === 'youtube_v4') return ytPlayerV4;
-  return ytPlayerV5; // Ana YouTube artık V5 motorunu kullanır
+  if (section === 'youtube_v3') return ytPlayerV3;
+  if (section === 'youtube_v2') return ytPlayerV2;
+  if (section === 'youtube_v1') return ytPlayer; // Eski V1 motoruna erişim
+  return ytPlayerV4; // Ana YouTube varsayılan olarak V4 motorunu kullanır
 }
 
 function getYtVariantLabel(section = _activeSection) {
-  if (section === 'youtube_v2') return 'YT V2';
-  if (section === 'youtube_v3') return 'YT V3';
-  if (section === 'youtube_v1') return 'YT V1';
+  if (section === 'youtube_v5') return 'YT V5';
   if (section === 'youtube_v4') return 'YT V4';
-  return 'YT V5';
+  if (section === 'youtube_v3') return 'YT V3';
+  if (section === 'youtube_v2') return 'YT V2';
+  if (section === 'youtube_v1') return 'YT V1';
+  return 'YT V4';
 }
 
 function updateYtVariantBadge() {
@@ -1800,11 +1802,13 @@ function dockNav(section) {
   const c2 = document.getElementById('yt-canvas-v2');
   const c3 = document.getElementById('yt-canvas-v3');
   const c4 = document.getElementById('yt-canvas-v4');
-  if (c1 && c2 && c3 && c4) {
+  const c5 = document.getElementById('yt-canvas-v5');
+  if (c1 && c2 && c3 && c4 && c5) {
     c1.style.display = (section === 'youtube_v1') ? '' : 'none';
     c2.style.display = (section === 'youtube_v2') ? '' : 'none';
     c3.style.display = (section === 'youtube_v3') ? '' : 'none';
     c4.style.display = (section === 'youtube' || section === 'youtube_v4') ? '' : 'none';
+    c5.style.display = (section === 'youtube_v5') ? '' : 'none';
   }
 
   if (target) {
