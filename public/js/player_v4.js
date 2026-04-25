@@ -1,10 +1,8 @@
 'use strict';
 
 /**
- * TeslaPlayer V4 (Zero-Flash Variant)
- * Amaç: Duraklatma ve Devam etme sırasında hiçbir beyaz/gri flaşlama olmaması.
- * Pause -> Canvas'ın görüntüsünü al ve arka plana koy.
- * Play -> Yayın gelene kadar Canvas'ı gizli tut, hazır olunca göster.
+ * TeslaPlayer V4 (Robust Zero-Flash)
+ * Amaç: Canvas klonlama yöntemiyle sıfır kararma ve sıfır parlama sağlamak.
  */
 class TeslaPlayerV4 extends TeslaPlayer {
     constructor(canvasId, opts = {}) {
@@ -14,13 +12,11 @@ class TeslaPlayerV4 extends TeslaPlayer {
     }
 
     async load(channel, opts = {}) {
-        // Durdururken son kareyi arka plana sabitle (screenshot al)
+        // Durdururken son kareyi klonla ve üste koy
         this.stop(true); 
         
         this.currentChannel = channel;
         this.startTime = opts.startTime || 0;
-        this._pausedChannel = null;
-        this._pausedAtAbs = 0;
         
         const isResume = this.startTime > 0;
         const spinner = document.getElementById(this.spinnerId);
@@ -28,19 +24,12 @@ class TeslaPlayerV4 extends TeslaPlayer {
         if (this._spinnerDelayTimer) clearTimeout(this._spinnerDelayTimer);
 
         if (isResume) {
-            if (spinner) {
-                spinner.classList.remove('active');
-                spinner.style.background = 'transparent';
-            }
-            // Resume sırasında spinner'ı çok uzun süre beklet (10sn)
+            if (spinner) spinner.classList.remove('active');
             this._spinnerDelayTimer = setTimeout(() => {
                 if (!this.isPlaying && spinner) spinner.classList.add('active');
             }, 10000); 
         } else {
-            if (spinner) {
-                spinner.style.background = 'rgba(0,0,0,0.5)';
-                spinner.classList.add('active');
-            }
+            if (spinner) spinner.classList.add('active');
         }
 
         try {
@@ -48,7 +37,7 @@ class TeslaPlayerV4 extends TeslaPlayer {
             return true;
         } catch (err) {
             console.error('[V4] Load Error:', err);
-            if (spinner) spinner.classList.remove('active');
+            this._removeFreezeFrame();
             return false;
         }
     }
@@ -59,9 +48,6 @@ class TeslaPlayerV4 extends TeslaPlayer {
         const wsUrl = `${wsProto}//${location.host}/stream/ws?url=${encodeURIComponent(rawUrl)}&t=${t}`;
 
         if (this.mpegPlayer) this.mpegPlayer.destroy();
-
-        // Canvas'ı gizleyelim (arka plandaki screenshot görünsün)
-        if (t > 0) this.canvas.style.visibility = 'hidden';
 
         this.mpegPlayer = new window.JSMpeg.Player(wsUrl, {
             canvas: this.canvas,
@@ -77,27 +63,14 @@ class TeslaPlayerV4 extends TeslaPlayer {
                 this.isPlaying = true;
                 if (this._spinnerDelayTimer) clearTimeout(this._spinnerDelayTimer);
                 
-                // Yayın hazır! Canvas'ı göster ve arka plan resmini temizle
-                this.canvas.style.visibility = 'visible';
-                const container = document.getElementById(this.containerId);
-                if (container) {
-                    container.style.backgroundImage = 'none';
-                }
+                // Yayın hazır! Klonlanmış katmanı kaldır
+                this._removeFreezeFrame();
 
                 if (this.mpegPlayer.audioOut) this.mpegPlayer.volume = 1;
-                
                 const spinner = document.getElementById(this.spinnerId);
-                if (spinner) {
-                    spinner.classList.remove('active');
-                    spinner.style.background = 'rgba(0,0,0,0.5)';
-                }
+                if (spinner) spinner.classList.remove('active');
             }
         });
-
-        this._audioRetry = setInterval(() => {
-            const audio = this.mpegPlayer?.audioOut;
-            if (audio?.context?.state === 'suspended') audio.context.resume();
-        }, 2000);
 
         this._dummyTimer = setInterval(() => {
             if (!this.mpegPlayer) return;
@@ -120,7 +93,7 @@ class TeslaPlayerV4 extends TeslaPlayer {
         if (this.isPlaying) {
             this._pausedAtAbs = this._lastKnownAbsTime;
             this._pausedChannel = this.currentChannel;
-            this.stop(true); // freeze frame + screenshot
+            this.stop(true); 
             return;
         }
 
@@ -131,26 +104,52 @@ class TeslaPlayerV4 extends TeslaPlayer {
         }
     }
 
+    /**
+     * Freeze Frame oluşturma (Canvas Cloning)
+     */
+    _createFreezeFrame() {
+        const container = document.getElementById(this.containerId);
+        if (!container || !this.canvas) return;
+        
+        this._removeFreezeFrame();
+
+        const freeze = document.createElement('canvas');
+        freeze.id = 'v4-freeze-frame';
+        freeze.width = this.canvas.width;
+        freeze.height = this.canvas.height;
+        
+        // Stilleri ana canvas ile birebir eşle
+        freeze.style.position = 'absolute';
+        freeze.style.top = '0';
+        freeze.style.left = '0';
+        freeze.style.width = '100%';
+        freeze.style.height = '100%';
+        freeze.style.zIndex = '5'; 
+        freeze.style.pointerEvents = 'none';
+
+        const ctx = freeze.getContext('2d');
+        if (ctx) {
+            try {
+                ctx.drawImage(this.canvas, 0, 0);
+                container.appendChild(freeze);
+            } catch (e) {
+                console.warn('[V4] Clone failed:', e);
+            }
+        }
+    }
+
+    _removeFreezeFrame() {
+        const old = document.getElementById('v4-freeze-frame');
+        if (old) old.remove();
+    }
+
     stop(keepFrame = false) {
         if (this._heartbeatTimer) { clearInterval(this._heartbeatTimer); this._heartbeatTimer = null; }
         if (this._spinnerDelayTimer) { clearTimeout(this._spinnerDelayTimer); this._spinnerDelayTimer = null; }
-        if (this._audioRetry) { clearInterval(this._audioRetry); this._audioRetry = null; }
         if (this._dummyTimer) { clearInterval(this._dummyTimer); this._dummyTimer = null; }
 
         if (keepFrame && this.canvas) {
-            try {
-                // Ekran görüntüsü al ve container arka planına koy
-                const dataUrl = this.canvas.toDataURL('image/jpeg', 0.8);
-                const container = document.getElementById(this.containerId);
-                if (container) {
-                    container.style.backgroundImage = `url(${dataUrl})`;
-                    container.style.backgroundSize = 'cover';
-                    container.style.backgroundPosition = 'center';
-                }
-                this.canvas.style.visibility = 'hidden';
-            } catch (e) {
-                console.warn('[V4] Screenshot failed:', e);
-            }
+            this._createFreezeFrame();
         }
 
         if (this.mpegPlayer) {
@@ -161,10 +160,7 @@ class TeslaPlayerV4 extends TeslaPlayer {
         this.isPlaying = false;
 
         if (!keepFrame) {
-            const container = document.getElementById(this.containerId);
-            if (container) container.style.backgroundImage = 'none';
-            this.canvas.style.visibility = 'visible';
-
+            this._removeFreezeFrame();
             try {
                 const ctx = this.canvas.getContext('2d');
                 if (ctx) {
