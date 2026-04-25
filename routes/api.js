@@ -596,6 +596,40 @@ router.post('/iptv/settings', async (req, res) => {
   res.json({ success: true, xtreamTest });
 });
 
+router.post('/iptv/m3u-url', async (req, res) => {
+  if (req.user.role !== 'owner') {
+    return res.status(403).json({ error: 'Sadece paket sahibi M3U yükleyebilir.' });
+  }
+  const url = String(req.body.url || '').trim();
+  if (!url) {
+    return res.status(400).json({ error: 'M3U adresi boş olamaz.' });
+  }
+  try {
+    const upstream = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0' } });
+    if (!upstream.ok) {
+      return res.status(400).json({ error: `Liste alınamadı (HTTP ${upstream.status}).` });
+    }
+    const text = await upstream.text();
+    if (!text.trim()) {
+      return res.status(400).json({ error: 'Liste içeriği boş.' });
+    }
+    const db = database.db;
+    iptvService.ensureIptvRow(db, req.user.membership_id);
+    db.prepare(`
+      UPDATE membership_iptv_settings SET
+        m3u_content = ?,
+        m3u_updated_at = datetime('now'),
+        updated_at = datetime('now')
+      WHERE membership_id = ?
+    `).run(text, req.user.membership_id);
+
+    res.json({ success: true, sizeBytes: Buffer.byteLength(text, 'utf8') });
+  } catch (err) {
+    console.error('[IPTV] M3U URL fetch:', err.message);
+    res.status(502).json({ error: 'M3U adresine erişilemedi: ' + err.message });
+  }
+});
+
 router.post('/iptv/m3u', express.text({ limit: '15mb' }), (req, res) => {
   if (req.user.role !== 'owner') {
     return res.status(403).json({ error: 'Sadece paket sahibi M3U yükleyebilir.' });

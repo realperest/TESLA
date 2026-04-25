@@ -414,6 +414,10 @@
         Liste metni veritabanında saklanır; tüm paket kullanıcıları aynı kanalları görür. Yalnızca paket sahibi yükleyebilir veya silebilir.
       </p>
       <div id="iptv-m3u-owner" style="display:none">
+        <div class="invite-row" style="flex-wrap:wrap;margin-bottom:10px">
+          <input type="url" id="iptv-m3u-url" class="invite-input" data-i18n-placeholder="manageIptvM3uUrlPh" placeholder="http://.../playlist.m3u">
+          <button type="button" class="btn-primary" onclick="saveIptvM3uUrl()" data-i18n="manageIptvM3uUrlSave">M3U Linki Kaydet</button>
+        </div>
         <div class="invite-row" style="flex-wrap:wrap">
           <input type="file" id="iptv-m3u-file" accept=".m3u,.m3u8,text/*" class="invite-input" style="padding:10px">
           <button type="button" class="btn-primary" onclick="uploadIptvM3u()" data-i18n="manageIptvM3uUpload">M3U Yükle</button>
@@ -543,8 +547,13 @@
     </div>
     </div>
     <div class="dock-bar-user">
+      <div id="app-version-container" style="position: absolute; bottom: 10px; right: 10px; font-size: 10px; color: #888; text-align: right; z-index: 1000; pointer-events: none;">
+        <div class="app-version-item newest"><b style="color:#ff4444 !important">260425.0113</b></div>
+        <div class="app-version-item">260425.0112</div>
+        <div class="app-version-item">260425.0111</div>
+      </div>
       <div class="user-menu" id="user-menu">
-        <div class="user-pill" id="user-pill" onclick="toggleUserMenu(event)">
+        <div class="user-pill" id="user-pill" onclick="toggleUserMenu(event)" style="pointer-events: auto;">
           <img src="" alt="" id="user-avatar" referrerpolicy="no-referrer" style="display:none">
           <span id="user-name">...</span>
         </div>
@@ -845,6 +854,32 @@
         }
       } catch (e) {
         console.error('[manage] IPTV ayarları:', e);
+      }
+    }
+
+    async function saveIptvM3uUrl() {
+      const urlInput = document.getElementById('iptv-m3u-url');
+      const url = urlInput ? urlInput.value.trim() : '';
+      if (!url) {
+        showToast(window.AppI18n ? AppI18n.t('toastSelectM3uUrl') : 'Bir M3U adresi girin.', true);
+        return;
+      }
+      try {
+        const r = await fetch('/api/iptv/m3u-url', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url }),
+        });
+        const data = await r.json();
+        if (!r.ok) {
+          showToast(data.error || (window.AppI18n ? AppI18n.t('toastOpFail') : 'Kaydedilemedi.'), true);
+          return;
+        }
+        showToast(window.AppI18n ? AppI18n.t('toastM3uSaved') : 'M3U linkinden liste başarıyla çekildi ve kaydedildi.', false);
+        loadIptvSettings();
+      } catch (e) {
+        console.error('[manage] M3U URL kaydet:', e);
+        showToast(window.AppI18n ? AppI18n.t('toastM3uUploadErr') : 'Kayıt sırasında hata oluştu.', true);
       }
     }
 
