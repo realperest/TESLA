@@ -2,7 +2,7 @@
 
 /**
  * TeslaPlayer V4 (HD + Precise Sync + HUD Force)
- * - v260425.0107: HUD görünürlüğü garantilendi, önbellek kırıcı eklendi.
+ * - v260425.0108: HUD görünürlüğü garantilendi, önbellek kırıcı eklendi.
  */
 class TeslaPlayerV4 extends TeslaPlayer {
     constructor(canvasId, opts = {}) {
