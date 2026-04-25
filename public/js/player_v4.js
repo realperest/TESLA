@@ -3,13 +3,49 @@
 /**
  * TeslaPlayer V4 (Audio+Canvas Variant)
  * Amaç: JSMpeg tabanlı, hafif ve stabil oynatıcı. 
- * Duraklatma (Pause) sırasında bağlantıyı tamamen keser, devam ederken (Play) son pozisyondan yeniden bağlanır.
- * Bu sayede duraklatma sonrası oluşan ses/görüntü binişmesi ve "catch-up" (yetişme) sorunu engellenir.
+ * Duraklatma (Pause) sırasında bağlantıyı keser ancak son kareyi (freeze-frame) ekranda tutar.
+ * Devam ederken (Play) yükleniyor yazısını geciktirerek akıcı bir geçiş sağlar.
  */
 class TeslaPlayerV4 extends TeslaPlayer {
     constructor(canvasId, opts = {}) {
         super(canvasId, opts);
         this._heartbeatTimer = null;
+        this._spinnerDelayTimer = null;
+    }
+
+    async load(channel, opts = {}) {
+        // Durdur ama ekranı karartma
+        this.stop(true); 
+        
+        this.currentChannel = channel;
+        this.startTime = opts.startTime || 0;
+        this._pausedChannel = null;
+        this._pausedAtAbs = 0;
+        
+        const isResume = this.startTime > 0;
+        const spinner = document.getElementById(this.spinnerId);
+        
+        if (this._spinnerDelayTimer) clearTimeout(this._spinnerDelayTimer);
+
+        // Resume (devam etme) durumunda spinner'ı hemen gösterme, 2 saniye bekle.
+        // Eğer 2 saniye içinde yayın başlarsa kullanıcı hiç "Yükleniyor" görmez.
+        if (isResume) {
+            if (spinner) spinner.classList.remove('active');
+            this._spinnerDelayTimer = setTimeout(() => {
+                if (!this.isPlaying && spinner) spinner.classList.add('active');
+            }, 2000);
+        } else {
+            if (spinner) spinner.classList.add('active');
+        }
+
+        try {
+            this._startJsmpeg(channel, this.startTime);
+            return true;
+        } catch (err) {
+            console.error('[V4] Load Error:', err);
+            if (spinner) spinner.classList.remove('active');
+            return false;
+        }
     }
 
     _startJsmpeg(channel, t = 0) {
@@ -30,20 +66,19 @@ class TeslaPlayerV4 extends TeslaPlayer {
             maxAudioLag: 1.8,
             onPlay: () => {
                 this.isPlaying = true;
+                if (this._spinnerDelayTimer) clearTimeout(this._spinnerDelayTimer);
                 if (this.mpegPlayer.audioOut) this.mpegPlayer.volume = 1;
-                // Spinner'ı kaldır (Base class desteği için)
+                
                 const spinner = document.getElementById(this.spinnerId);
                 if (spinner) spinner.classList.remove('active');
             }
         });
 
-        // Tesla tarayıcılarında suspend olabilen AudioContext'i canlı tut
         this._audioRetry = setInterval(() => {
             const audio = this.mpegPlayer?.audioOut;
             if (audio?.context?.state === 'suspended') audio.context.resume();
         }, 2000);
 
-        // İlerleme senkronizasyonu
         this._dummyTimer = setInterval(() => {
             if (!this.mpegPlayer) return;
             const abs = (this.mpegPlayer.currentTime || 0) + (this.startTime || 0);
@@ -53,51 +88,58 @@ class TeslaPlayerV4 extends TeslaPlayer {
             Object.defineProperty(this._dummyVideo, 'duration', { value: dur, configurable: true });
         }, 120);
 
-        // Cloudflare/Railway Zaman Aşımı Engelleyici (Heartbeat)
-        // Her 10 saniyede bir boş paket göndererek bağlantıyı aktif tutar.
         this._heartbeatTimer = setInterval(() => {
             if (this.mpegPlayer && this.mpegPlayer.source && this.mpegPlayer.source.socket) {
                 const socket = this.mpegPlayer.source.socket;
-                if (socket.readyState === 1) { // OPEN
+                if (socket.readyState === 1) {
                     socket.send(JSON.stringify({ type: 'hb', ts: Date.now() }));
                 }
             }
         }, 10000);
     }
 
-    /**
-     * Pause/Resume mantığını V4 için özelleştiriyoruz.
-     * Duraklatma yapıldığında stream'i tamamen durdurur (Stop).
-     * Oynatma yapıldığında son kalınan saniyeden tekrar bağlanır (Load).
-     */
     togglePlay() {
         if (this.isPlaying) {
-            // DURAKLAT (PAUSE) -> Aslında tamamen durduruyoruz.
             this._pausedAtAbs = this._lastKnownAbsTime;
             this._pausedChannel = this.currentChannel;
-            console.log(`[V4] Paused at: ${this._pausedAtAbs}s - Connection closed.`);
-            this.stop();
+            // stop(true) -> ekranı karartmadan durdur
+            this.stop(true); 
             return;
         }
 
-        // DEVAM ET (PLAY) -> Son kalınan noktadan yükle.
         if (this._pausedChannel && this._pausedAtAbs > 0) {
-            console.log(`[V4] Resuming at: ${this._pausedAtAbs}s - Reconnecting...`);
             this.load(this._pausedChannel, { startTime: this._pausedAtAbs });
-            this._pausedChannel = null;
-            this._pausedAtAbs = 0;
         } else if (this.currentChannel) {
-            // Eğer kanal varsa ama pause datası yoksa (belki ilk start)
             this.load(this.currentChannel, { startTime: this.startTime || 0 });
         }
     }
 
-    stop() {
-        if (this._heartbeatTimer) {
-            clearInterval(this._heartbeatTimer);
-            this._heartbeatTimer = null;
+    /**
+     * @param {boolean} keepFrame - Eğer true ise ekran siyaha boyanmaz, son kare kalır.
+     */
+    stop(keepFrame = false) {
+        if (this._heartbeatTimer) { clearInterval(this._heartbeatTimer); this._heartbeatTimer = null; }
+        if (this._spinnerDelayTimer) { clearTimeout(this._spinnerDelayTimer); this._spinnerDelayTimer = null; }
+        if (this._audioRetry) { clearInterval(this._audioRetry); this._audioRetry = null; }
+        if (this._dummyTimer) { clearInterval(this._dummyTimer); this._dummyTimer = null; }
+
+        if (this.mpegPlayer) {
+            this.mpegPlayer.destroy();
+            this.mpegPlayer = null;
         }
-        super.stop();
+        
+        this.isPlaying = false;
+
+        // Ekranı karartma mantığı (Base class'tan farklı olarak opsiyonel)
+        if (!keepFrame) {
+            try {
+                const ctx = this.canvas.getContext('2d');
+                if (ctx) {
+                    ctx.fillStyle = '#000';
+                    ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+                }
+            } catch {}
+        }
     }
 
     getDiagnostics() {
