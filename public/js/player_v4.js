@@ -1,8 +1,8 @@
 'use strict';
 
 /**
- * TeslaPlayer V4 (Robust Zero-Flash)
- * Amaç: Canvas klonlama yöntemiyle sıfır kararma ve sıfır parlama sağlamak.
+ * TeslaPlayer V4 (Perfect Fit + UI Feedback)
+ * Amaç: Donmuş karenin boyutlarını video alanına tam eşlemek ve Resume sırasında kullanıcıya bilgi vermek.
  */
 class TeslaPlayerV4 extends TeslaPlayer {
     constructor(canvasId, opts = {}) {
@@ -12,7 +12,6 @@ class TeslaPlayerV4 extends TeslaPlayer {
     }
 
     async load(channel, opts = {}) {
-        // Durdururken son kareyi klonla ve üste koy
         this.stop(true); 
         
         this.currentChannel = channel;
@@ -25,9 +24,8 @@ class TeslaPlayerV4 extends TeslaPlayer {
 
         if (isResume) {
             if (spinner) spinner.classList.remove('active');
-            this._spinnerDelayTimer = setTimeout(() => {
-                if (!this.isPlaying && spinner) spinner.classList.add('active');
-            }, 10000); 
+            // Kullanıcıya bilgi ver: DEVAM EDİLİYOR
+            this._showResumingOverlay();
         } else {
             if (spinner) spinner.classList.add('active');
         }
@@ -38,6 +36,7 @@ class TeslaPlayerV4 extends TeslaPlayer {
         } catch (err) {
             console.error('[V4] Load Error:', err);
             this._removeFreezeFrame();
+            this._removeResumingOverlay();
             return false;
         }
     }
@@ -63,8 +62,9 @@ class TeslaPlayerV4 extends TeslaPlayer {
                 this.isPlaying = true;
                 if (this._spinnerDelayTimer) clearTimeout(this._spinnerDelayTimer);
                 
-                // Yayın hazır! Klonlanmış katmanı kaldır
+                // Yayın hazır! Her şeyi temizle
                 this._removeFreezeFrame();
+                this._removeResumingOverlay();
 
                 if (this.mpegPlayer.audioOut) this.mpegPlayer.volume = 1;
                 const spinner = document.getElementById(this.spinnerId);
@@ -89,41 +89,27 @@ class TeslaPlayerV4 extends TeslaPlayer {
         }, 10000);
     }
 
-    togglePlay() {
-        if (this.isPlaying) {
-            this._pausedAtAbs = this._lastKnownAbsTime;
-            this._pausedChannel = this.currentChannel;
-            this.stop(true); 
-            return;
-        }
-
-        if (this._pausedChannel && this._pausedAtAbs > 0) {
-            this.load(this._pausedChannel, { startTime: this._pausedAtAbs });
-        } else if (this.currentChannel) {
-            this.load(this.currentChannel, { startTime: this.startTime || 0 });
-        }
-    }
-
-    /**
-     * Freeze Frame oluşturma (Canvas Cloning)
-     */
     _createFreezeFrame() {
         const container = document.getElementById(this.containerId);
         if (!container || !this.canvas) return;
         
         this._removeFreezeFrame();
 
+        // Gerçek piksel ölçülerini al
+        const rect = this.canvas.getBoundingClientRect();
+        const containerRect = container.getBoundingClientRect();
+
         const freeze = document.createElement('canvas');
         freeze.id = 'v4-freeze-frame';
         freeze.width = this.canvas.width;
         freeze.height = this.canvas.height;
         
-        // Stilleri ana canvas ile birebir eşle
         freeze.style.position = 'absolute';
-        freeze.style.top = '0';
-        freeze.style.left = '0';
-        freeze.style.width = '100%';
-        freeze.style.height = '100%';
+        // Container'a göre tam konumu ve boyutu hesapla (Mükemmel piksel uyumu)
+        freeze.style.top = (rect.top - containerRect.top) + 'px';
+        freeze.style.left = (rect.left - containerRect.left) + 'px';
+        freeze.style.width = rect.width + 'px';
+        freeze.style.height = rect.height + 'px';
         freeze.style.zIndex = '5'; 
         freeze.style.pointerEvents = 'none';
 
@@ -140,6 +126,53 @@ class TeslaPlayerV4 extends TeslaPlayer {
 
     _removeFreezeFrame() {
         const old = document.getElementById('v4-freeze-frame');
+        if (old) old.remove();
+    }
+
+    _showResumingOverlay() {
+        const container = document.getElementById(this.containerId);
+        if (!container) return;
+        
+        this._removeResumingOverlay();
+
+        const overlay = document.createElement('div');
+        overlay.id = 'v4-resuming-overlay';
+        overlay.style.position = 'absolute';
+        overlay.style.inset = '0';
+        overlay.style.display = 'flex';
+        overlay.style.alignItems = 'center';
+        overlay.style.justifyContent = 'center';
+        overlay.style.zIndex = '15';
+        overlay.style.pointerEvents = 'none';
+        overlay.style.backdropFilter = 'blur(3px)';
+        overlay.style.backgroundColor = 'rgba(0,0,0,0.1)';
+
+        const text = (typeof AppI18n !== 'undefined' ? AppI18n.t('resuming') : 'DEVAM EDİLİYOR...').toUpperCase();
+
+        overlay.innerHTML = `
+            <div style="
+                background: rgba(0,0,0,0.85);
+                color: #fff;
+                padding: 14px 28px;
+                border-radius: 14px;
+                font-size: 14px;
+                font-weight: 800;
+                border: 1px solid rgba(255,255,255,0.1);
+                box-shadow: 0 12px 40px rgba(0,0,0,0.6);
+                display: flex;
+                align-items: center;
+                gap: 14px;
+                letter-spacing: 1px;
+            ">
+                <div class="spinner-ring" style="width:22px;height:22px;border-width:3px;border-top-color:#e82127"></div>
+                <span>${text}</span>
+            </div>
+        `;
+        container.appendChild(overlay);
+    }
+
+    _removeResumingOverlay() {
+        const old = document.getElementById('v4-resuming-overlay');
         if (old) old.remove();
     }
 
@@ -161,6 +194,7 @@ class TeslaPlayerV4 extends TeslaPlayer {
 
         if (!keepFrame) {
             this._removeFreezeFrame();
+            this._removeResumingOverlay();
             try {
                 const ctx = this.canvas.getContext('2d');
                 if (ctx) {
