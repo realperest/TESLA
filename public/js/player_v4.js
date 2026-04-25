@@ -1,9 +1,9 @@
 'use strict';
 
 /**
- * TeslaPlayer V4 (Seamless + UI Sync)
- * Amaç: Sıfır parlama ile kesintisiz geçiş sağlarken, arayüz sayaçlarını ve ilerleme çubuğunu canlı tutmak.
- * Hızlı sarma (rush) sorununu önlemek için buffer ve soket yönetimi optimize edildi.
+ * TeslaPlayer V4 (Precise HUD + Sync Variant)
+ * Amaç: Duraklatıldığında HUD araçlarının görünür kalmasını sağlamak 
+ * ve Resume sırasında saniye atlamasını (offset ile) engellemek.
  */
 class TeslaPlayerV4 extends TeslaPlayer {
     constructor(canvasId, opts = {}) {
@@ -13,15 +13,10 @@ class TeslaPlayerV4 extends TeslaPlayer {
     }
 
     async load(channel, opts = {}) {
-        // Durdur (freeze frame aktif)
         this.stop(true); 
         
         this.currentChannel = channel;
         this.startTime = opts.startTime || 0;
-        this._pausedChannel = null;
-        this._pausedAtAbs = 0;
-        // HUD senkronizasyonu için başlangıç değerini ata
-        this._lastKnownAbsTime = this.startTime;
         
         const isResume = this.startTime > 0;
         const spinner = document.getElementById(this.spinnerId);
@@ -49,7 +44,6 @@ class TeslaPlayerV4 extends TeslaPlayer {
     _startJsmpeg(channel, t = 0) {
         const rawUrl = channel.ytUrl || channel.url;
         const wsProto = location.protocol === 'https:' ? 'wss:' : 'ws:';
-        // saniye değerini tam sayıya yuvarlayarak gönderelim (backend için daha güvenli)
         const seekTime = Math.floor(t);
         const wsUrl = `${wsProto}//${location.host}/stream/ws?url=${encodeURIComponent(rawUrl)}&t=${seekTime}`;
 
@@ -67,10 +61,9 @@ class TeslaPlayerV4 extends TeslaPlayer {
             autoplay: true,
             disableGl: true,
             preserveDrawingBuffer: true,
-            // Hızlı sarmayı (rush) önlemek için Tesla'nın işleyebileceği makul buffer değerleri
-            audioBufferSize: 2 * 1024 * 1024, 
+            audioBufferSize: 2 * 1024 * 1024,
             videoBufferSize: 4 * 1024 * 1024,
-            maxAudioLag: 0.8, // Daha agresif senkronizasyon (hızlı sarmayı engeller)
+            maxAudioLag: 0.8,
             onPlay: () => {
                 this.isPlaying = true;
                 this._sessionStartedAtMs = Date.now();
@@ -86,21 +79,17 @@ class TeslaPlayerV4 extends TeslaPlayer {
             }
         });
 
-        // AudioContext canlı tut
         this._audioRetry = setInterval(() => {
             const audio = this.mpegPlayer?.audioOut;
             if (audio?.context?.state === 'suspended') audio.context.resume();
         }, 2000);
 
-        // ARAYÜZ SENKRONİZASYONU: Sayaçlar ve İlerleme Çubuğu (HUD)
         this._dummyTimer = setInterval(() => {
             if (!this.mpegPlayer) return;
-            // Mutlak pozisyon = başlangıç offseti + akış süresi
             const abs = (this.mpegPlayer.currentTime || 0) + (this.startTime || 0);
             this._dummyVideo.currentTime = abs;
             this._lastKnownAbsTime = Math.max(this._lastKnownAbsTime || 0, abs || 0);
             
-            // Video süresini ata (Arayüzde görünmesi için şart)
             const dur = this.currentChannel?.duration || 3600;
             if (this._dummyVideo.duration !== dur) {
                 Object.defineProperty(this._dummyVideo, 'duration', { value: dur, configurable: true });
@@ -119,14 +108,18 @@ class TeslaPlayerV4 extends TeslaPlayer {
 
     togglePlay() {
         if (this.isPlaying) {
-            this._pausedAtAbs = this._lastKnownAbsTime;
+            // Duraklatırken süreyi milisaniyelik hassasiyetle yakala
+            const exactTime = this._lastKnownAbsTime;
+            this._pausedAtAbs = exactTime;
             this._pausedChannel = this.currentChannel;
-            this.stop(true); 
+            this.stop(true); // Freeze frame aktif
             return;
         }
 
         if (this._pausedChannel && this._pausedAtAbs > 0) {
-            this.load(this._pausedChannel, { startTime: this._pausedAtAbs });
+            // ATLAMA ÖNLEYİCİ: Durulan yerin 0.5 - 1 saniye gerisinden başla (Flow koruması)
+            const resumePoint = Math.max(0, this._pausedAtAbs - 0.5);
+            this.load(this._pausedChannel, { startTime: resumePoint });
         } else if (this.currentChannel) {
             this.load(this.currentChannel, { startTime: this.startTime || 0 });
         }
@@ -144,7 +137,9 @@ class TeslaPlayerV4 extends TeslaPlayer {
         freeze.id = 'v4-freeze-frame';
         freeze.width = this.canvas.width;
         freeze.height = this.canvas.height;
-        freeze.style.cssText = `position:absolute; top:${rect.top - containerRect.top}px; left:${rect.left - containerRect.left}px; width:${rect.width}px; height:${rect.height}px; z-index:5; pointer-events:none;`;
+        
+        // Z-INDEX: Kontrollerin (HUD) altında kalması için 2 yapıldı
+        freeze.style.cssText = `position:absolute; top:${rect.top - containerRect.top}px; left:${rect.left - containerRect.left}px; width:${rect.width}px; height:${rect.height}px; z-index:2; pointer-events:none;`;
 
         const ctx = freeze.getContext('2d');
         if (ctx) {
@@ -167,6 +162,7 @@ class TeslaPlayerV4 extends TeslaPlayer {
 
         const overlay = document.createElement('div');
         overlay.id = 'v4-resuming-overlay';
+        // Z-INDEX: Kontrollerin ve freeze-frame'in üzerinde olması için 15
         overlay.style.cssText = 'position:absolute; inset:0; display:flex; align-items:center; justify-content:center; z-index:15; pointer-events:none; backdrop-filter:blur(3px); background-color:rgba(0,0,0,0.1);';
 
         const text = (typeof AppI18n !== 'undefined' ? AppI18n.t('resuming') : 'DEVAM EDİLİYOR...').toUpperCase();
