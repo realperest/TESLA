@@ -221,6 +221,7 @@
     iptvEpgLocal: 'Yerel XMLTV yüklü ·',
     iptvEpgUrlPrefix: 'EPG URL:',
     iptvEpgNone: 'EPG tanımlı değil.',
+    resuming: 'DEVAM EDİLİYOR...',
   };
 
   const EN = {
@@ -438,6 +439,7 @@
     iptvEpgLocal: 'Local XMLTV loaded ·',
     iptvEpgUrlPrefix: 'EPG URL:',
     iptvEpgNone: 'No EPG configured.',
+    resuming: 'RESUMING...',
   };
 
   function merge(base, patch) {
