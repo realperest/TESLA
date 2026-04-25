@@ -416,7 +416,6 @@ async function init() {
   });
 
   setupYtSeekGestures();
-  setYtInputMode('search');
   if (typeof initKeyboardManager === 'function') initKeyboardManager();
 }
 
@@ -1159,45 +1158,64 @@ async function ytSearch(q) {
   }
 }
 
-function setYtInputMode(mode) {
-  const nextMode = mode === 'link' ? 'link' : 'search';
-  const changed = _ytInputMode !== nextMode;
-  _ytInputMode = nextMode;
-  const searchBtn = document.getElementById('yt-input-search');
-  const linkBtn = document.getElementById('yt-input-link');
+async function ytSubmitMainInput() {
   const input = document.getElementById('yt-main-input');
-  const searchAction = document.getElementById('yt-action-search');
-  const linkAction = document.getElementById('yt-action-link');
-  if (searchBtn && linkBtn) {
-    searchBtn.classList.toggle('active', _ytInputMode === 'search');
-    linkBtn.classList.toggle('active', _ytInputMode === 'link');
-  }
-  if (input) {
-    if (changed) input.value = '';
-    if (typeof AppI18n !== 'undefined') {
-      input.placeholder = _ytInputMode === 'search'
-        ? AppI18n.t('ytPhSearch')
-        : AppI18n.t('ytPhLink');
+  if (!input) return;
+  const val = input.value.trim();
+  if (!val) return;
+
+  // Akıllı Algılama: Eğer bir link ise doğrudan aç, değilse ara
+  const isUrl = /^https?:\/\//i.test(val) || val.includes('youtube.com/') || val.includes('youtu.be/');
+  
+  if (isUrl) {
+    console.log('[YouTube] Link detected, opening:', val);
+    const vid = ytExtractId(val);
+    if (vid) {
+      ytPlayVideo(vid);
     } else {
-      input.placeholder = _ytInputMode === 'search'
-        ? 'Buraya aramak istediğiniz kelimeleri yazın...'
-        : 'Buraya açmak istediğiniz videonun linkini yapıştırın...';
+      // Eğer YouTube ID'si değilse ama bir linkse, yine de denesin (proxy üzerinden)
+      ytSearch(val); 
     }
-    input.focus();
+  } else {
+    console.log('[YouTube] Searching for:', val);
+    ytSearch(val);
   }
-  if (searchAction) searchAction.style.display = _ytInputMode === 'search' ? '' : 'none';
-  if (linkAction) linkAction.style.display = _ytInputMode === 'link' ? '' : 'none';
+  
+  // Aramadan sonra klavyeyi tekrar kilitle
+  input.readOnly = true;
+  const kbBtn = document.querySelector('.yt-kb-btn');
+  if (kbBtn) kbBtn.classList.remove('active');
 }
 
-function ytSubmitMainInput() {
+function unlockYtKeyboard() {
   const input = document.getElementById('yt-main-input');
-  const val = String(input?.value || '').trim();
-  if (_ytInputMode === 'link') {
-    resolveUrl(val);
-    return;
-  }
-  ytSearch(val);
+  const btn = document.querySelector('.yt-kb-btn');
+  if (!input) return;
+  
+  input.readOnly = false;
+  input.focus();
+  if (btn) btn.classList.add('active');
+  
+  // Blur olunca tekrar kilitle
+  const onBlur = () => {
+    input.readOnly = true;
+    if (btn) btn.classList.remove('active');
+    input.removeEventListener('blur', onBlur);
+  };
+  input.addEventListener('blur', onBlur);
 }
+
+function ytExtractId(url) {
+  if (!url) return null;
+  let id = '';
+  if (url.includes('v=')) id = url.split('v=')[1].split('&')[0];
+  else if (url.includes('be/')) id = url.split('be/')[1].split('?')[0];
+  else if (url.includes('embed/')) id = url.split('embed/')[1].split('?')[0];
+  return id || null;
+}
+
+// setYtInputMode ve eski ytSubmitMainInput kaldırıldı. Akıllı algılama artık yukarıdaki async ytSubmitMainInput içinde.
+
 
 async function resolveUrl(rawUrl) {
   const url = String(rawUrl || document.getElementById('yt-main-input')?.value || '').trim();

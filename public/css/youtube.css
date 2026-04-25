@@ -29,11 +29,28 @@
   flex-wrap: nowrap;
 }
 
-#yt-input-mode {
+.yt-kb-btn {
+  width: 44px;
+  height: 40px;
+  background: var(--surface3);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  color: #fff;
+  font-size: 20px;
   display: flex;
   align-items: center;
-  gap: 6px;
+  justify-content: center;
+  cursor: pointer;
   flex-shrink: 0;
+  transition: all 0.15s;
+}
+.yt-kb-btn:hover {
+  background: #333;
+  border-color: #555;
+}
+.yt-kb-btn.active {
+  background: var(--accent);
+  border-color: var(--accent);
 }
 
 .yt-search-input {
