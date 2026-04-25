@@ -1,8 +1,9 @@
 'use strict';
 
 /**
- * TeslaPlayer V4 (Perfect Fit + UI Feedback)
- * Amaç: Donmuş karenin boyutlarını video alanına tam eşlemek ve Resume sırasında kullanıcıya bilgi vermek.
+ * TeslaPlayer V4 (Seamless + UI Sync)
+ * Amaç: Sıfır parlama ile kesintisiz geçiş sağlarken, arayüz sayaçlarını ve ilerleme çubuğunu canlı tutmak.
+ * Hızlı sarma (rush) sorununu önlemek için buffer ve soket yönetimi optimize edildi.
  */
 class TeslaPlayerV4 extends TeslaPlayer {
     constructor(canvasId, opts = {}) {
@@ -12,10 +13,15 @@ class TeslaPlayerV4 extends TeslaPlayer {
     }
 
     async load(channel, opts = {}) {
+        // Durdur (freeze frame aktif)
         this.stop(true); 
         
         this.currentChannel = channel;
         this.startTime = opts.startTime || 0;
+        this._pausedChannel = null;
+        this._pausedAtAbs = 0;
+        // HUD senkronizasyonu için başlangıç değerini ata
+        this._lastKnownAbsTime = this.startTime;
         
         const isResume = this.startTime > 0;
         const spinner = document.getElementById(this.spinnerId);
@@ -24,7 +30,6 @@ class TeslaPlayerV4 extends TeslaPlayer {
 
         if (isResume) {
             if (spinner) spinner.classList.remove('active');
-            // Kullanıcıya bilgi ver: DEVAM EDİLİYOR
             this._showResumingOverlay();
         } else {
             if (spinner) spinner.classList.add('active');
@@ -44,9 +49,16 @@ class TeslaPlayerV4 extends TeslaPlayer {
     _startJsmpeg(channel, t = 0) {
         const rawUrl = channel.ytUrl || channel.url;
         const wsProto = location.protocol === 'https:' ? 'wss:' : 'ws:';
-        const wsUrl = `${wsProto}//${location.host}/stream/ws?url=${encodeURIComponent(rawUrl)}&t=${t}`;
+        // saniye değerini tam sayıya yuvarlayarak gönderelim (backend için daha güvenli)
+        const seekTime = Math.floor(t);
+        const wsUrl = `${wsProto}//${location.host}/stream/ws?url=${encodeURIComponent(rawUrl)}&t=${seekTime}`;
 
-        if (this.mpegPlayer) this.mpegPlayer.destroy();
+        if (this.mpegPlayer) {
+            this.mpegPlayer.destroy();
+            this.mpegPlayer = null;
+        }
+
+        if (t > 0) this.canvas.style.visibility = 'hidden';
 
         this.mpegPlayer = new window.JSMpeg.Player(wsUrl, {
             canvas: this.canvas,
@@ -55,14 +67,16 @@ class TeslaPlayerV4 extends TeslaPlayer {
             autoplay: true,
             disableGl: true,
             preserveDrawingBuffer: true,
-            audioBufferSize: 8 * 1024 * 1024,
-            videoBufferSize: 20 * 1024 * 1024,
-            maxAudioLag: 1.8,
+            // Hızlı sarmayı (rush) önlemek için Tesla'nın işleyebileceği makul buffer değerleri
+            audioBufferSize: 2 * 1024 * 1024, 
+            videoBufferSize: 4 * 1024 * 1024,
+            maxAudioLag: 0.8, // Daha agresif senkronizasyon (hızlı sarmayı engeller)
             onPlay: () => {
                 this.isPlaying = true;
+                this._sessionStartedAtMs = Date.now();
                 if (this._spinnerDelayTimer) clearTimeout(this._spinnerDelayTimer);
                 
-                // Yayın hazır! Her şeyi temizle
+                this.canvas.style.visibility = 'visible';
                 this._removeFreezeFrame();
                 this._removeResumingOverlay();
 
@@ -72,11 +86,25 @@ class TeslaPlayerV4 extends TeslaPlayer {
             }
         });
 
+        // AudioContext canlı tut
+        this._audioRetry = setInterval(() => {
+            const audio = this.mpegPlayer?.audioOut;
+            if (audio?.context?.state === 'suspended') audio.context.resume();
+        }, 2000);
+
+        // ARAYÜZ SENKRONİZASYONU: Sayaçlar ve İlerleme Çubuğu (HUD)
         this._dummyTimer = setInterval(() => {
             if (!this.mpegPlayer) return;
+            // Mutlak pozisyon = başlangıç offseti + akış süresi
             const abs = (this.mpegPlayer.currentTime || 0) + (this.startTime || 0);
             this._dummyVideo.currentTime = abs;
             this._lastKnownAbsTime = Math.max(this._lastKnownAbsTime || 0, abs || 0);
+            
+            // Video süresini ata (Arayüzde görünmesi için şart)
+            const dur = this.currentChannel?.duration || 3600;
+            if (this._dummyVideo.duration !== dur) {
+                Object.defineProperty(this._dummyVideo, 'duration', { value: dur, configurable: true });
+            }
         }, 120);
 
         this._heartbeatTimer = setInterval(() => {
@@ -89,13 +117,26 @@ class TeslaPlayerV4 extends TeslaPlayer {
         }, 10000);
     }
 
+    togglePlay() {
+        if (this.isPlaying) {
+            this._pausedAtAbs = this._lastKnownAbsTime;
+            this._pausedChannel = this.currentChannel;
+            this.stop(true); 
+            return;
+        }
+
+        if (this._pausedChannel && this._pausedAtAbs > 0) {
+            this.load(this._pausedChannel, { startTime: this._pausedAtAbs });
+        } else if (this.currentChannel) {
+            this.load(this.currentChannel, { startTime: this.startTime || 0 });
+        }
+    }
+
     _createFreezeFrame() {
         const container = document.getElementById(this.containerId);
         if (!container || !this.canvas) return;
         
         this._removeFreezeFrame();
-
-        // Gerçek piksel ölçülerini al
         const rect = this.canvas.getBoundingClientRect();
         const containerRect = container.getBoundingClientRect();
 
@@ -103,24 +144,14 @@ class TeslaPlayerV4 extends TeslaPlayer {
         freeze.id = 'v4-freeze-frame';
         freeze.width = this.canvas.width;
         freeze.height = this.canvas.height;
-        
-        freeze.style.position = 'absolute';
-        // Container'a göre tam konumu ve boyutu hesapla (Mükemmel piksel uyumu)
-        freeze.style.top = (rect.top - containerRect.top) + 'px';
-        freeze.style.left = (rect.left - containerRect.left) + 'px';
-        freeze.style.width = rect.width + 'px';
-        freeze.style.height = rect.height + 'px';
-        freeze.style.zIndex = '5'; 
-        freeze.style.pointerEvents = 'none';
+        freeze.style.cssText = `position:absolute; top:${rect.top - containerRect.top}px; left:${rect.left - containerRect.left}px; width:${rect.width}px; height:${rect.height}px; z-index:5; pointer-events:none;`;
 
         const ctx = freeze.getContext('2d');
         if (ctx) {
             try {
                 ctx.drawImage(this.canvas, 0, 0);
                 container.appendChild(freeze);
-            } catch (e) {
-                console.warn('[V4] Clone failed:', e);
-            }
+            } catch (e) { console.warn('[V4] Clone failed:', e); }
         }
     }
 
@@ -132,38 +163,15 @@ class TeslaPlayerV4 extends TeslaPlayer {
     _showResumingOverlay() {
         const container = document.getElementById(this.containerId);
         if (!container) return;
-        
         this._removeResumingOverlay();
 
         const overlay = document.createElement('div');
         overlay.id = 'v4-resuming-overlay';
-        overlay.style.position = 'absolute';
-        overlay.style.inset = '0';
-        overlay.style.display = 'flex';
-        overlay.style.alignItems = 'center';
-        overlay.style.justifyContent = 'center';
-        overlay.style.zIndex = '15';
-        overlay.style.pointerEvents = 'none';
-        overlay.style.backdropFilter = 'blur(3px)';
-        overlay.style.backgroundColor = 'rgba(0,0,0,0.1)';
+        overlay.style.cssText = 'position:absolute; inset:0; display:flex; align-items:center; justify-content:center; z-index:15; pointer-events:none; backdrop-filter:blur(3px); background-color:rgba(0,0,0,0.1);';
 
         const text = (typeof AppI18n !== 'undefined' ? AppI18n.t('resuming') : 'DEVAM EDİLİYOR...').toUpperCase();
-
         overlay.innerHTML = `
-            <div style="
-                background: rgba(0,0,0,0.85);
-                color: #fff;
-                padding: 14px 28px;
-                border-radius: 14px;
-                font-size: 14px;
-                font-weight: 800;
-                border: 1px solid rgba(255,255,255,0.1);
-                box-shadow: 0 12px 40px rgba(0,0,0,0.6);
-                display: flex;
-                align-items: center;
-                gap: 14px;
-                letter-spacing: 1px;
-            ">
+            <div style="background:rgba(0,0,0,0.85); color:#fff; padding:14px 28px; border-radius:14px; font-size:14px; font-weight:800; border:1px solid rgba(255,255,255,0.1); box-shadow:0 12px 40px rgba(0,0,0,0.6); display:flex; align-items:center; gap:14px; letter-spacing:1px;">
                 <div class="spinner-ring" style="width:22px;height:22px;border-width:3px;border-top-color:#e82127"></div>
                 <span>${text}</span>
             </div>
@@ -179,6 +187,7 @@ class TeslaPlayerV4 extends TeslaPlayer {
     stop(keepFrame = false) {
         if (this._heartbeatTimer) { clearInterval(this._heartbeatTimer); this._heartbeatTimer = null; }
         if (this._spinnerDelayTimer) { clearTimeout(this._spinnerDelayTimer); this._spinnerDelayTimer = null; }
+        if (this._audioRetry) { clearInterval(this._audioRetry); this._audioRetry = null; }
         if (this._dummyTimer) { clearInterval(this._dummyTimer); this._dummyTimer = null; }
 
         if (keepFrame && this.canvas) {
