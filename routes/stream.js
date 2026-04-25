@@ -90,7 +90,21 @@ async function handleStreamConnection(ws, req) {
     
     ACTIVE.set(ws, { ff, yt });
 
-    ff.stdout.on('data', (d) => { if (ws.readyState === 1) ws.send(d); });
+    let isPaused = false;
+    ws.on('message', (msg) => {
+      try {
+        const payload = JSON.parse(msg);
+        if (payload.type === 'pause') {
+          isPaused = true;
+          ff.stdout.pause();
+        } else if (payload.type === 'resume') {
+          isPaused = false;
+          ff.stdout.resume();
+        }
+      } catch (e) {}
+    });
+
+    ff.stdout.on('data', (d) => { if (!isPaused && ws.readyState === 1) ws.send(d); });
     ff.on('close', () => { if (ws.readyState === 1) ws.close(); _cleanupSession(ws); });
     
     // Monitor yt-dlp potential errors
