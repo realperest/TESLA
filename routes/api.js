@@ -608,7 +608,8 @@ router.post('/iptv/m3u-url', async (req, res) => {
   try {
     const upstream = await fetch(url, {
       headers: {
-        'User-Agent': 'IPTVSmartersPlayer',
+        'User-Agent': 'VLC/3.0.9 LibVLC/3.0.9',
+        'X-Requested-With': 'com.nathnetwork.iptvsmarters',
         'Accept': '*/*',
         'Accept-Encoding': 'gzip, deflate',
         'Connection': 'keep-alive',
