@@ -1,10 +1,10 @@
 'use strict';
 
 /**
- * TeslaPlayer V4 (Audio+Canvas Variant)
- * Amaç: JSMpeg tabanlı, hafif ve stabil oynatıcı. 
- * Duraklatma (Pause) sırasında bağlantıyı keser ancak son kareyi (freeze-frame) ekranda tutar.
- * Devam ederken (Play) yükleniyor yazısını geciktirerek akıcı bir geçiş sağlar.
+ * TeslaPlayer V4 (Seamless Variant)
+ * Amaç: Duraklatma ve Devam etme sırasında kullanıcıya hiçbir yükleme ekranı hissettirmemek.
+ * Pause -> Freeze Frame
+ * Play -> Invisible Reconnect (Spinner yok, gri ekran yok)
  */
 class TeslaPlayerV4 extends TeslaPlayer {
     constructor(canvasId, opts = {}) {
@@ -14,7 +14,7 @@ class TeslaPlayerV4 extends TeslaPlayer {
     }
 
     async load(channel, opts = {}) {
-        // Durdur ama ekranı karartma
+        // Durdur ama ekranı karartma (freeze frame)
         this.stop(true); 
         
         this.currentChannel = channel;
@@ -27,15 +27,23 @@ class TeslaPlayerV4 extends TeslaPlayer {
         
         if (this._spinnerDelayTimer) clearTimeout(this._spinnerDelayTimer);
 
-        // Resume (devam etme) durumunda spinner'ı hemen gösterme, 2 saniye bekle.
-        // Eğer 2 saniye içinde yayın başlarsa kullanıcı hiç "Yükleniyor" görmez.
+        // RESUME DURUMU: Spinner'ı tamamen gizli tut. 
+        // Kullanıcı sadece donmuş kareyi görsün, yayın hazır olunca kendiliğinden akmaya başlasın.
         if (isResume) {
-            if (spinner) spinner.classList.remove('active');
+            if (spinner) {
+                spinner.classList.remove('active');
+                spinner.style.background = 'transparent'; // Arka planı şeffaf yap
+            }
+            // Sadece çok uzun sürerse (10sn+) hata mesajı veya spinner gösterilebilir.
             this._spinnerDelayTimer = setTimeout(() => {
                 if (!this.isPlaying && spinner) spinner.classList.add('active');
-            }, 2000);
+            }, 10000); 
         } else {
-            if (spinner) spinner.classList.add('active');
+            // İlk açılışta spinner görünebilir.
+            if (spinner) {
+                spinner.style.background = 'rgba(0,0,0,0.5)';
+                spinner.classList.add('active');
+            }
         }
 
         try {
@@ -60,7 +68,8 @@ class TeslaPlayerV4 extends TeslaPlayer {
             audio: true,
             video: true,
             autoplay: true,
-            disableGl: true,
+            disableGl: true, // Tesla için en stabil mod
+            preserveDrawingBuffer: true, // Frame kaybını önlemek için
             audioBufferSize: 8 * 1024 * 1024,
             videoBufferSize: 20 * 1024 * 1024,
             maxAudioLag: 1.8,
@@ -70,7 +79,10 @@ class TeslaPlayerV4 extends TeslaPlayer {
                 if (this.mpegPlayer.audioOut) this.mpegPlayer.volume = 1;
                 
                 const spinner = document.getElementById(this.spinnerId);
-                if (spinner) spinner.classList.remove('active');
+                if (spinner) {
+                    spinner.classList.remove('active');
+                    spinner.style.background = 'rgba(0,0,0,0.5)'; // Eski haline döndür
+                }
             }
         });
 
@@ -102,8 +114,7 @@ class TeslaPlayerV4 extends TeslaPlayer {
         if (this.isPlaying) {
             this._pausedAtAbs = this._lastKnownAbsTime;
             this._pausedChannel = this.currentChannel;
-            // stop(true) -> ekranı karartmadan durdur
-            this.stop(true); 
+            this.stop(true); // freeze frame
             return;
         }
 
@@ -114,9 +125,6 @@ class TeslaPlayerV4 extends TeslaPlayer {
         }
     }
 
-    /**
-     * @param {boolean} keepFrame - Eğer true ise ekran siyaha boyanmaz, son kare kalır.
-     */
     stop(keepFrame = false) {
         if (this._heartbeatTimer) { clearInterval(this._heartbeatTimer); this._heartbeatTimer = null; }
         if (this._spinnerDelayTimer) { clearTimeout(this._spinnerDelayTimer); this._spinnerDelayTimer = null; }
@@ -124,13 +132,13 @@ class TeslaPlayerV4 extends TeslaPlayer {
         if (this._dummyTimer) { clearInterval(this._dummyTimer); this._dummyTimer = null; }
 
         if (this.mpegPlayer) {
+            // Destroy etmeden önce frame'i korumaya çalışalım
             this.mpegPlayer.destroy();
             this.mpegPlayer = null;
         }
         
         this.isPlaying = false;
 
-        // Ekranı karartma mantığı (Base class'tan farklı olarak opsiyonel)
         if (!keepFrame) {
             try {
                 const ctx = this.canvas.getContext('2d');
@@ -140,14 +148,6 @@ class TeslaPlayerV4 extends TeslaPlayer {
                 }
             } catch {}
         }
-    }
-
-    getDiagnostics() {
-        return {
-            audioEnabled: true,
-            currentTime: Number(this.mpegPlayer?.currentTime || 0),
-            hbActive: !!this._heartbeatTimer
-        };
     }
 }
 
