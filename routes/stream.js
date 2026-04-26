@@ -85,10 +85,17 @@ async function handleStreamConnection(ws, req) {
     ACTIVE.set(ws, { ff, yt });
 
     yt.stdout.on('data', (chunk) => {
-      if (ff.stdin.writable) {
-        ff.stdin.write(chunk, (err) => { if (err && err.code === 'EPIPE') yt.kill(); });
+      if (ff.stdin && ff.stdin.writable) {
+        ff.stdin.write(chunk, (err) => { if (err) try { yt.kill(); } catch(e){} });
       }
     });
+
+    // ── Zırhlı Hata Yakalayıcılar ──
+    yt.stdout.on('error', (e) => console.log('[YT-STDOUT-ERR]', e.message));
+    yt.stderr.on('error', (e) => console.log('[YT-STDERR-ERR]', e.message));
+    ff.stdin.on('error', (e) => console.log('[FF-STDIN-ERR]', e.message));
+    ff.stdout.on('error', (e) => console.log('[FF-STDOUT-ERR]', e.message));
+    ff.stderr.on('error', (e) => console.log('[FF-STDERR-ERR]', e.message));
 
     yt.stderr.on('data', (d) => {
       const msg = d.toString();
@@ -102,8 +109,8 @@ async function handleStreamConnection(ws, req) {
     ws.on('message', (msg) => {
       try {
         const p = JSON.parse(msg);
-        if (p.type === 'pause') { ff.stdout.pause(); }
-        else if (p.type === 'resume') { ff.stdout.resume(); }
+        if (p.type === 'pause' && ff.stdout) { ff.stdout.pause(); }
+        else if (p.type === 'resume' && ff.stdout) { ff.stdout.resume(); }
       } catch (e) {}
     });
 
@@ -112,7 +119,8 @@ async function handleStreamConnection(ws, req) {
     });
     
     ff.on('close', () => { clearInterval(heartbeat); if (ws.readyState === 1) ws.close(); _cleanupSession(ws); });
-    ff.on('error', (e) => { clearInterval(heartbeat); _cleanupSession(ws); });
+    ff.on('error', (e) => { console.log('[FF-PROC-ERR]', e.message); clearInterval(heartbeat); _cleanupSession(ws); });
+    yt.on('error', (e) => { console.log('[YT-PROC-ERR]', e.message); });
 
 
 
