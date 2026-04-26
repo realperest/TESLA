@@ -249,6 +249,17 @@ async function init() {
   document.addEventListener('touchstart', unlock, { once: true });
   document.addEventListener('mousedown', unlock, { once: true });
 
+  // Global Heartbeat (Zorunlu Kalp Atışı): Railway/Cloudflare timeout koruması
+  setInterval(() => {
+    const activeP = getActivePlayer();
+    if (activeP && activeP.mpegPlayer && activeP.mpegPlayer.source && activeP.mpegPlayer.source.socket) {
+      const ws = activeP.mpegPlayer.source.socket;
+      if (ws.readyState === 1) {
+        ws.send(JSON.stringify({ type: 'heartbeat', ts: Date.now() }));
+      }
+    }
+  }, 10000);
+
   // Global Klavye Kısa Yolu: SPACE
   document.addEventListener('keydown', (e) => {
     if (e.code === 'Space') {

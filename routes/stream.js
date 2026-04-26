@@ -100,6 +100,15 @@ async function handleStreamConnection(ws, req) {
     
     ACTIVE.set(ws, { ff, yt });
 
+    // RAILWAY TIMEOUT Koruması: Her 10 saniyede bir "kalp atışı" gönder
+    const heartbeat = setInterval(() => {
+      if (ws.readyState === 1) {
+        ws.send(JSON.stringify({ type: 'ping', ts: Date.now() }), (err) => {
+          if (err) _cleanupSession(ws);
+        });
+      }
+    }, 10000);
+
     let isPaused = false;
     ws.on('message', (msg) => {
       try {
@@ -122,8 +131,15 @@ async function handleStreamConnection(ws, req) {
       } 
     });
     
-    ff.on('close', () => { if (ws.readyState === 1) ws.close(); _cleanupSession(ws); });
-    ff.on('error', () => _cleanupSession(ws));
+    ff.on('close', () => { 
+      clearInterval(heartbeat);
+      if (ws.readyState === 1) ws.close(); 
+      _cleanupSession(ws); 
+    });
+    ff.on('error', () => {
+      clearInterval(heartbeat);
+      _cleanupSession(ws);
+    });
     
     yt.stderr.on('data', (d) => { 
       const msg = d.toString();
@@ -135,7 +151,11 @@ async function handleStreamConnection(ws, req) {
     ws.close(1011);
   }
 
-  ws.on('close', () => _cleanupSession(ws));
+  ws.on('close', () => {
+    // heartbeat burada temizlenemez çünkü scope dışında kalabilir, 
+    // ff.on('close') ve fatal catch içinde temizlenmesi daha güvenli.
+    _cleanupSession(ws);
+  });
 }
 
 function _cleanupSession(ws) {
