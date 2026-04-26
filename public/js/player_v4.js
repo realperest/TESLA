@@ -62,8 +62,8 @@ class TeslaPlayerV4 extends TeslaPlayer {
             autoplay: true,
             disableGl: true,
             preserveDrawingBuffer: true,
-            audioBufferSize: 4 * 1024 * 1024,
-            videoBufferSize: 16 * 1024 * 1024,
+            audioBufferSize: 512 * 1024,   // 512KB (Daha hızlı dolma)
+            videoBufferSize: 2 * 1024 * 1024, // 2MB (Daha hızlı görüntü başlangıcı)
             maxAudioLag: 0.8, // Yakalama hızını daha agresif yap (hızlı oynatmayı engellemek için atla)
             onPlay: () => {
                 this.isPlaying = true;
@@ -77,6 +77,7 @@ class TeslaPlayerV4 extends TeslaPlayer {
                 this.canvas.style.visibility = 'visible';
                 this._removeFreezeFrame();
                 this._removeResumingOverlay();
+                console.log('[V4] Playback started');
 
                 // Oynarken kontrollerin otomatik gizlenmesine izin ver (style'ı temizle)
                 const controls = document.getElementById('yt-external-controls');
