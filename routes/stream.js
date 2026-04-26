@@ -98,8 +98,11 @@ async function handleStreamConnection(ws, req) {
     ff.stderr.on('error', (e) => console.log('[FF-STDERR-ERR]', e.message));
 
     yt.stderr.on('data', (d) => {
-      const msg = d.toString();
-      if (msg.includes('ERROR')) console.log('[YT-ERR]', msg.trim());
+      console.log('[YT-DEBUG]', d.toString().trim());
+    });
+
+    ff.stderr.on('data', (d) => {
+      console.log('[FF-DEBUG]', d.toString().trim());
     });
 
     const heartbeat = setInterval(() => {
