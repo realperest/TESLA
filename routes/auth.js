@@ -86,7 +86,7 @@ router.get('/google/callback', async (req, res) => {
 
     res.cookie(COOKIE_NAME, token, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
+      secure: req.protocol === 'https',
       sameSite: 'lax',
       maxAge: SESSION_DAYS * 24 * 60 * 60 * 1000,
     });

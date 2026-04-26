@@ -12,7 +12,7 @@ const initSqlJs = require('sql.js');
 const fs = require('fs');
 const path = require('path');
 
-const DB_PATH = path.join(__dirname, 'tesla_tv.db');
+const DB_PATH = process.env.DATABASE_URL || path.join(__dirname, 'tesla_tv.db');
 
 // ── Wrapper sınıfları (better-sqlite3 uyumlu sync API) ──────────────────────
 
