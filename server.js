@@ -135,7 +135,7 @@ initDB().then(() => {
     });
   });
 
-  server.listen(PORT, () => {
+  server.listen(PORT, '0.0.0.0', () => {
     const base = process.env.BASE_URL || `http://localhost:${PORT}`;
     console.log('\n========================================');
     console.log(`  Açıl Susam çalışıyor`);
