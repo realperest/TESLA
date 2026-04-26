@@ -278,6 +278,54 @@
   max-width: 80%;
 }
 
+/* Sinyal İndikatörü */
+#yt-signal-indicator {
+  display: flex;
+  align-items: flex-end;
+  gap: 3px;
+  height: 24px;
+  padding: 4px 8px;
+  background: rgba(255,255,255,0.03);
+  border-radius: 6px;
+  flex-shrink: 0;
+}
+
+.sig-bar {
+  width: 4px;
+  background: #333;
+  border-radius: 1px;
+  transition: all 0.3s;
+}
+
+#sig-1 { height: 6px; }
+#sig-2 { height: 10px; }
+#sig-3 { height: 14px; }
+#sig-4 { height: 18px; }
+
+#sig-text {
+  font-size: 10px;
+  color: #666;
+  font-weight: 800;
+  margin-left: 4px;
+  line-height: 1;
+}
+
+/* Sinyal Seviyeleri */
+#yt-signal-indicator.bad .sig-bar { background: #333; }
+#yt-signal-indicator.bad #sig-1 { background: #f44; }
+#yt-signal-indicator.bad #sig-text { color: #f44; }
+
+#yt-signal-indicator.okay .sig-bar { background: #333; }
+#yt-signal-indicator.okay #sig-1, #yt-signal-indicator.okay #sig-2 { background: #fb1; }
+#yt-signal-indicator.okay #sig-text { color: #fb1; }
+
+#yt-signal-indicator.good .sig-bar { background: #333; }
+#yt-signal-indicator.good #sig-1, #yt-signal-indicator.good #sig-2, #yt-signal-indicator.good #sig-3 { background: #4f4; }
+#yt-signal-indicator.good #sig-text { color: #4f4; }
+
+#yt-signal-indicator.perfect .sig-bar { background: #4f4; }
+#yt-signal-indicator.perfect #sig-text { color: #4f4; }
+
 /* Video Ortada */
 #yt-player-container {
   position: relative;

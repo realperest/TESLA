@@ -289,11 +289,28 @@ async function init() {
     const activeP = getActivePlayer();
     if (activeP && activeP.mpegPlayer && activeP.mpegPlayer.source && activeP.mpegPlayer.source.socket) {
       const ws = activeP.mpegPlayer.source.socket;
-      if (ws.readyState === 1) {
-        ws.send(new Uint8Array([0x00]));
-      }
+      if (ws.readyState === 1) ws.send(new Uint8Array([0x00]));
     }
   }, 10000);
+
+  // Sinyal Kalite İzleyici (LTE/WiFi İndikatörü)
+  const _ytUpdateSignal = () => {
+    const el = document.getElementById('yt-signal-indicator');
+    const txt = document.getElementById('sig-text');
+    if (!el) return;
+    let level = 'perfect'; let type = 'LTE';
+    if (navigator.connection) {
+      const conn = navigator.connection;
+      type = (conn.effectiveType || 'LTE').toUpperCase();
+      if (conn.downlink < 1) level = 'bad';
+      else if (conn.downlink < 3) level = 'okay';
+      else if (conn.downlink < 8) level = 'good';
+    }
+    if (txt) txt.textContent = type;
+    el.className = ''; el.classList.add(level);
+  };
+  setInterval(_ytUpdateSignal, 5000);
+  _ytUpdateSignal();
 
   // Global Klavye Kısa Yolu: SPACE
   document.addEventListener('keydown', (e) => {
