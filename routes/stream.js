@@ -62,44 +62,43 @@ async function handleStreamConnection(ws, req) {
     let ff, yt;
     console.log(`[Stream] Fast-Start: ${targetUrl} (Seek: ${startTime}s)`);
 
-    let finalInputUrl = targetUrl;
-    let inputHeaders = '';
-
-    // 1. YouTube ise ham linki ve kimlik bilgilerini al
-    if (isYouTube) {
-      console.log('[Stream] Fetching direct URL and headers for YouTube...');
-      const ytProc = spawn(YT_DLP, [
-        '--get-url', '--no-playlist', '--force-ipv4',
-        '--user-agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
-        '--format', '18', // Combined format (360p mp4) - En stabil olanı
-        ..._ytCookieArgs(), targetUrl
-      ]);
-      
-      let out = '';
-      for await (const chunk of ytProc.stdout) { out += chunk.toString(); }
-      finalInputUrl = out.trim().split('\n')[0];
-      
-      if (!finalInputUrl) throw new Error('YouTube linki alınamadı');
-      
-      // Cookie dosyasını oku ve başlığa ekle
-      const cookiePath = path.join(__dirname, '..', 'youtube-cookies.txt');
-      let cookies = '';
-      try { if (fs.existsSync(cookiePath)) cookies = fs.readFileSync(cookiePath, 'utf8'); } catch(e){}
-      
-      inputHeaders = `User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36\r\n`;
-    }
-
-    // 2. FFmpeg ile Yayını Başlat
+    // Core Engine: Standardize transport for Tesla
+    // 'ios' istemcisi hem bot engelini aşıyor hem de throttling (6sn uyuma) yapmıyor.
+    const ytArgs = [
+      '--no-playlist', '--no-warnings', '--force-ipv4',
+      '--user-agent', 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_4_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4.1 Mobile/15E148 Safari/604.1',
+      '--extractor-args', isYouTube ? 'youtube:player_client=ios' : `generic:referer=https://www.trtizle.com/`,
+      isYouTube && startTime !== '0' ? '--download-sections' : null, 
+      isYouTube && startTime !== '0' ? `*${startTime}-inf` : null,
+      '--format', '18/best[height<=720]', // Format 18 en stabili
+      '-o', '-', targetUrl
+    ].concat(_ytCookieArgs()).filter(Boolean);
+    
     const ffArgs = [
-      '-thread_queue_size', '8192', '-re',
-      isYouTube ? '-headers' : null, isYouTube ? inputHeaders : null,
-      startTime !== '0' ? '-ss' : null, startTime !== '0' ? startTime : null,
-      '-i', finalInputUrl,
+      '-thread_queue_size', '8192', '-re', 
+      '-i', 'pipe:0',
       ..._ffmpegOutputs()
     ].filter(Boolean);
 
+    yt = spawn(YT_DLP, ytArgs, { stdio: ['ignore', 'pipe', 'pipe'] });
     ff = spawn(FFMPEG_PATH, ffArgs, { stdio: ['pipe', 'pipe', 'pipe'] });
-    ACTIVE.set(ws, { ff });
+    
+    ACTIVE.set(ws, { ff, yt });
+
+    yt.stdout.on('data', (chunk) => {
+      if (ff.stdin && ff.stdin.writable) {
+        ff.stdin.write(chunk, (err) => { if (err) try { yt.kill(); } catch(e){} });
+      }
+    });
+
+    // ── Zırhlı Hata Yakalayıcılar ──
+    yt.stdout.on('error', () => {});
+    ff.stdin.on('error', () => {});
+
+    yt.stderr.on('data', (d) => {
+      const msg = d.toString();
+      if (msg.includes('ERROR')) console.log('[YT-ERR]', msg.trim());
+    });
 
     const heartbeat = setInterval(() => {
       if (ws.readyState === 1) ws.send(Buffer.from([0x00]), (err) => { if (err) _cleanupSession(ws); });
@@ -116,13 +115,9 @@ async function handleStreamConnection(ws, req) {
     ff.stdout.on('data', (d) => { 
       if (ws.readyState === 1) ws.send(d, (err) => { if (err) _cleanupSession(ws); });
     });
-
-    ff.stderr.on('data', (d) => {
-      console.log('[FF-DEBUG]', d.toString().trim());
-    });
     
     ff.on('close', () => { clearInterval(heartbeat); if (ws.readyState === 1) ws.close(); _cleanupSession(ws); });
-    ff.on('error', (e) => { console.log('[FF-PROC-ERR]', e.message); clearInterval(heartbeat); _cleanupSession(ws); });
+    ff.on('error', () => { clearInterval(heartbeat); _cleanupSession(ws); });
 
   } catch (err) {
     console.error('[Stream] Fatal Error:', err.message);
