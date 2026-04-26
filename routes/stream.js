@@ -63,14 +63,13 @@ async function handleStreamConnection(ws, req) {
     console.log(`[Stream] Fast-Start: ${targetUrl} (Seek: ${startTime}s)`);
 
     // Core Engine: Standardize transport for Tesla
-    // 'ios' istemcisi bot engelini aşıyor ve 6 saniyelik 'uyuma' cezasını tetiklemiyor.
     const ytArgs = [
       '--no-playlist', '--no-warnings', '--force-ipv4',
-      '--user-agent', 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_4_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4.1 Mobile/15E148 Safari/604.1',
-      '--extractor-args', isYouTube ? 'youtube:player_client=ios' : `generic:referer=https://www.trtizle.com/`,
+      '--user-agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+      '--extractor-args', isYouTube ? 'youtube:player_client=tv,android' : `generic:referer=https://www.trtizle.com/`,
       isYouTube && startTime !== '0' ? '--download-sections' : null, 
       isYouTube && startTime !== '0' ? `*${startTime}-inf` : null,
-      '--format', 'bestvideo[height<=720]+bestaudio/best[height<=720]/best',
+      '--format', 'best[height<=720]', // Tek parça format her zaman daha hızlı açılır
       '-o', '-', targetUrl
     ].concat(_ytCookieArgs()).filter(Boolean);
     
