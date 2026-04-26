@@ -79,6 +79,11 @@ class TeslaPlayerV5 extends TeslaPlayer {
                 if (this.mpegPlayer.audioOut) this.mpegPlayer.volume = 1;
                 const spinner = document.getElementById(this.spinnerId);
                 if (spinner) spinner.classList.remove('active');
+
+                // Merkezi pause ikonunu kaldır
+                document.getElementById('yt-player-area')?.classList.remove('yt-paused');
+                const btn = document.getElementById('yt-btn-play');
+                if (btn && typeof YC_ICONS !== 'undefined') btn.innerHTML = YC_ICONS.pause;
             }
         });
 

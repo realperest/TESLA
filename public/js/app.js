@@ -1455,7 +1455,7 @@ async function playResolved() {
   await ytStartPlay(resolvedVideo);
 }
 
-// SVG ikonları
+// SVG ikonları (Official YouTube Style)
 const YC_ICONS = {
   play:  `<svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z" fill="#fff"/></svg>`,
   pause: `<svg viewBox="0 0 24 24"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z" fill="#fff"/></svg>`,
