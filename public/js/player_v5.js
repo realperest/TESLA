@@ -62,9 +62,12 @@ class TeslaPlayerV5 extends TeslaPlayer {
             preserveDrawingBuffer: true,
             audioBufferSize: 4 * 1024 * 1024,
             videoBufferSize: 16 * 1024 * 1024,
-            maxAudioLag: 1.5,
+            maxAudioLag: 0.8,
             onPlay: () => {
                 this.isPlaying = true;
+                if (this.mpegPlayer.audioOut && this.mpegPlayer.audioOut.context) {
+                    this.mpegPlayer.audioOut.context.resume();
+                }
                 this._sessionStartedAtMs = Date.now();
                 if (this._spinnerDelayTimer) clearTimeout(this._spinnerDelayTimer);
                 
