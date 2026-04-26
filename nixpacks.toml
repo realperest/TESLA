@@ -1,9 +1,8 @@
-# Railway / Nixpacks yedek planı (Dockerfile yoksa veya builder seçilirse)
-[variables]
-NIXPACKS_NODE_VERSION = "20"
+[phases.setup]
+nixPkgs = ["nodePackages.npm", "ffmpeg", "yt-dlp"]
 
-[phases.install]
-cmds = ["npm ci"]
+[phases.build]
+cmds = ["npm install"]
 
 [start]
 cmd = "npm start"
