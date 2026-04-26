@@ -293,22 +293,44 @@ async function init() {
     }
   }, 10000);
 
-  // Sinyal Kalite İzleyici (LTE/WiFi İndikatörü)
-  const _ytUpdateSignal = () => {
+  // Sinyal Kalite İzleyici (Gerçek Zamanlı Gecikme Ölçümü)
+  const _ytUpdateSignal = async () => {
     const el = document.getElementById('yt-signal-indicator');
     const txt = document.getElementById('sig-text');
     if (!el) return;
-    let level = 'perfect'; let type = 'LTE';
-    if (navigator.connection) {
-      const conn = navigator.connection;
-      type = (conn.effectiveType || 'LTE').toUpperCase();
-      if (conn.downlink < 1) level = 'bad';
-      else if (conn.downlink < 3) level = 'okay';
-      else if (conn.downlink < 8) level = 'good';
+
+    let level = 'bad';
+    let type = '...';
+
+    try {
+      const start = Date.now();
+      // Sunucuya minik bir ping atıp süreyi ölçüyoruz
+      const resp = await fetch('/proxy/ping', { method: 'HEAD', cache: 'no-store' });
+      const rtt = Date.now() - start;
+
+      if (navigator.connection) {
+        type = (navigator.connection.effectiveType || '4G').toUpperCase();
+      } else {
+        type = rtt < 300 ? 'LTE' : '3G';
+      }
+
+      if (rtt < 150) level = 'perfect';
+      else if (rtt < 350) level = 'good';
+      else if (rtt < 700) level = 'okay';
+      else level = 'bad';
+
+      // Eğer sunucu hata verirse (500 vb) sinyali düşür
+      if (!resp.ok) level = 'bad';
+    } catch (err) {
+      level = 'bad';
+      type = 'KOPUK';
     }
+
     if (txt) txt.textContent = type;
-    el.className = ''; el.classList.add(level);
+    el.className = ''; 
+    el.classList.add(level);
   };
+
   setInterval(_ytUpdateSignal, 5000);
   _ytUpdateSignal();
 

@@ -20,6 +20,11 @@ const { ipLock } = require('../middleware/ipLock');
 
 const router = express.Router();
 
+// Sinyal testi için hafif uç nokta (Auth gerektirmez)
+router.get('/ping', (req, res) => {
+  res.status(200).send('ok');
+});
+
 // HLS stream proxy — auth gerektirmez (hls.js segment istekleri cookie göndermez)
 router.get('/hls', (req, res) => {
   const { url } = req.query;
