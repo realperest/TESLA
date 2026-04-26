@@ -72,14 +72,17 @@ async function handleStreamConnection(ws, req) {
       isYouTube && startTime !== '0' ? `*${startTime}-inf` : null,
       '--format', 'bestvideo[height<=720]+bestaudio/best[height<=720]/best[height<=720]',
       '-o', '-', targetUrl
-    ].filter(Boolean);
+    ].concat(_ytCookieArgs()).filter(Boolean);
     
     // FFmpeg Optimization for Tesla Seeking:
+    // Sadece YouTube HARİÇ videolarda ffmpeg -ss kullansın (YouTube'da yt-dlp zaten hallediyor)
     const ffArgs = [
-      '-thread_queue_size', '4096', '-re', '-i', 'pipe:0',
-      '-g', '1', '-bf', '0', 
+      '-thread_queue_size', '8192', '-re', 
+      (!isYouTube && startTime !== '0') ? '-ss' : null, (!isYouTube && startTime !== '0') ? startTime : null,
+      '-i', 'pipe:0',
+      '-g', '15', '-bf', '0', 
       '-map', '0:v:0?', '-map', '0:a:0?'
-    ].concat(_ffmpegOutputs());
+    ].filter(Boolean).concat(_ffmpegOutputs());
 
     yt = spawn(YT_DLP, ytArgs, { stdio: ['ignore', 'pipe', 'pipe'] });
     ff = spawn(FFMPEG_PATH, ffArgs, { stdio: ['pipe', 'pipe', 'pipe'] });
@@ -87,65 +90,47 @@ async function handleStreamConnection(ws, req) {
     // EPIPE Hatasını Önlemek İçin Pipe Yönetimi
     yt.stdout.on('data', (chunk) => {
       if (ff.stdin.writable) {
-        ff.stdin.write(chunk, (err) => {
-          if (err && err.code === 'EPIPE') yt.kill();
-        });
+        ff.stdin.write(chunk);
       }
     });
 
-    yt.stdout.on('error', () => {});
-    ff.stdin.on('error', (err) => {
-      if (err.code === 'EPIPE') yt.kill();
+    yt.stderr.on('data', (d) => {
+      const msg = d.toString();
+      if (msg.includes('ERROR') || msg.includes('WARNING')) console.log('[YT-LOG]', msg.trim());
     });
-    
-    ACTIVE.set(ws, { ff, yt });
 
-    // RAILWAY TIMEOUT Koruması: Her 10 saniyede bir "kalp atışı" (Binary 0x00) gönder
-    // JSMpeg binary beklediği için JSON göndermek bağlantıyı koparabilir.
+    ff.stderr.on('data', (d) => {
+      const msg = d.toString();
+      if (msg.includes('Error')) console.log('[FF-ERR]', msg.trim());
+    });
+
+    ACTIVE.set(ws, { ff, yt });
     const heartbeat = setInterval(() => {
       if (ws.readyState === 1) {
-        ws.send(Buffer.from([0x00]), (err) => {
-          if (err) _cleanupSession(ws);
-        });
+        ws.send(Buffer.from([0x00]), (err) => { if (err) _cleanupSession(ws); });
       }
     }, 10000);
 
     let isPaused = false;
     ws.on('message', (msg) => {
       try {
-        const payload = JSON.parse(msg);
-        if (payload.type === 'pause') {
-          isPaused = true;
-          ff.stdout.pause();
-        } else if (payload.type === 'resume') {
-          isPaused = false;
-          ff.stdout.resume();
-        }
+        const p = JSON.parse(msg);
+        if (p.type === 'pause') { isPaused = true; ff.stdout.pause(); }
+        else if (p.type === 'resume') { isPaused = false; ff.stdout.resume(); }
       } catch (e) {}
     });
 
     ff.stdout.on('data', (d) => { 
       if (!isPaused && ws.readyState === 1) {
-        ws.send(d, (err) => {
-          if (err) _cleanupSession(ws);
-        });
+        ws.send(d, (err) => { if (err) _cleanupSession(ws); });
       } 
     });
     
-    ff.on('close', () => { 
-      clearInterval(heartbeat);
-      if (ws.readyState === 1) ws.close(); 
-      _cleanupSession(ws); 
-    });
-    ff.on('error', () => {
-      clearInterval(heartbeat);
-      _cleanupSession(ws);
-    });
+    ff.on('close', () => { clearInterval(heartbeat); if (ws.readyState === 1) ws.close(); _cleanupSession(ws); });
+    ff.on('error', (e) => { console.error('[FF-FATAL]', e); clearInterval(heartbeat); _cleanupSession(ws); });
     
-    yt.stderr.on('data', (d) => { 
-      const msg = d.toString();
-      if (msg.includes('ERROR')) console.error('[YT-ERR]', msg.trim());
-    });
+    yt.on('close', (code) => { if (code !== 0 && code !== null) console.log(`[YT-EXIT] Code: ${code}`); });
+
 
   } catch (err) {
     console.error('[Stream] Fatal Error:', err.message);
@@ -153,8 +138,6 @@ async function handleStreamConnection(ws, req) {
   }
 
   ws.on('close', () => {
-    // heartbeat burada temizlenemez çünkü scope dışında kalabilir, 
-    // ff.on('close') ve fatal catch içinde temizlenmesi daha güvenli.
     _cleanupSession(ws);
   });
 }
