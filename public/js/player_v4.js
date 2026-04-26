@@ -75,14 +75,10 @@ class TeslaPlayerV4 extends TeslaPlayer {
                 this._removeResumingOverlay();
 
                 // Oynarken kontrollerin otomatik gizlenmesine izin ver (style'ı temizle)
-                const controls = document.getElementById('yt-controls');
-                const overlay = document.getElementById('yt-overlay');
-                if (controls) controls.style.display = '';
-                if (overlay) {
-                    overlay.classList.remove('visible');
-                    overlay.style.opacity = '';
-                    overlay.style.pointerEvents = '';
-                }
+                const controls = document.getElementById('yt-external-controls');
+                const header = document.getElementById('yt-external-header');
+                if (controls) controls.style.opacity = '';
+                if (header) header.style.opacity = '';
 
                 if (this.mpegPlayer.audioOut) this.mpegPlayer.volume = 1;
                 const spinner = document.getElementById(this.spinnerId);
@@ -124,14 +120,10 @@ class TeslaPlayerV4 extends TeslaPlayer {
             this.stop(true); 
             
             // DURAKLATINCA KONTROLLERİ ZORLA GÖRÜNÜR YAP
-            const controls = document.getElementById('yt-controls');
-            const overlay = document.getElementById('yt-overlay');
-            if (controls) {
-                controls.style.cssText = 'display: flex !important; background: linear-gradient(to top, rgba(0,0,0,0.95) 0%, transparent 100%) !important; z-index: 10000 !important;';
-            }
-            if (overlay) {
-                overlay.style.cssText = 'opacity: 1 !important; pointer-events: all !important; z-index: 9999 !important; display: flex !important;';
-            }
+            const controls = document.getElementById('yt-external-controls');
+            const header = document.getElementById('yt-external-header');
+            if (controls) controls.style.opacity = '1';
+            if (header) header.style.opacity = '1';
             
             return;
         }
@@ -218,13 +210,10 @@ class TeslaPlayerV4 extends TeslaPlayer {
         if (!keepFrame) {
             this._removeFreezeFrame();
             this._removeResumingOverlay();
-            const controls = document.getElementById('yt-controls');
-            const overlay = document.getElementById('yt-overlay');
-            if (controls) controls.style.display = '';
-            if (overlay) {
-                overlay.classList.remove('visible');
-                overlay.style.opacity = '';
-            }
+            const controls = document.getElementById('yt-external-controls');
+            const header = document.getElementById('yt-external-header');
+            if (controls) controls.style.opacity = '';
+            if (header) header.style.opacity = '';
 
             try {
                 const ctx = this.canvas.getContext('2d');
