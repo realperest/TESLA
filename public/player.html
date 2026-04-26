@@ -39,14 +39,17 @@
       <!-- ── Ortak üst bar (her iki view'de de görünür) ────── -->
       <div id="yt-topbar">
         <div id="yt-search-row">
-          <button class="yt-kb-btn" onclick="unlockYtKeyboard()" title="Klavyeyi Aç">⌨️</button>
           <input type="text" id="yt-main-input" class="yt-search-input"
-            data-i18n-placeholder="ytPhSearch"
-            placeholder="Arama yapın veya YouTube linki yapıştırın..."
+            placeholder="Aramak istediğiniz kelimeyi yazın..."
             readonly
             onkeydown="if(event.key==='Enter') ytSubmitMainInput()">
+          
+          <button class="yt-kb-btn" onclick="unlockYtKeyboard()" title="Klavyeyi Aç">⌨️</button>
+          
+          <button class="yt-mic-btn" id="yt-action-mic" onclick="ytStartVoiceSearch()" title="Sesli Ara">🎙️</button>
+          
           <button class="yt-btn" id="yt-action-search" onclick="ytSubmitMainInput()">
-            <span class="btn-ico">🔎</span><span data-i18n="ytBtnSearch">Ara / Aç</span>
+            <span class="btn-ico">🔎</span><span data-i18n="ytBtnSearch">Ara</span>
           </button>
           <div id="yt-feed-mode">
             <button class="yt-mode-btn active" id="yt-mode-smart" onclick="setYtFeedMode('smart')">
@@ -413,11 +416,11 @@
     </div>
     <div class="dock-bar-user">
       <div id="app-version-container">
-        <div class="app-version-item newest"><b style="color:#ff4444 !important">260426.0130</b></div>
+        <div class="app-version-item newest"><b style="color:#ff4444 !important">260426.0131</b></div>
+        <div class="app-version-item">260426.0130</div>
         <div class="app-version-item">260426.0129</div>
-        <div class="app-version-item">260426.0128</div>
       </div>
-      <span id="app-version-badge" data-version="260426.0130" style="display:none">260426.0130</span>
+      <span id="app-version-badge" data-version="260426.0131" style="display:none">260426.0131</span>
       <div class="user-menu" id="user-menu">
         <div class="user-pill" id="user-pill" onclick="toggleUserMenu(event)">
           <img src="" alt="" id="user-avatar" referrerpolicy="no-referrer" style="display:none">

@@ -1164,27 +1164,57 @@ async function ytSubmitMainInput() {
   const val = input.value.trim();
   if (!val) return;
 
-  // Akıllı Algılama: Eğer bir link ise doğrudan aç, değilse ara
-  const isUrl = /^https?:\/\//i.test(val) || val.includes('youtube.com/') || val.includes('youtu.be/');
-  
-  if (isUrl) {
-    console.log('[YouTube] Link detected, opening:', val);
-    const vid = ytExtractId(val);
-    if (vid) {
-      ytPlayVideo(vid);
-    } else {
-      // Eğer YouTube ID'si değilse ama bir linkse, yine de denesin (proxy üzerinden)
-      ytSearch(val); 
-    }
-  } else {
-    console.log('[YouTube] Searching for:', val);
-    ytSearch(val);
-  }
+  // Link tespiti kaldırıldı. Her giriş doğrudan arama terimi sayılıyor.
+  console.log('[YouTube] Searching for:', val);
+  ytSearch(val);
   
   // Aramadan sonra klavyeyi tekrar kilitle
   input.readOnly = true;
   const kbBtn = document.querySelector('.yt-kb-btn');
   if (kbBtn) kbBtn.classList.remove('active');
+}
+
+function ytStartVoiceSearch() {
+  const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!Recognition) {
+    ytError('Tarayıcınız sesli aramayı desteklemiyor.');
+    return;
+  }
+  
+  const rec = new Recognition();
+  rec.lang = 'tr-TR';
+  const micBtn = document.getElementById('yt-action-mic');
+  
+  if (micBtn) {
+    micBtn.style.color = '#ff0000';
+    micBtn.innerHTML = '🔴'; // Kayıt simgesi
+  }
+  
+  rec.onresult = (e) => {
+    const text = e.results[0][0].transcript;
+    const input = document.getElementById('yt-main-input');
+    if (input) {
+      input.value = text;
+      ytSubmitMainInput();
+    }
+  };
+  
+  rec.onend = () => {
+    if (micBtn) {
+      micBtn.style.color = '';
+      micBtn.innerHTML = '🎙️';
+    }
+  };
+  
+  rec.onerror = () => {
+    if (micBtn) {
+      micBtn.style.color = '';
+      micBtn.innerHTML = '🎙️';
+    }
+    ytError('Ses anlaşılamadı.');
+  };
+  
+  rec.start();
 }
 
 function unlockYtKeyboard() {
