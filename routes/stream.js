@@ -90,7 +90,16 @@ async function handleStreamConnection(ws, req) {
     // EPIPE Hatasını Önlemek İçin Pipe Yönetimi
     yt.stdout.on('data', (chunk) => {
       if (ff.stdin.writable) {
-        ff.stdin.write(chunk);
+        ff.stdin.write(chunk, (err) => {
+          if (err && err.code === 'EPIPE') yt.kill();
+        });
+      }
+    });
+
+    yt.stdout.on('error', () => {});
+    ff.stdin.on('error', (err) => {
+      if (err.code === 'EPIPE') {
+         try { yt.kill(); } catch(e) {}
       }
     });
 
