@@ -96,37 +96,42 @@
               <svg viewBox="0 0 24 24"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
             </div>
           </div>
-
-          <!-- Alt Boşluk: Kontroller ve Akış -->
+          <!-- Video altı boşluk (Letterbox) kontrolleri -->
           <div id="yt-external-controls">
-            <div id="yt-progress-wrap" onmousedown="ytSeek(event)">
-              <div id="yt-progress-bg"></div>
-              <div id="yt-progress-buf"></div>
-              <div id="yt-progress-fill"></div>
-              <div id="yt-progress-thumb"></div>
+            <!-- Üst Satır: Süre + Akış Bandı -->
+            <div class="yt-ctrl-row top">
+              <div id="yt-time">0:00 / 0:00</div>
+              <div id="yt-progress-wrap" onmousedown="ytSeek(event)">
+                <div id="yt-progress-bg"></div>
+                <div id="yt-progress-buf"></div>
+                <div id="yt-progress-fill"></div>
+                <div id="yt-progress-thumb"></div>
+              </div>
             </div>
-            <div id="yt-controls-row">
-              <div id="yt-controls-left">
-                <button class="yc-btn primary" id="yt-btn-play" onclick="toggleYtPlay()">
-                  <svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+
+            <!-- Alt Satır: Düğmeler -->
+            <div class="yt-ctrl-row bottom">
+              <div class="yt-ctrl-group left">
+                <button class="yc-btn primary" id="yt-btn-play" onclick="toggleYtPlay()" title="Oynat/Duraklat">
+                  <svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z" fill="#fff"/></svg>
                 </button>
-                
-                <!-- Ses Menüsü Sola Alındı -->
+
                 <div id="yt-volume-container">
-                  <button class="yc-btn" id="yt-btn-mute" onclick="toggleYtMute()">
-                    <svg viewBox="0 0 24 24"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02z"/></svg>
+                  <button class="yc-btn" id="yt-btn-mute" onclick="toggleYtMute()" title="Sesi Kapat">
+                    <svg viewBox="0 0 24 24"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02z" fill="#fff"/></svg>
                   </button>
                   <div id="yt-volume-wrap">
                     <input type="range" id="yt-volume" min="0" max="100" value="100" oninput="ytSetVolume(this.value)">
                   </div>
                 </div>
-
-                <div id="yt-time">0:00 / 0:00</div>
               </div>
 
-              <div id="yt-controls-right">
-                <button class="yc-btn" onclick="toggleYtFullscreen()" title="Tam ekran">
-                  <svg viewBox="0 0 24 24"><path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/></svg>
+              <div class="yt-ctrl-group right">
+                <button class="yc-btn" id="yt-btn-fs" onclick="toggleYtFullscreen()" title="Tam Ekran">
+                  <svg viewBox="0 0 24 24"><path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z" fill="#fff"/></svg>
+                </button>
+                <button class="yc-btn" onclick="ytBackToMain()" title="Geri Dön">
+                  <svg viewBox="0 0 24 24"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z" fill="#fff"/></svg>
                 </button>
               </div>
             </div>
@@ -416,11 +421,11 @@
     </div>
     <div class="dock-bar-user">
       <div id="app-version-container">
-        <div class="app-version-item newest"><b style="color:#ff4444 !important">260426.0131</b></div>
+        <div class="app-version-item newest"><b style="color:#ff4444 !important">260426.0132</b></div>
+        <div class="app-version-item">260426.0131</div>
         <div class="app-version-item">260426.0130</div>
-        <div class="app-version-item">260426.0129</div>
       </div>
-      <span id="app-version-badge" data-version="260426.0131" style="display:none">260426.0131</span>
+      <span id="app-version-badge" data-version="260426.0132" style="display:none">260426.0132</span>
       <div class="user-menu" id="user-menu">
         <div class="user-pill" id="user-pill" onclick="toggleUserMenu(event)">
           <img src="" alt="" id="user-avatar" referrerpolicy="no-referrer" style="display:none">
