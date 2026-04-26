@@ -100,10 +100,11 @@ async function handleStreamConnection(ws, req) {
     
     ACTIVE.set(ws, { ff, yt });
 
-    // RAILWAY TIMEOUT Koruması: Her 10 saniyede bir "kalp atışı" gönder
+    // RAILWAY TIMEOUT Koruması: Her 10 saniyede bir "kalp atışı" (Binary 0x00) gönder
+    // JSMpeg binary beklediği için JSON göndermek bağlantıyı koparabilir.
     const heartbeat = setInterval(() => {
       if (ws.readyState === 1) {
-        ws.send(JSON.stringify({ type: 'ping', ts: Date.now() }), (err) => {
+        ws.send(Buffer.from([0x00]), (err) => {
           if (err) _cleanupSession(ws);
         });
       }
