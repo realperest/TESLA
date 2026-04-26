@@ -62,58 +62,57 @@ async function handleStreamConnection(ws, req) {
     let ff, yt;
     console.log(`[Stream] Fast-Start: ${targetUrl} (Seek: ${startTime}s)`);
 
-    let finalInputUrl = targetUrl;
-
-    // 1. YouTube ise ham linki al (Throttling'den kaçmak için)
-    if (isYouTube) {
-      console.log('[Stream] Fetching direct URL for YouTube...');
-      const ytProc = spawn(YT_DLP, [
-        '--get-url', '--no-playlist', '--force-ipv4',
-        '--format', 'bestvideo[height<=720][ext=mp4]+bestaudio[ext=m4a]/best[height<=720][ext=mp4]/best',
-        ..._ytCookieArgs(), targetUrl
-      ]);
-      
-      let out = '';
-      for await (const chunk of ytProc.stdout) { out += chunk.toString(); }
-      finalInputUrl = out.trim().split('\n')[0]; // İlk linki al (genelde video+audio birleşik format)
-      if (!finalInputUrl) throw new Error('YouTube linki alınamadı');
-    }
-
-    // 2. FFmpeg ile Yayını Başlat
+    // Core Engine: Standardize transport for Tesla
+    const ytArgs = [
+      '--no-playlist', '--no-warnings', '--force-ipv4', '--geo-bypass',
+      '--user-agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+      '--extractor-args', isYouTube ? 'youtube:player_client=tv,android' : `generic:referer=https://www.trtizle.com/`,
+      isYouTube && startTime !== '0' ? '--download-sections' : null, 
+      isYouTube && startTime !== '0' ? `*${startTime}-inf` : null,
+      '--format', 'bestvideo[height<=720]+bestaudio/best[height<=720]/best[height<=720]',
+      '-o', '-', targetUrl
+    ].concat(_ytCookieArgs()).filter(Boolean);
+    
     const ffArgs = [
-      '-thread_queue_size', '8192', '-re',
-      startTime !== '0' ? '-ss' : null, startTime !== '0' ? startTime : null,
-      '-i', finalInputUrl,
+      '-thread_queue_size', '8192', '-re', 
+      '-i', 'pipe:0',
       ..._ffmpegOutputs()
     ].filter(Boolean);
 
+    yt = spawn(YT_DLP, ytArgs, { stdio: ['ignore', 'pipe', 'pipe'] });
     ff = spawn(FFMPEG_PATH, ffArgs, { stdio: ['pipe', 'pipe', 'pipe'] });
-    ACTIVE.set(ws, { ff });
+    
+    ACTIVE.set(ws, { ff, yt });
+
+    yt.stdout.on('data', (chunk) => {
+      if (ff.stdin.writable) {
+        ff.stdin.write(chunk, (err) => { if (err && err.code === 'EPIPE') yt.kill(); });
+      }
+    });
+
+    yt.stderr.on('data', (d) => {
+      const msg = d.toString();
+      if (msg.includes('ERROR')) console.log('[YT-ERR]', msg.trim());
+    });
 
     const heartbeat = setInterval(() => {
       if (ws.readyState === 1) ws.send(Buffer.from([0x00]), (err) => { if (err) _cleanupSession(ws); });
     }, 10000);
 
-    let isPaused = false;
     ws.on('message', (msg) => {
       try {
         const p = JSON.parse(msg);
-        if (p.type === 'pause') { isPaused = true; ff.stdout.pause(); }
-        else if (p.type === 'resume') { isPaused = false; ff.stdout.resume(); }
+        if (p.type === 'pause') { ff.stdout.pause(); }
+        else if (p.type === 'resume') { ff.stdout.resume(); }
       } catch (e) {}
     });
 
     ff.stdout.on('data', (d) => { 
-      if (!isPaused && ws.readyState === 1) ws.send(d, (err) => { if (err) _cleanupSession(ws); });
-    });
-
-    ff.stderr.on('data', (d) => {
-      const msg = d.toString();
-      if (msg.includes('Error')) console.log('[FF-ERR]', msg.trim());
+      if (ws.readyState === 1) ws.send(d, (err) => { if (err) _cleanupSession(ws); });
     });
     
     ff.on('close', () => { clearInterval(heartbeat); if (ws.readyState === 1) ws.close(); _cleanupSession(ws); });
-    ff.on('error', (e) => { console.error('[FF-FATAL]', e); clearInterval(heartbeat); _cleanupSession(ws); });
+    ff.on('error', (e) => { clearInterval(heartbeat); _cleanupSession(ws); });
 
 
 
