@@ -62,48 +62,44 @@ async function handleStreamConnection(ws, req) {
     let ff, yt;
     console.log(`[Stream] Fast-Start: ${targetUrl} (Seek: ${startTime}s)`);
 
-    // Core Engine: Standardize transport for Tesla
-    const ytArgs = [
-      '--no-playlist', '--no-warnings', '--force-ipv4', '--geo-bypass',
-      '--user-agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
-      '--extractor-args', isYouTube ? 'youtube:player_client=tv,android' : `generic:referer=https://www.trtizle.com/`,
-      isYouTube && startTime !== '0' ? '--download-sections' : null, 
-      isYouTube && startTime !== '0' ? `*${startTime}-inf` : null,
-      '--format', 'bestvideo[height<=720]+bestaudio/best[height<=720]/best[height<=720]',
-      '-o', '-', targetUrl
-    ].concat(_ytCookieArgs()).filter(Boolean);
-    
+    let finalInputUrl = targetUrl;
+    let inputHeaders = '';
+
+    // 1. YouTube ise ham linki ve kimlik bilgilerini al
+    if (isYouTube) {
+      console.log('[Stream] Fetching direct URL and headers for YouTube...');
+      const ytProc = spawn(YT_DLP, [
+        '--get-url', '--no-playlist', '--force-ipv4',
+        '--user-agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+        '--format', '18', // Combined format (360p mp4) - En stabil olanı
+        ..._ytCookieArgs(), targetUrl
+      ]);
+      
+      let out = '';
+      for await (const chunk of ytProc.stdout) { out += chunk.toString(); }
+      finalInputUrl = out.trim().split('\n')[0];
+      
+      if (!finalInputUrl) throw new Error('YouTube linki alınamadı');
+      
+      // Cookie dosyasını oku ve başlığa ekle
+      const cookiePath = path.join(__dirname, '..', 'youtube-cookies.txt');
+      let cookies = '';
+      try { if (fs.existsSync(cookiePath)) cookies = fs.readFileSync(cookiePath, 'utf8'); } catch(e){}
+      
+      inputHeaders = `User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36\r\n`;
+    }
+
+    // 2. FFmpeg ile Yayını Başlat
     const ffArgs = [
-      '-thread_queue_size', '8192', '-re', 
-      '-i', 'pipe:0',
+      '-thread_queue_size', '8192', '-re',
+      isYouTube ? '-headers' : null, isYouTube ? inputHeaders : null,
+      startTime !== '0' ? '-ss' : null, startTime !== '0' ? startTime : null,
+      '-i', finalInputUrl,
       ..._ffmpegOutputs()
     ].filter(Boolean);
 
-    yt = spawn(YT_DLP, ytArgs, { stdio: ['ignore', 'pipe', 'pipe'] });
     ff = spawn(FFMPEG_PATH, ffArgs, { stdio: ['pipe', 'pipe', 'pipe'] });
-    
-    ACTIVE.set(ws, { ff, yt });
-
-    yt.stdout.on('data', (chunk) => {
-      if (ff.stdin && ff.stdin.writable) {
-        ff.stdin.write(chunk, (err) => { if (err) try { yt.kill(); } catch(e){} });
-      }
-    });
-
-    // ── Zırhlı Hata Yakalayıcılar ──
-    yt.stdout.on('error', (e) => console.log('[YT-STDOUT-ERR]', e.message));
-    yt.stderr.on('error', (e) => console.log('[YT-STDERR-ERR]', e.message));
-    ff.stdin.on('error', (e) => console.log('[FF-STDIN-ERR]', e.message));
-    ff.stdout.on('error', (e) => console.log('[FF-STDOUT-ERR]', e.message));
-    ff.stderr.on('error', (e) => console.log('[FF-STDERR-ERR]', e.message));
-
-    yt.stderr.on('data', (d) => {
-      console.log('[YT-DEBUG]', d.toString().trim());
-    });
-
-    ff.stderr.on('data', (d) => {
-      console.log('[FF-DEBUG]', d.toString().trim());
-    });
+    ACTIVE.set(ws, { ff });
 
     const heartbeat = setInterval(() => {
       if (ws.readyState === 1) ws.send(Buffer.from([0x00]), (err) => { if (err) _cleanupSession(ws); });
@@ -120,12 +116,13 @@ async function handleStreamConnection(ws, req) {
     ff.stdout.on('data', (d) => { 
       if (ws.readyState === 1) ws.send(d, (err) => { if (err) _cleanupSession(ws); });
     });
+
+    ff.stderr.on('data', (d) => {
+      console.log('[FF-DEBUG]', d.toString().trim());
+    });
     
     ff.on('close', () => { clearInterval(heartbeat); if (ws.readyState === 1) ws.close(); _cleanupSession(ws); });
     ff.on('error', (e) => { console.log('[FF-PROC-ERR]', e.message); clearInterval(heartbeat); _cleanupSession(ws); });
-    yt.on('error', (e) => { console.log('[YT-PROC-ERR]', e.message); });
-
-
 
   } catch (err) {
     console.error('[Stream] Fatal Error:', err.message);
