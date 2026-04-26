@@ -15,11 +15,12 @@
 /* ── Üst bar (her iki view'de sabit) ─────────────────────── */
 #yt-topbar {
   flex-shrink: 0;
-  padding: 14px 20px 10px;
+  padding: 14px 20px 6px;
   border-bottom: 1px solid var(--border);
   display: flex;
   flex-direction: column;
   gap: 8px;
+  min-height: 85px; /* Yüksekliği sabitleyerek zıplamayı önler */
 }
 
 #yt-search-row {
@@ -172,11 +173,12 @@
 
 .yt-loading {
   color: var(--text-muted);
-  font-size: 13px;
-  display: none;
-  padding: 2px 0;
+  font-size: 12px;
+  height: 18px; /* Sabit yükseklik */
+  line-height: 18px;
+  visibility: hidden; /* display:none yerine visibility kullanarak yerini koruruz */
 }
-.yt-loading.show { display: block; }
+.yt-loading.show { visibility: visible; }
 
 .yt-error {
   background: rgba(180,30,30,0.15);
@@ -266,6 +268,9 @@
   background: #000;
   border-radius: 6px;
   overflow: hidden;
+  /* Boyutların akış gelmeden önce de sabit kalmasını zorunlu kılar */
+  min-width: 320px;
+  min-height: 180px;
 }
 
 #yt-canvas,

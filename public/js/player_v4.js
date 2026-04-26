@@ -62,8 +62,8 @@ class TeslaPlayerV4 extends TeslaPlayer {
             autoplay: true,
             disableGl: true,
             preserveDrawingBuffer: true,
-            audioBufferSize: 4 * 1024 * 1024,
-            videoBufferSize: 8 * 1024 * 1024,
+            audioBufferSize: 1024 * 1024,
+            videoBufferSize: 4 * 1024 * 1024,
             maxAudioLag: 0.7,
             onPlay: () => {
                 this.isPlaying = true;
@@ -181,7 +181,7 @@ class TeslaPlayerV4 extends TeslaPlayer {
 
         const overlay = document.createElement('div');
         overlay.id = 'v4-resuming-overlay';
-        overlay.style.cssText = 'position:absolute; inset:0; display:flex; align-items:center; justify-content:center; z-index:50; pointer-events:none; backdrop-filter:blur(3px); background-color:rgba(0,0,0,0.1);';
+        overlay.style.cssText = 'position:absolute; inset:0; display:flex; align-items:center; justify-content:center; z-index:50; pointer-events:none; background-color:rgba(0,0,0,0.4);';
 
         const text = (typeof AppI18n !== 'undefined' ? AppI18n.t('resuming') : 'DEVAM EDİLİYOR...').toUpperCase();
         overlay.innerHTML = `
