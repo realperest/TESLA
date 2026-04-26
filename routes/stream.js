@@ -74,19 +74,29 @@ async function handleStreamConnection(ws, req) {
       '-o', '-', targetUrl
     ].filter(Boolean);
     
-    yt = spawn(YT_DLP, ytArgs, { stdio: ['ignore', 'pipe', 'pipe'] });
-    
     // FFmpeg Optimization for Tesla Seeking:
-    // -g 1 makes every frame a keyframe (instant sync)
-    // -bf 0 removes B-frames for zero-latency
     const ffArgs = [
       '-thread_queue_size', '4096', '-re', '-i', 'pipe:0',
       '-g', '1', '-bf', '0', 
       '-map', '0:v:0?', '-map', '0:a:0?'
     ].concat(_ffmpegOutputs());
 
+    yt = spawn(YT_DLP, ytArgs, { stdio: ['ignore', 'pipe', 'pipe'] });
     ff = spawn(FFMPEG_PATH, ffArgs, { stdio: ['pipe', 'pipe', 'pipe'] });
-    yt.stdout.pipe(ff.stdin);
+    
+    // EPIPE Hatasını Önlemek İçin Pipe Yönetimi
+    yt.stdout.on('data', (chunk) => {
+      if (ff.stdin.writable) {
+        ff.stdin.write(chunk, (err) => {
+          if (err && err.code === 'EPIPE') yt.kill();
+        });
+      }
+    });
+
+    yt.stdout.on('error', () => {});
+    ff.stdin.on('error', (err) => {
+      if (err.code === 'EPIPE') yt.kill();
+    });
     
     ACTIVE.set(ws, { ff, yt });
 
@@ -104,10 +114,17 @@ async function handleStreamConnection(ws, req) {
       } catch (e) {}
     });
 
-    ff.stdout.on('data', (d) => { if (!isPaused && ws.readyState === 1) ws.send(d); });
-    ff.on('close', () => { if (ws.readyState === 1) ws.close(); _cleanupSession(ws); });
+    ff.stdout.on('data', (d) => { 
+      if (!isPaused && ws.readyState === 1) {
+        ws.send(d, (err) => {
+          if (err) _cleanupSession(ws);
+        });
+      } 
+    });
     
-    // Monitor yt-dlp potential errors
+    ff.on('close', () => { if (ws.readyState === 1) ws.close(); _cleanupSession(ws); });
+    ff.on('error', () => _cleanupSession(ws));
+    
     yt.stderr.on('data', (d) => { 
       const msg = d.toString();
       if (msg.includes('ERROR')) console.error('[YT-ERR]', msg.trim());

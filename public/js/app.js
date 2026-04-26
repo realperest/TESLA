@@ -1481,7 +1481,11 @@ async function toggleYtPlay() {
   }
   activeYt.togglePlay();
   const btn = document.getElementById('yt-btn-play');
-  btn.innerHTML = activeYt.paused ? YC_ICONS.play : YC_ICONS.pause;
+  const area = document.getElementById('yt-player-area');
+  const isPlaying = activeYt.isPlaying;
+  
+  if (btn) btn.innerHTML = isPlaying ? YC_ICONS.pause : YC_ICONS.play;
+  if (area) area.classList.toggle('yt-paused', !isPlaying);
 }
 
 function toggleYtMute() {
