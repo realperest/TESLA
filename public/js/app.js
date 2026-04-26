@@ -138,6 +138,41 @@ function resumeFromVisibilityIfNeeded(key, playerObj) {
   _resumeOnVisibilityReturn[key] = false;
 }
 
+async function ytSeek(e) {
+  if (e) e.stopPropagation();
+  
+  const activeYt = getYtPlayerBySection(_activeSection);
+  if (!activeYt || !activeYt.currentChannel) return;
+
+  const wrap = document.getElementById('yt-progress-wrap');
+  if (!wrap) return;
+
+  const rect = wrap.getBoundingClientRect();
+  const offsetX = e.clientX - rect.left;
+  const pct = Math.max(0, Math.min(1, offsetX / rect.width));
+  const dur = activeYt.currentChannel.duration || 0;
+  const targetAbs = pct * dur;
+
+  // Görsel olarak anında güncelle
+  const fill = document.getElementById('yt-progress-fill');
+  const thumb = document.getElementById('yt-progress-thumb');
+  if (fill) fill.style.width = (pct * 100) + '%';
+  if (thumb) thumb.style.left = (pct * 100) + '%';
+
+  // Debounce: Çok hızlı tıklamaları engelle
+  if (_ytSeekTimer) clearTimeout(_ytSeekTimer);
+  _ytSeekTimer = setTimeout(async () => {
+    ytLoading(true, 'Kaydırılıyor...');
+    try {
+      await activeYt.seek(targetAbs);
+    } catch (err) {
+      ytError('Kaydırma yapılamadı.');
+    } finally {
+      ytLoading(false);
+    }
+  }, 300);
+}
+
 function setupYtSeekGestures() {
   const wrap = document.getElementById('yt-progress-wrap');
   if (!wrap) return;
@@ -1562,24 +1597,10 @@ function ytSetVolume(val) {
   document.getElementById('yt-btn-mute').innerHTML = muted ? YC_ICONS.mute : YC_ICONS.vol;
 }
 
-function ytSeek(e) {
-  const wrap = document.getElementById('yt-progress-wrap');
-  const rect = wrap.getBoundingClientRect();
-  const pct = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+function toggleYtFullscreen(e) {
+  if (e) e.stopPropagation();
   const activeYt = getYtPlayerBySection(_activeSection);
-  if (activeYt && activeYt.video && activeYt.video.duration) {
-    const seconds = pct * activeYt.video.duration;
-    activeYt.seekTo(seconds);
-  }
-}
-
-function toggleYtFullscreen() {
-  const el = document.getElementById('yt-player-area');
-  if (!document.fullscreenElement) {
-    (el.requestFullscreen || el.webkitRequestFullscreen).call(el);
-  } else {
-    (document.exitFullscreen || document.webkitExitFullscreen).call(document);
-  }
+  if (activeYt) activeYt.toggleFullscreen();
 }
 
 // Progress güncelleme döngüsü
