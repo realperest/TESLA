@@ -104,13 +104,11 @@ async function handleStreamConnection(ws, req) {
     });
 
     yt.stderr.on('data', (d) => {
-      const msg = d.toString();
-      if (msg.includes('ERROR') || msg.includes('WARNING')) console.log('[YT-LOG]', msg.trim());
+      console.log('[YT-DEBUG]', d.toString().trim());
     });
 
     ff.stderr.on('data', (d) => {
-      const msg = d.toString();
-      if (msg.includes('Error')) console.log('[FF-ERR]', msg.trim());
+      console.log('[FF-DEBUG]', d.toString().trim());
     });
 
     ACTIVE.set(ws, { ff, yt });
