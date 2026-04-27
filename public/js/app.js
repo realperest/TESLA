@@ -1307,6 +1307,12 @@ function unlockYtKeyboard() {
   const btn = document.querySelector('.yt-kb-btn');
   if (!input) return;
   
+  // Eğer zaten aktifse kapat (blur yap)
+  if (!input.readOnly && document.activeElement === input) {
+    input.blur();
+    return;
+  }
+  
   input.readOnly = false;
   input.focus();
   if (btn) btn.classList.add('active');
