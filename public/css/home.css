@@ -9,12 +9,11 @@
 }
 
 .home-logo {
-  font-size: clamp(32px, 9vw, 52px);
-  font-weight: 800;
-  letter-spacing: -0.04em;
-  opacity: 0.12;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  opacity: 1;
 }
-.home-logo span { color: var(--accent); }
 
 .home-welcome {
   text-align: center;
