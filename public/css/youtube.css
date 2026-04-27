@@ -102,7 +102,7 @@
   display: flex;
   align-items: center;
   gap: 4px;
-  margin-left: 12px;
+  margin-left: auto;
   flex-shrink: 0;
   overflow-x: auto;
   scrollbar-width: none;
