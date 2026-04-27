@@ -309,9 +309,9 @@ async function init() {
       const rtt = Date.now() - start;
 
       if (navigator.connection) {
-        type = (navigator.connection.effectiveType || '4G').toUpperCase();
+        type = ''; // 4G metni kaldırıldı, sadece çubuklar kalacak
       } else {
-        type = rtt < 300 ? 'LTE' : '3G';
+        type = ''; // LTE/3G metinleri kaldırıldı
       }
 
       if (rtt < 150) level = 'perfect';
@@ -2012,6 +2012,7 @@ function toggleActivePlayerPlay() {
 }
 
 function showMediaStatusFeedback(sectionId) {
+  return; // Tesla: Hayalet ikonlar engellendi
   const container = document.getElementById(sectionId);
   if (!container) return;
   
