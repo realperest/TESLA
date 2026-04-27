@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 540 140">
+  <defs>
+    <style>
+      @import url('https://fonts.googleapis.com/css2?family=Fredoka:wght@700&amp;display=swap');
+      .t-text { font-family: 'Fredoka', sans-serif; font-weight: 700; font-size: 110px; letter-spacing: -2px; }
+    </style>
+  </defs>
+  
+  <!-- T -->
+  <text x="10" y="105" class="t-text" fill="#3EA35B">T</text>
+  
+  <!-- o -->
+  <text x="75" y="105" class="t-text" fill="#7D2FA9">o</text>
+  
+  <!-- b -->
+  <text x="140" y="105" class="t-text" fill="#4F6FB1">b</text>
+  
+  <!-- e -->
+  <text x="205" y="105" class="t-text" fill="#FECB16">e</text>
+  
+  <!-- T (Red with Play) -->
+  <g transform="translate(265, 10)">
+    <text x="0" y="95" class="t-text" fill="#B10000">T</text>
+    <path d="M45 40 L58 48 L45 56 Z" fill="white" />
+  </g>
+  
+  <!-- u -->
+  <text x="325" y="105" class="t-text" fill="#F27B31">u</text>
+  
+  <!-- b -->
+  <text x="390" y="105" class="t-text" fill="#346095">b</text>
+  
+  <!-- e -->
+  <text x="455" y="105" class="t-text" fill="#9ECB3C">e</text>
+</svg>
