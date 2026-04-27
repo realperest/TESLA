@@ -9,7 +9,7 @@
   flex-direction: column;
   overflow: hidden;
   background: var(--bg);
-  --yt-top-btn-w: 168px;
+  --yt-top-btn-w: 110px;
 }
 
 /* ── Üst bar (her iki view'de sabit) ─────────────────────── */
@@ -101,10 +101,13 @@
 #yt-feed-mode {
   display: flex;
   align-items: center;
-  gap: 6px;
-  margin-left: auto;
+  gap: 4px;
+  margin-left: 12px;
   flex-shrink: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
 }
+#yt-feed-mode::-webkit-scrollbar { display: none; }
 
 .yt-mode-btn {
   min-height: 36px;
@@ -121,7 +124,8 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  width: var(--yt-top-btn-w);
+  min-width: 90px;
+  width: auto;
   justify-content: center;
 }
 

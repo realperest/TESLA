@@ -41,7 +41,7 @@ let _iptvOverlayTimer = null;
 let resolvedVideo = null;
 let _ytResolving = false;
 let _ytLastVideoId = '';
-let _ytMainFeedMode = 'smart';
+let _ytMainFeedMode = 'trending';
 let _ytInputMode = 'search';
 let _activeSection = 'home';
 let _membershipInterestTags = [];
@@ -1424,18 +1424,25 @@ function extractKeywords(text) {
     .slice(0, 6);
 }
 
+async function setYtFeedMode(mode) {
+  _ytMainFeedMode = mode;
+  await ytLoadTrending();
+}
+
 async function ytLoadTrending() {
   ytShowView('main');
-  const smartBtn = document.getElementById('yt-mode-smart');
-  const historyBtn = document.getElementById('yt-mode-history');
-  if (smartBtn && historyBtn) {
-    smartBtn.classList.toggle('active', _ytMainFeedMode === 'smart');
-    historyBtn.classList.toggle('active', _ytMainFeedMode === 'history');
-  }
+  
+  // Aktif buton görselini güncelle
+  document.querySelectorAll('.yt-mode-btn').forEach(btn => {
+    const btnMode = btn.getAttribute('onclick').match(/'([^']+)'/)[1];
+    btn.classList.toggle('active', btnMode === _ytMainFeedMode);
+  });
 
+  ytError('');
+
+  // ── GEÇMİŞ MODU ──
   if (_ytMainFeedMode === 'history') {
     ytLoading(true, typeof AppI18n !== 'undefined' ? AppI18n.t('ytHistoryLoading') : 'Geçmiş videolar hazırlanıyor...');
-    ytError('');
     const history = ytGetHistory();
     ytLoading(false);
     if (history.length) {
@@ -1443,71 +1450,59 @@ async function ytLoadTrending() {
       return;
     }
     const hEmpty = typeof AppI18n !== 'undefined' ? AppI18n.t('ytHistoryEmpty') : 'Henüz izleme geçmişi bulunamadı';
-    document.getElementById('yt-main-grid').innerHTML = `
-      <div class="yt-grid-empty">
-        <div class="icon" style="font-size:44px;opacity:0.35">•</div>
-        <div>${esc(hEmpty)}</div>
-      </div>`;
+    document.getElementById('yt-main-grid').innerHTML = `<div class="yt-grid-empty"><div>${esc(hEmpty)}</div></div>`;
     return;
   }
 
-  ytLoading(true, typeof AppI18n !== 'undefined' ? AppI18n.t('ytSmartLoading') : 'Sana uygun videolar hazırlanıyor...');
-  ytError('');
-
-  try {
-    let queries = [];
+  // ── TRENDLER MODU ──
+  if (_ytMainFeedMode === 'trending') {
+    ytLoading(true, 'Trend videolar yükleniyor...');
     try {
-      const profile = await API.get('/profile/interests');
-      _membershipInterestTags = Array.isArray(profile?.terms)
-        ? profile.terms.map(s => String(s || '').trim()).filter(Boolean).slice(0, 12)
-        : [];
-      _userLanguage = String(profile?.language || _userLanguage || 'tr').toLowerCase();
-      _interestTagsFetchedAt = Date.now();
-      applyPlayerLocale();
-      queries = _membershipInterestTags.slice(0, 6);
-    } catch {}
-
-    if (!queries.length) {
-      queries = buildInterestTerms().slice(0, 6);
-    }
-
-    if (queries.length) {
-      const responses = await Promise.all(
-        queries.map(q => fetch(`/api/youtube/search?q=${encodeURIComponent(q)}&n=16&lang=${encodeURIComponent(_userLanguage)}`))
-      );
-      const payloads = await Promise.all(responses.map(r => r.ok ? r.json() : []));
-      const personalized = diversifyVideosByQuery(payloads, queries, '').slice(0, 40);
-      if (personalized.length) {
-        ytLoading(false);
-        renderMainGrid(personalized);
-        return;
+      const r = await fetch('/api/youtube/trending');
+      const data = await r.json();
+      ytLoading(false);
+      if (Array.isArray(data) && data.length) {
+        renderMainGrid(data);
+      } else {
+        ytError('Trend videolar alınamadı.');
       }
+    } catch {
+      ytLoading(false);
+      ytError('Bağlantı hatası.');
     }
-
-    // İlgi temelli sonuç gelmezse trend'e düş.
-    const r = await fetch('/api/youtube/trending');
-    const data = await r.json();
-    ytLoading(false);
-    if (Array.isArray(data) && data.length) {
-      renderMainGrid(data);
-    } else {
-      const hint = typeof AppI18n !== 'undefined' ? AppI18n.t('ytHintSearchYoutube') : 'YouTube\'da bir şeyler ara';
-      document.getElementById('yt-main-grid').innerHTML = `
-        <div class="yt-grid-empty">
-          <div class="icon" style="font-size:48px;opacity:0.3">▶️</div>
-          <div>${esc(hint)}</div>
-        </div>`;
-    }
-  } catch {
-    ytLoading(false);
-    const hint = typeof AppI18n !== 'undefined' ? AppI18n.t('ytHintStartSearch') : 'Aramaya başla';
-    document.getElementById('yt-main-grid').innerHTML = `
-      <div class="yt-grid-empty"><div class="icon">🔍</div><div>${esc(hint)}</div></div>`;
+    return;
   }
-}
 
-function setYtFeedMode(mode) {
-  _ytMainFeedMode = mode === 'history' ? 'history' : 'smart';
+  // ── KATEGORİ MODLARI (Arama tabanlı) ──
+  const categoryQueries = {
+    news: 'Haberler',
+    tech: 'Teknoloji',
+    music: 'Müzik',
+    gaming: 'Oyun',
+    automotive: 'Otomobil'
+  };
+
+  const query = categoryQueries[_ytMainFeedMode];
+  if (query) {
+    ytLoading(true, `${query} kategorisi yükleniyor...`);
+    try {
+      const r = await fetch(`/api/youtube/search?q=${encodeURIComponent(query)}&lang=${encodeURIComponent(_userLanguage)}`);
+      const data = await r.json();
+      ytLoading(false);
+      if (Array.isArray(data)) {
+        renderMainGrid(data);
+      } else {
+        ytError('İçerik bulunamadı.');
+      }
+    } catch {
+      ytLoading(false);
+      ytError('Arama hatası.');
+    }
+    return;
+  }
+
+  // Default fallback (hiçbiri değilse trendlere dön)
+  _ytMainFeedMode = 'trending';
   ytLoadTrending();
 }
 
