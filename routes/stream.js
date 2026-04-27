@@ -64,8 +64,8 @@ async function handleStreamConnection(ws, req) {
       '--no-playlist', '--no-warnings', '--force-ipv4',
       '--user-agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
       '--extractor-args', isYouTube ? 'youtube:player_client=tv,android' : `generic:referer=https://www.trtizle.com/`,
-      isYouTube && startTime !== '0' ? '--download-sections' : null, 
-      isYouTube && startTime !== '0' ? `*${startTime}-inf` : null,
+      isYouTube ? '--download-sections' : null, 
+      isYouTube ? `*${startTime}-inf` : null,
       '--format', 'best[height<=720]', // Tek parça format her zaman daha hızlı açılır
       '-o', '-', targetUrl
     ].concat(_ytCookieArgs()).filter(Boolean);
