@@ -125,6 +125,27 @@ async function handleStreamConnection(ws, req) {
   });
 }
 
+async function handleAudioRequest(req, res) {
+  const targetUrl = req.query.url;
+  if (!targetUrl) return res.status(400).send('URL required');
+  
+  res.setHeader('Content-Type', 'audio/mpeg');
+  const yt = spawn(YT_DLP, [
+    '--no-playlist', '--format', 'bestaudio', '-o', '-', targetUrl
+  ].concat(_ytCookieArgs()));
+  
+  const ff = spawn(FFMPEG_PATH, [
+    '-i', 'pipe:0', '-acodec', 'libmp3lame', '-ab', '128k', '-f', 'mp3', 'pipe:1'
+  ]);
+  
+  yt.stdout.pipe(ff.stdin);
+  ff.stdout.pipe(res);
+  
+  res.on('close', () => {
+    try { yt.kill(); ff.kill(); } catch(e){}
+  });
+}
+
 function _cleanupSession(ws) {
   const session = ACTIVE.get(ws);
   if (session) {
@@ -136,4 +157,4 @@ function _cleanupSession(ws) {
   }
 }
 
-module.exports = { router, handleStreamConnection };
+module.exports = { router, handleStreamConnection, handleAudioRequest };
