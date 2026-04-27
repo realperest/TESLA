@@ -90,6 +90,8 @@ async function handleStreamConnection(ws, req) {
     // ── Zırhlı Hata Yakalayıcılar ──
     yt.stdout.on('error', () => {});
     ff.stdin.on('error', () => {});
+    yt.stderr.on('error', () => {});
+    ff.stderr.on('error', () => {});
 
     yt.stderr.on('data', (d) => {
       const msg = d.toString();

@@ -147,28 +147,37 @@ class TeslaPlayerV4 extends TeslaPlayer {
     }
 
     _createFreezeFrame() {
-        // Kontrollerin olduğu yt-player-container içine ekle
         const container = this._hudContainer || document.getElementById('yt-player-container');
         if (!container || !this.canvas) return;
         
         this._removeFreezeFrame();
+        const rect = this.canvas.getBoundingClientRect();
         
-        const freeze = document.createElement('canvas');
+        const freeze = document.createElement('div');
         freeze.id = 'v4-freeze-frame';
-        freeze.width = this.canvas.width;
-        freeze.height = this.canvas.height;
-        // z-index: 1 -> Canvas'ın üstünde ama HUD'un (z-index belirtilmemişse 0'dır, ama genelde üsttedir) altında
-        // HUD elemanları player-container içinde olduğu için bu canvas'ı en başa eklersek arkada kalır
-        freeze.style.cssText = 'position:absolute; inset:0; width:100%; height:100%; z-index:1; pointer-events:none; object-fit:contain;';
-
-        const ctx = freeze.getContext('2d');
-        if (ctx) {
-            try {
-                ctx.drawImage(this.canvas, 0, 0);
-                // Container'ın en başına ekle (diğer elemanların arkasında kalsın)
-                container.insertBefore(freeze, container.firstChild);
-            } catch (e) { console.warn('[V4] Clone failed:', e); }
-        }
+        
+        const canvas = document.createElement('canvas');
+        canvas.width = this.canvas.width;
+        canvas.height = this.canvas.height;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(this.canvas, 0, 0, canvas.width, canvas.height);
+        
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.7);
+        
+        freeze.style.cssText = `
+            position: absolute;
+            top: ${this.canvas.offsetTop}px;
+            left: ${this.canvas.offsetLeft}px;
+            width: ${rect.width}px;
+            height: ${rect.height}px;
+            background: url(${dataUrl}) center/cover no-repeat;
+            filter: blur(8px) brightness(0.7);
+            z-index: 10;
+            pointer-events: none;
+            border-radius: 4px;
+        `;
+        
+        container.appendChild(freeze);
     }
 
     _removeFreezeFrame() {
