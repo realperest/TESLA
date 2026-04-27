@@ -1,29 +1,25 @@
-'use strict';
-
+const express = require('express');
+const router = express.Router();
 const { spawn } = require('child_process');
-const http      = require('http');
-const https     = require('https');
-const path      = require('path');
-const fs        = require('fs');
+const path = require('path');
+const fs = require('fs');
 
-let FFMPEG_PATH;
-try { FFMPEG_PATH = require('ffmpeg-static'); } catch { FFMPEG_PATH = process.env.FFMPEG_PATH || 'ffmpeg'; }
-
-const YT_DLP = (() => {
-  const venv = path.join(__dirname, '..', 'venv', 'Scripts', 'yt-dlp.exe');
-  try { fs.accessSync(venv); return venv; } catch { return 'yt-dlp'; }
-})();
-
-function _ytCookieArgs() {
-  const p = path.join(__dirname, '..', 'youtube-cookies.txt');
-  try { if (fs.existsSync(p) && fs.statSync(p).size > 0) return ['--cookies', p]; } catch {}
-  return [];
-}
-
+// Global state to track active streams per connection
 const ACTIVE = new Map();
 
+const FFMPEG_PATH = process.env.FFMPEG_PATH || 'ffmpeg';
+const YT_DLP = process.env.YT_DLP_PATH || 'yt-dlp';
+
 function _isYouTubeUrl(url) {
-  return /youtube\.com|youtu\.be/.test(url);
+  return url.includes('youtube.com/') || url.includes('youtu.be/');
+}
+
+function _ytCookieArgs() {
+  const cookiePath = path.join(__dirname, '..', 'youtube-cookies.txt');
+  if (fs.existsSync(cookiePath)) {
+    return ['--cookies', cookiePath];
+  }
+  return [];
 }
 
 function _ffmpegOutputs() {
@@ -75,7 +71,7 @@ async function handleStreamConnection(ws, req) {
     ].concat(_ytCookieArgs()).filter(Boolean);
     
     const ffArgs = [
-      '-thread_queue_size', '8192',
+      '-thread_queue_size', '8192', '-re', 
       '-i', 'pipe:0',
       ..._ffmpegOutputs()
     ].filter(Boolean);
@@ -130,16 +126,14 @@ async function handleStreamConnection(ws, req) {
 }
 
 function _cleanupSession(ws) {
-  const entry = ACTIVE.get(ws);
-  if (entry) {
-    if (entry.yt) try { entry.yt.kill(); } catch {}
-    if (entry.ff) try { entry.ff.kill(); } catch {}
+  const session = ACTIVE.get(ws);
+  if (session) {
+    try {
+      if (session.ff) session.ff.kill();
+      if (session.yt) session.yt.kill();
+    } catch (e) {}
     ACTIVE.delete(ws);
   }
 }
 
-function handleAudioRequest(req, res) {
-  res.status(404).end();
-}
-
-module.exports = { handleStreamConnection, handleAudioRequest };
+module.exports = { router, handleStreamConnection };
