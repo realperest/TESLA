@@ -56,6 +56,18 @@ function cookieArgsForFeed() {
   return [];
 }
 
+function isLiveContent(v) {
+  if (!v) return true;
+  // yt-dlp flagleri
+  if (v.is_live === true || v.live_status === 'is_live' || v.live_status === 'was_live') return true;
+  // Süre kontrolü (canlı yayınların genellikle süresi yoktur veya 0'dır)
+  if (!v.duration || v.duration <= 0) return true;
+  // Başlık kontrolü (garantiye almak için)
+  const title = String(v.title || '').toLowerCase();
+  if (title.includes('canlı yayın') || title.includes('live stream') || title.includes('canlı izle')) return true;
+  return false;
+}
+
 function ytDlpCookieFetch(url, maxItems = 30) {
   const cookieArgs = cookieArgsForFeed();
 
@@ -80,7 +92,9 @@ function ytDlpCookieFetch(url, maxItems = 30) {
       for (const line of stdout.trim().split('\n')) {
         try {
           const v = JSON.parse(line);
-          if (!v.id || !v.duration) continue;
+          if (!v.id) continue;
+          if (isLiveContent(v)) continue; // Canlı yayın filtresi
+
           results.push({
             videoId: v.id,
             title: v.title || '',
@@ -120,16 +134,7 @@ router.get('/search', (req, res) => {
   const count = Math.min(parseInt(n) || 20, 50);
   const l = String(lang || 'tr').toLowerCase();
   const langHint = {
-    tr: 'turkce',
-    en: 'english',
-    de: 'deutsch',
-    fr: 'francais',
-    es: 'espanol',
-    it: 'italiano',
-    pt: 'portugues',
-    nl: 'nederlands',
-    ru: 'russian',
-    ar: 'arabic',
+    tr: 'turkce', en: 'english', de: 'deutsch', fr: 'francais', es: 'espanol', it: 'italiano', pt: 'portugues', nl: 'nederlands', ru: 'russian', ar: 'arabic',
   }[l] || '';
   const queryText = langHint ? `${q} ${langHint}` : String(q);
 
@@ -148,6 +153,8 @@ router.get('/search', (req, res) => {
       try {
         const v = JSON.parse(line);
         if (!v.id) continue;
+        if (isLiveContent(v)) continue; // Canlı yayın filtresi
+
         results.push({
           videoId: v.id,
           title: v.title || '',
@@ -209,7 +216,9 @@ router.get('/trending', async (req, res) => {
       for (const line of stdout.trim().split('\n')) {
         try {
           const v = JSON.parse(line);
-          if (!v.id || !v.duration) continue;
+          if (!v.id) continue;
+          if (isLiveContent(v)) continue;
+
           results.push({
             videoId: v.id,
             title: v.title || '',
