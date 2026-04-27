@@ -254,7 +254,7 @@
   flex-direction: column; /* Dikey dağılım: Header -> Video -> Controls */
   align-items: center;
   justify-content: center;
-  border-right: 1px solid var(--border);
+  border: none;
   container-type: size;
   overflow: hidden;
 }

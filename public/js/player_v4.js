@@ -188,11 +188,11 @@ class TeslaPlayerV4 extends TeslaPlayer {
             left: ${this.canvas.offsetLeft}px;
             width: ${rect.width}px;
             height: ${rect.height}px;
-            background: url(${dataUrl}) center/cover no-repeat;
-            filter: blur(8px) brightness(0.7);
+            background: url(${dataUrl}) center/100% 100% no-repeat;
+            filter: blur(10px) brightness(0.6);
             z-index: 10;
             pointer-events: none;
-            border-radius: 4px;
+            border: none;
         `;
         
         container.appendChild(freeze);
