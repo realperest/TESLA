@@ -73,7 +73,8 @@ async function handleStreamConnection(ws, req) {
     ].concat(_ytCookieArgs()).filter(Boolean);
     
     const ffArgs = [
-      '-thread_queue_size', '1024', 
+      '-thread_queue_size', '4096', 
+      '-re',
       '-i', 'pipe:0',
       ..._ffmpegOutputs()
     ].filter(Boolean);
