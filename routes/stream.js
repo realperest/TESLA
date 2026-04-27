@@ -28,21 +28,22 @@ function _isYouTubeUrl(url) {
 
 function _ffmpegOutputs() {
   return [
-    '-vf', 'scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2:color=black,unsharp=5:5:1.0:5:5:0.5,fps=30',
+    '-vf', 'scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2:color=black,fps=30', // unsharp kaldırıldı (CPU dostu)
     '-f', 'mpegts',
     '-codec:v', 'mpeg1video',
     '-s', '1280x720',
-    '-b:v', '6000k',
-    '-maxrate', '8000k',
-    '-bufsize', '12000k',
-    '-g', '15',
+    '-b:v', '5000k', // Bitrate bir tık düşürüldü (Daha stabil akış)
+    '-maxrate', '6000k',
+    '-bufsize', '10000k',
+    '-g', '30', // GOP artırıldı (İşlemci yükü azalır)
+    '-threads', '0', // Tüm CPU çekirdeklerini kullan
     '-acodec', 'mp2',
-    '-af', 'volume=2.0,aresample=async=1:min_hard_comp=0.100000:first_pts=0', // Force audio sync
+    '-af', 'volume=2.0,aresample=async=1:min_hard_comp=0.100000:first_pts=0',
     '-ar', '44100',
     '-ac', '2',
-    '-b:a', '256k',
+    '-b:a', '192k',
     '-mpegts_flags', '+initial_discontinuity+system_b+latm',
-    '-fflags', '+genpts+discardcorrupt+igndts', // Better timestamp generation
+    '-fflags', '+genpts+discardcorrupt+igndts',
     '-muxdelay', '0',
     'pipe:1'
   ];
