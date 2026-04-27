@@ -15,10 +15,13 @@ class TeslaPlayerV4 extends TeslaPlayer {
 
     async load(channel, opts = {}) {
         this.stop(true); 
-        this._showOpeningOverlay(); // Yeni: Açılış mesajı
-        
         this.currentChannel = channel;
         this.startTime = opts.startTime || 0;
+
+        // Sadece ilk açılışta (0. saniye) açılış mesajını göster
+        if (this.startTime === 0 || this.startTime === '0') {
+            this._showOpeningOverlay();
+        }
         
         const isResume = this.startTime > 0;
         const spinner = document.getElementById(this.spinnerId);
@@ -64,8 +67,8 @@ class TeslaPlayerV4 extends TeslaPlayer {
             autoplay: true,
             disableGl: true,
             preserveDrawingBuffer: true,
-            audioBufferSize: 512 * 1024,   // 512KB
-            videoBufferSize: 2 * 1024 * 1024, // 2MB
+            audioBufferSize: 512 * 1024,   
+            videoBufferSize: 512 * 1024, // 512KB'a düşürüldü (4 kat daha hızlı başlangıç)
             maxAudioLag: 0.8, // Agresif senkronizasyon (Yağ gibi akış için)
             onPlay: () => {
                 this.isPlaying = true;
