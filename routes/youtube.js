@@ -166,7 +166,23 @@ router.get('/search', (req, res) => {
 // ── Trending — önce Invidious, olmazsa yt-dlp ile popüler arama ────────────
 router.get('/trending', async (req, res) => {
   try {
-    // 1. Yol: Invidious (En Hızlısı)
+    // 1. Yol: YouTube Ana Sayfası (Home Feed - Çerezler varsa kişiselleştirilmiş gelir)
+    try {
+      const results = await ytDlpCookieFetch('https://www.youtube.com/');
+      if (results && results.length > 5) return res.json(results);
+    } catch (e) {
+      console.warn('[YT/home] yt-dlp home feed failed:', e.message);
+    }
+
+    // 2. Yol: YouTube Trending Sayfası (Genel Trendler)
+    try {
+      const results = await ytDlpCookieFetch('https://www.youtube.com/feed/trending');
+      if (results && results.length > 0) return res.json(results);
+    } catch (e) {
+      console.warn('[YT/trending] yt-dlp feed/trending failed:', e.message);
+    }
+
+    // 3. Yol: Invidious (Çerezsiz Fallback)
     const inv = await invFetch('/trending?type=default&region=TR');
     if (inv && Array.isArray(inv) && inv.length > 0) {
       return res.json(
@@ -182,15 +198,7 @@ router.get('/trending', async (req, res) => {
       );
     }
 
-    // 2. Yol: Gerçek YouTube Trending Sayfası (yt-dlp + Cookies)
-    try {
-      const results = await ytDlpCookieFetch('https://www.youtube.com/feed/trending');
-      if (results && results.length > 0) return res.json(results);
-    } catch (e) {
-      console.warn('[YT/trending] yt-dlp feed/trending failed:', e.message);
-    }
-
-    // 3. Yol: YouTube Arama (Fallback)
+    // 4. Yol: YouTube Arama (Son Çare)
     const query = 'ytsearch25:Türkiye trend videolar';
     execFile(YT_DLP, [
       ...getYoutubeCookieArgs(),
