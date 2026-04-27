@@ -40,8 +40,9 @@ function _ffmpegOutputs() {
     '-ar', '44100',
     '-ac', '2',
     '-b:a', '192k',
-    '-mpegts_flags', '+initial_discontinuity+system_b+latm',
-    '-fflags', '+genpts+discardcorrupt+igndts',
+    '-mpegts_flags', '+initial_discontinuity+system_b+latm+low_delay',
+    '-fflags', '+genpts+discardcorrupt+igndts+nobuffer',
+    '-flush_packets', '1',
     '-muxdelay', '0',
     'pipe:1'
   ];
@@ -69,12 +70,14 @@ async function handleStreamConnection(ws, req) {
       isYouTube ? '--download-sections' : null, 
       isYouTube ? `*${startTime}-inf` : null,
       '--format', isYouTube ? 'bestvideo[height<=720][ext=mp4]+bestaudio[ext=m4a]/best[height<=720]' : 'best[height<=720]',
+      '--buffer-size', '16K',
       '-o', '-', targetUrl
     ].concat(_ytCookieArgs()).filter(Boolean);
     
     const ffArgs = [
       '-thread_queue_size', '4096', 
       '-re',
+      '-readrate_initial_burst', '3.0', // İlk 3 saniyeyi burst (hızlı) gönder
       '-i', 'pipe:0',
       ..._ffmpegOutputs()
     ].filter(Boolean);
