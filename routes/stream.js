@@ -24,8 +24,8 @@ function _ytCookieArgs() {
 
 function _ffmpegOutputs() {
   return [
-    '-probesize', '32',
-    '-analyzeduration', '0',
+    '-probesize', '32k',
+    '-analyzeduration', '100k',
     '-vf', 'scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2:color=black,unsharp=5:5:1.0:5:5:0.5,fps=30',
     '-f', 'mpegts',
     '-codec:v', 'mpeg1video',
@@ -68,12 +68,12 @@ async function handleStreamConnection(ws, req) {
       '--extractor-args', isYouTube ? 'youtube:player_client=tv,android' : `generic:referer=https://www.trtizle.com/`,
       isYouTube ? '--download-sections' : null, 
       isYouTube ? `*${startTime}-inf` : null,
-      '--format', 'best[height<=720]', // Tek parça format her zaman daha hızlı açılır
+      '--format', isYouTube ? 'bestvideo[height<=720][ext=mp4]+bestaudio[ext=m4a]/best[height<=720]' : 'best[height<=720]',
       '-o', '-', targetUrl
     ].concat(_ytCookieArgs()).filter(Boolean);
     
     const ffArgs = [
-      '-thread_queue_size', '8192', '-re', 
+      '-thread_queue_size', '1024', 
       '-i', 'pipe:0',
       ..._ffmpegOutputs()
     ].filter(Boolean);

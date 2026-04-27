@@ -67,9 +67,9 @@ class TeslaPlayerV4 extends TeslaPlayer {
             autoplay: true,
             disableGl: true,
             preserveDrawingBuffer: true,
-            audioBufferSize: 512 * 1024,   
-            videoBufferSize: 512 * 1024, // 512KB'a düşürüldü (4 kat daha hızlı başlangıç)
-            maxAudioLag: 0.8, // Agresif senkronizasyon (Yağ gibi akış için)
+            audioBufferSize: 128 * 1024, // 128KB (Gecikmeyi önlemek için küçültüldü)
+            videoBufferSize: 512 * 1024,
+            maxAudioLag: 0.3, // Daha sıkı dudak senkronizasyonu (0.8 -> 0.3)
             onPlay: () => {
                 this.isPlaying = true;
                 // Bağlantı geri geldiğinde sesi sıfırla (üst üste binmeyi önler)
