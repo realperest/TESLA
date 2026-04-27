@@ -102,6 +102,17 @@ class TeslaPlayerV4 extends TeslaPlayer {
             }
         });
 
+        // ── AUTO-RECONNECT (YAYIN KESİLİRSE OTOMATİK DEVAM ET) ──
+        if (this.mpegPlayer.source && this.mpegPlayer.source.socket) {
+            this.mpegPlayer.source.socket.onclose = () => {
+                // Eğer kasıtlı olarak durdurulmadıysa ve hala bu kanaldaysak yeniden bağlan
+                if (this.isPlaying && this.currentChannel) {
+                    console.log('[V4] Connection lost at', this._lastKnownAbsTime, 's. Auto-resuming...');
+                    this.load(this.currentChannel, { startTime: this._lastKnownAbsTime });
+                }
+            };
+        }
+
         this._audioRetry = setInterval(() => {
             const audio = this.mpegPlayer?.audioOut;
             if (audio?.context?.state === 'suspended') audio.context.resume();

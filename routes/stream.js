@@ -69,6 +69,10 @@ async function handleStreamConnection(ws, req) {
       isYouTube ? '--download-sections' : null, 
       isYouTube ? `*${startTime}-inf` : null,
       '--format', 'best[height<=720]', // Tek parça format her zaman daha hızlı açılır
+      '--socket-timeout', '30',
+      '--file-access-retries', '5',
+      '--fragment-retries', '10',
+      '--hls-prefer-native',
       '-o', '-', targetUrl
     ].concat(_ytCookieArgs()).filter(Boolean);
     
