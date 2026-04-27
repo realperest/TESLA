@@ -67,9 +67,9 @@ class TeslaPlayerV4 extends TeslaPlayer {
             autoplay: true,
             disableGl: true,
             preserveDrawingBuffer: true,
-            audioBufferSize: 128 * 1024, // Kararlı seviyeye çekildi
-            videoBufferSize: 512 * 1024, // Kararlı seviyeye çekildi
-            maxAudioLag: 0.4, // Dengeli senkronizasyon
+            audioBufferSize: 512 * 1024,   
+            videoBufferSize: 512 * 1024,
+            maxAudioLag: 0.8, // Akıcı oynatım için ilk değer
             onPlay: () => {
                 this.isPlaying = true;
                 // Bağlantı geri geldiğinde sesi sıfırla (üst üste binmeyi önler)
@@ -135,7 +135,8 @@ class TeslaPlayerV4 extends TeslaPlayer {
             this._pausedChannel = this.currentChannel;
             this.stop(true); 
             
-            // DURAKLATINCA KONTROLLERİ ZORLA GÖRÜNÜR YAP
+            // DURAKLATINCA KONTROLLERİ ZORLA GÖRÜNÜR YAP VE İKONU GÖSTER
+            document.getElementById('yt-player-area')?.classList.add('yt-paused');
             const controls = document.getElementById('yt-external-controls');
             const header = document.getElementById('yt-external-header');
             if (controls) controls.style.opacity = '1';

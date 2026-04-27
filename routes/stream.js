@@ -68,8 +68,7 @@ async function handleStreamConnection(ws, req) {
       '--extractor-args', isYouTube ? 'youtube:player_client=tv,android' : `generic:referer=https://www.trtizle.com/`,
       isYouTube ? '--download-sections' : null, 
       isYouTube ? `*${startTime}-inf` : null,
-      '--format', isYouTube ? 'bestvideo[height<=720][ext=mp4]+bestaudio[ext=m4a]/best[height<=720]' : 'best[height<=720]',
-      '--buffer-size', '16K',
+      '--format', 'best[height<=720]', // Tek parça format her zaman daha hızlı açılır
       '-o', '-', targetUrl
     ].concat(_ytCookieArgs()).filter(Boolean);
     
