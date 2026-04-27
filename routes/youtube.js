@@ -23,11 +23,11 @@ const YT_DLP = (() => {
 
 // Invidious failover (trending için)
 const INVIDIOUS = [
+  'https://invidious.ducks.party',
+  'https://invidious.io.lol',
   'https://inv.nadeko.net',
   'https://invidious.nerdvpn.de',
-  'https://inv.thepixora.com',
   'https://invidious.privacydev.net',
-  'https://invidious.flokinet.to',
 ];
 
 async function invFetch(path) {
@@ -165,13 +165,12 @@ router.get('/search', (req, res) => {
 
 // ── Trending — önce Invidious, olmazsa yt-dlp ile popüler arama ────────────
 router.get('/trending', async (req, res) => {
-  // Önce Invidious dene
-  const inv = await invFetch('/trending?type=default&region=TR');
-  if (inv && Array.isArray(inv) && inv.length > 0) {
-    return res.json(
-      inv
-        .filter(v => !v.liveNow && v.lengthSeconds > 0)
-        .map(v => ({
+  try {
+    // 1. Yol: Invidious (En Hızlısı)
+    const inv = await invFetch('/trending?type=default&region=TR');
+    if (inv && Array.isArray(inv) && inv.length > 0) {
+      return res.json(
+        inv.filter(v => !v.liveNow && v.lengthSeconds > 0).map(v => ({
           videoId: v.videoId,
           title: v.title || '',
           thumbnail: `https://i.ytimg.com/vi/${v.videoId}/hqdefault.jpg`,
@@ -180,34 +179,46 @@ router.get('/trending', async (req, res) => {
           channel: v.author || '',
           publishedText: v.publishedText || '',
         }))
-    );
-  }
-
-  // Invidious çalışmıyorsa yt-dlp ile popüler arama
-  const query = 'ytsearch20:Türkiye gündem 2025';
-  execFile(YT_DLP, [
-    ...getYoutubeCookieArgs(),
-    query, '--dump-json', '--flat-playlist', '--no-download', '--no-warnings',
-  ], { timeout: 25000, maxBuffer: 4 * 1024 * 1024 }, (err, stdout) => {
-    if (err) return res.json([]);
-    const results = [];
-    for (const line of stdout.trim().split('\n')) {
-      try {
-        const v = JSON.parse(line);
-        if (!v.id || !v.duration) continue; // süresiz = canlı yayın
-        results.push({
-          videoId: v.id,
-          title: v.title || '',
-          thumbnail: `https://i.ytimg.com/vi/${v.id}/hqdefault.jpg`,
-          duration: Math.round(v.duration || 0),
-          views: v.view_count || 0,
-          channel: v.channel || v.uploader || '',
-          publishedText: '',
-        });
-      } catch {}
+      );
     }
-    res.json(results);
-  });
+
+    // 2. Yol: Gerçek YouTube Trending Sayfası (yt-dlp + Cookies)
+    try {
+      const results = await ytDlpCookieFetch('https://www.youtube.com/feed/trending');
+      if (results && results.length > 0) return res.json(results);
+    } catch (e) {
+      console.warn('[YT/trending] yt-dlp feed/trending failed:', e.message);
+    }
+
+    // 3. Yol: YouTube Arama (Fallback)
+    const query = 'ytsearch25:Türkiye trend videolar';
+    execFile(YT_DLP, [
+      ...getYoutubeCookieArgs(),
+      query, '--dump-json', '--flat-playlist', '--no-download', '--no-warnings',
+    ], { timeout: 30000, maxBuffer: 8 * 1024 * 1024 }, (err, stdout) => {
+      if (err) return res.json([]);
+      const results = [];
+      for (const line of stdout.trim().split('\n')) {
+        try {
+          const v = JSON.parse(line);
+          if (!v.id || !v.duration) continue;
+          results.push({
+            videoId: v.id,
+            title: v.title || '',
+            thumbnail: `https://i.ytimg.com/vi/${v.id}/hqdefault.jpg`,
+            duration: Math.round(v.duration || 0),
+            views: v.view_count || 0,
+            channel: v.channel || v.uploader || '',
+            publishedText: '',
+          });
+        } catch {}
+      }
+      res.json(results);
+    });
+  } catch (err) {
+    console.error('[YT/trending] Fatal:', err.message);
+    res.json([]);
+  }
 });
 
 module.exports = router;
