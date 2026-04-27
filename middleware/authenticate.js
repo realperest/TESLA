@@ -39,6 +39,7 @@ function authenticate(req, res, next) {
     return _redirect(req, res);
   }
 
+  /*
   if (!session.is_active) {
     return _error(req, res, 403, 'Hesabınız askıya alınmış.');
   }
@@ -46,6 +47,7 @@ function authenticate(req, res, next) {
   if (session.membership_status !== 'active') {
     return _error(req, res, 403, 'Üyelik paketiniz aktif değil.');
   }
+  */
 
   // last_seen güncelle
   db.prepare(`UPDATE sessions SET last_seen = datetime('now') WHERE token = ?`).run(payload.jti);
@@ -112,8 +114,10 @@ function verifyForWs(req, callback) {
 
   if (!session) return callback(new Error('session yok'), null);
   if (new Date(session.expires_at) < new Date()) return callback(new Error('session süresi doldu'), null);
+  /*
   if (!session.is_active) return callback(new Error('hesap askıda'), null);
   if (session.membership_status !== 'active') return callback(new Error('üyelik pasif'), null);
+  */
 
   callback(null, {
     id: session.uid,

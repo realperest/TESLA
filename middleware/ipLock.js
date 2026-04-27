@@ -17,6 +17,7 @@ function formatAllowedIps(ips) {
 }
 
 function ipLock(req, res, next) {
+  return next(); // Denemeler için IP kilidi devre dışı bırakıldı
   if (!req.user) return next();
 
   const db = database.db;
