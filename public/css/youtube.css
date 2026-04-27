@@ -364,9 +364,9 @@
   opacity: 0;
   pointer-events: none;
   transition: opacity 0.1s ease-out, transform 0.1s ease-out;
-  z-index: 20;
+  z-index: 100; /* Çok daha üstte */
 }
-#yt-central-pause svg { width: 36px; height: 36px; fill: #fff; }
+#yt-central-pause svg { width: 40px; height: 40px; fill: #fff; }
 .yt-paused #yt-central-pause { opacity: 1; transform: translate(-50%, -50%) scale(1); }
 
 /* Alt Boşluk Kontrolleri (Two-Row Layout) */
