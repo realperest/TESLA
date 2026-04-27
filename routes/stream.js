@@ -24,6 +24,8 @@ function _ytCookieArgs() {
 
 function _ffmpegOutputs() {
   return [
+    '-probesize', '32',
+    '-analyzeduration', '0',
     '-vf', 'scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2:color=black,unsharp=5:5:1.0:5:5:0.5,fps=30',
     '-f', 'mpegts',
     '-codec:v', 'mpeg1video',

@@ -9,11 +9,13 @@ class TeslaPlayerV4 extends TeslaPlayer {
         super(canvasId, opts);
         this._heartbeatTimer = null;
         this._spinnerDelayTimer = null;
-        this._hudContainer = document.getElementById('yt-player-container'); // Kontrollerin olduğu kapsayıcı
+        this._hudContainer = document.getElementById('yt-player-container');
+        if (this.canvas) this.canvas.style.backgroundColor = 'black';
     }
 
     async load(channel, opts = {}) {
         this.stop(true); 
+        this._showOpeningOverlay(); // Yeni: Açılış mesajı
         
         this.currentChannel = channel;
         this.startTime = opts.startTime || 0;
@@ -77,6 +79,7 @@ class TeslaPlayerV4 extends TeslaPlayer {
                 this.canvas.style.visibility = 'visible';
                 this._removeFreezeFrame();
                 this._removeResumingOverlay();
+                this._removeOpeningOverlay(); // Açılış mesajını kaldır
                 console.log('[V4] Playback started');
 
                 // Oynarken kontrollerin otomatik gizlenmesine izin ver (style'ı temizle)
@@ -242,6 +245,41 @@ class TeslaPlayerV4 extends TeslaPlayer {
                 }
             } catch {}
         }
+    }
+    _showOpeningOverlay() {
+        this._removeOpeningOverlay();
+        const container = this._hudContainer || document.getElementById('yt-player-container');
+        if (!container) return;
+
+        const overlay = document.createElement('div');
+        overlay.id = 'v4-opening-overlay';
+        overlay.style.cssText = `
+            position: absolute;
+            inset: 0;
+            background: #000;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 20;
+            color: white;
+            font-family: 'Inter', sans-serif;
+            gap: 15px;
+        `;
+
+        overlay.innerHTML = `
+            <div class="spinner-ring" style="width:40px; height:40px; border-width:3px"></div>
+            <div style="font-size: 14px; font-weight: bold; letter-spacing: 1px; color: #ff0000; text-shadow: 0 0 10px rgba(255,0,0,0.5)">
+                VİDEO AÇILIYOR...
+            </div>
+        `;
+
+        container.appendChild(overlay);
+    }
+
+    _removeOpeningOverlay() {
+        const overlay = document.getElementById('v4-opening-overlay');
+        if (overlay) overlay.remove();
     }
 }
 
