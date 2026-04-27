@@ -1454,17 +1454,49 @@ async function ytLoadTrending() {
     return;
   }
 
-  // ── TRENDLER MODU ──
+  // ── TRENDLER MODU (Akıllı Hibrit) ──
   if (_ytMainFeedMode === 'trending') {
-    ytLoading(true, 'Trend videolar yükleniyor...');
+    ytLoading(true, 'Trendler hazırlanıyor...');
     try {
+      let queries = [];
+      try {
+        const profile = await API.get('/profile/interests');
+        _membershipInterestTags = Array.isArray(profile?.terms)
+          ? profile.terms.map(s => String(s || '').trim()).filter(Boolean).slice(0, 8)
+          : [];
+        _userLanguage = String(profile?.language || _userLanguage || 'tr').toLowerCase();
+        _interestTagsFetchedAt = Date.now();
+        applyPlayerLocale();
+        queries = _membershipInterestTags;
+      } catch {}
+
+      if (!queries.length) {
+        queries = buildInterestTerms().slice(0, 5);
+      }
+
+      // Eğer ilgi alanı/geçmiş varsa, bunlarla arama yapıp karıştır
+      if (queries.length) {
+        const responses = await Promise.all(
+          queries.map(q => fetch(`/api/youtube/search?q=${encodeURIComponent(q)}&n=12&lang=${encodeURIComponent(_userLanguage)}`))
+        );
+        const payloads = await Promise.all(responses.map(r => r.ok ? r.json() : []));
+        const personalized = diversifyVideosByQuery(payloads, queries, '').slice(0, 40);
+        
+        if (personalized.length > 5) {
+          ytLoading(false);
+          renderMainGrid(personalized);
+          return;
+        }
+      }
+
+      // İlgi alanı yoksa veya az sonuç geldiyse genel trendlere düş
       const r = await fetch('/api/youtube/trending');
       const data = await r.json();
       ytLoading(false);
       if (Array.isArray(data) && data.length) {
         renderMainGrid(data);
       } else {
-        ytError('Trend videolar alınamadı.');
+        ytError('Trend videolar şu an alınamıyor.');
       }
     } catch {
       ytLoading(false);
@@ -1477,8 +1509,6 @@ async function ytLoadTrending() {
   const categoryQueries = {
     news: 'Haberler',
     tech: 'Teknoloji',
-    music: 'Müzik',
-    gaming: 'Oyun',
     automotive: 'Otomobil'
   };
 
