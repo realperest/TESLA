@@ -73,7 +73,7 @@ function getYtPlayerBySection(section = _activeSection) {
 
 function getYtVariantLabel(section = _activeSection) {
   if (section === 'youtube_v8') return 'YouTube';
-  if (section === 'youtube_v5') return 'YT V5';
+  if (section === 'youtube_v5') return 'YouTube (V5)';
   if (section === 'youtube_v4') return 'YT V4';
   if (section === 'youtube_v3') return 'YT V3';
   if (section === 'youtube_v2') return 'YT V2';

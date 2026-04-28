@@ -78,43 +78,33 @@ function initDecoder() {
                 frame: frame,
                 pts: frame.timestamp / 1000000
             });
-            
-            if (frameQueue.length > 90) { 
-                const old = frameQueue.shift();
-                old.frame.close();
-            }
         },
-        error: (e) => console.error('[WorkerV2] Decoder Error:', e)
+        error: (err) => {
+            console.error('[Worker] Decoder Error:', err);
+            isConfigured = false;
+        }
     });
-
     configureDecoder();
 }
 
 function configureDecoder() {
     try {
         decoder.configure({
-            codec: 'avc1.640028', // High Profile, Level 4.0 (YouTube Standartı)
+            codec: 'avc1.640028', // High Profile 4.0
             optimizeForLatency: true,
             hardwareAcceleration: 'prefer-hardware'
         });
         isConfigured = true;
-        console.log('[WorkerV2] Decoder Configured');
     } catch (err) {
-        console.error('[WorkerV2] Config Fail:', err);
+        console.error('[Worker] Config Error:', err);
     }
 }
 
 function decodeAnnexB(data, pts) {
-    if (!isConfigured) return;
     annexBuffer = concatBytes(annexBuffer, data);
-
+    
     const starts = findStartCodes(annexBuffer);
-    if (starts.length < 2) {
-        if (annexBuffer.length > 2 * 1024 * 1024) {
-            annexBuffer = annexBuffer.slice(-512 * 1024);
-        }
-        return;
-    }
+    if (starts.length < 2) return;
 
     for (let i = 0; i < starts.length - 1; i++) {
         const start = starts[i].index;
@@ -125,7 +115,6 @@ function decodeAnnexB(data, pts) {
 
     const tailStart = starts[starts.length - 1].index;
     annexBuffer = annexBuffer.slice(tailStart);
-
 }
 
 function pushNalToAccessUnit(nal, pts) {
@@ -158,41 +147,34 @@ function pushNalToAccessUnit(nal, pts) {
                 currentAuHasIdr = true;
             }
             currentAuHasVcl = true;
-            currentAuNals.push(nal);
-            lastAuAppendMs = Date.now();
-            return;
         }
-
-        if (!currentAuNals.length) currentAuPts = pts;
         currentAuNals.push(nal);
         lastAuAppendMs = Date.now();
+
     } catch (err) {
-        self.postMessage({ type: 'status', payload: { state: 'decode_error' } });
+        console.error('[Worker] NAL Error:', err);
     }
 }
 
 function flushCurrentAccessUnit() {
-    if (!currentAuHasVcl || currentAuNals.length === 0) {
+    if (!currentAuNals.length) return;
+    if (!currentAuHasVcl) {
         currentAuNals = [];
-        currentAuHasVcl = false;
-        currentAuHasIdr = false;
         return;
     }
 
-    const au = concatMany(currentAuNals);
-    const baseTs = Math.floor((currentAuPts || 0) * 1000000);
-    const ts = baseTs <= lastTimestampUs ? (lastTimestampUs + 1) : baseTs;
-    lastTimestampUs = ts;
-
-    try {
-        const chunk = new EncodedVideoChunk({
-            type: currentAuHasIdr ? 'key' : 'delta',
-            timestamp: ts,
-            data: au
-        });
-        decoder.decode(chunk);
-    } catch (err) {
-        self.postMessage({ type: 'status', payload: { state: 'decode_error' } });
+    if (isConfigured && decoder.state === 'configured') {
+        const fullData = concatMany(currentAuNals);
+        try {
+            const chunk = new EncodedVideoChunk({
+                type: currentAuHasIdr ? 'key' : 'delta',
+                timestamp: currentAuPts * 1000000,
+                data: fullData
+            });
+            decoder.decode(chunk);
+        } catch (e) {
+            console.error('[Worker] Chunk Error:', e);
+        }
     }
 
     currentAuNals = [];
@@ -206,7 +188,7 @@ function findStartCodes(data) {
         const len = getStartCodeLength(data, i);
         if (len > 0) {
             out.push({ index: i });
-            i += len; // 4-byte start code içinde tekrar 3-byte eşleşmeyi engelle
+            i += len;
             continue;
         }
         i += 1;
@@ -241,17 +223,10 @@ function concatMany(arr) {
 
 function renderLoop() {
     if (!ctx) return;
-
-    // Bazı akışlarda AUD/geçiş işareti seyrek gelebiliyor.
-    // VCL taşıyan AU birikmişse kısa gecikmeyle flush ederek görüntünün hiç başlamamasını engeller.
     if (currentAuHasVcl && (Date.now() - lastAuAppendMs) > 80) {
         flushCurrentAccessUnit();
     }
-
-    if (frameQueue.length === 0) {
-        self.postMessage({ type: 'status', payload: 'underflow' });
-        return;
-    }
+    if (frameQueue.length === 0) return;
 
     let bestFrameIndex = -1;
     for (let i = 0; i < frameQueue.length; i++) {
@@ -266,7 +241,6 @@ function renderLoop() {
         const item = frameQueue[bestFrameIndex];
         ctx.drawImage(item.frame, 0, 0, canvas.width, canvas.height);
         self.postMessage({ type: 'status', payload: { state: 'healthy', pts: item.pts } });
-
         for (let j = 0; j <= bestFrameIndex; j++) {
             frameQueue[j].frame.close();
         }
