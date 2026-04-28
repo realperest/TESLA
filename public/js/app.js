@@ -1948,6 +1948,38 @@ function dockNav(section) {
     c8.style.display = (section === 'youtube_v8') ? 'block' : 'none';
   }
 
+function dockNav(section) {
+  if (_activeSection === section && isYoutubeSection(section)) {
+    ytGoSectionHome();
+    return;
+  }
+  if (_activeSection === section && section === 'tv') {
+    tvGoSectionHome();
+    return;
+  }
+  if (_activeSection === section && section === 'iptv') {
+    iptvGoSectionHome();
+    return;
+  }
+
+  stopInactiveSectionPlayback(section);
+
+  document.querySelectorAll('.dock-item').forEach(el => {
+    el.classList.toggle('active', el.dataset.id === section);
+  });
+
+  document.querySelectorAll('.section').forEach(el => el.classList.remove('active'));
+  
+  const targetId = isYoutubeSection(section) ? 'section-youtube' : 'section-' + section;
+  const target = document.getElementById(targetId);
+  
+  const c5 = document.getElementById('yt-canvas-v5');
+  const c8 = document.getElementById('yt-canvas-v8');
+  if (c5 && c8) {
+    c5.style.display = (section === 'youtube_v5') ? 'block' : 'none';
+    c8.style.display = (section === 'youtube_v8') ? 'block' : 'none';
+  }
+
   if (target) {
     target.classList.add('active');
     target.style.opacity = '0';
@@ -1956,31 +1988,26 @@ function dockNav(section) {
   _activeSection = section;
   updateYtVariantBadge();
 
-  // Bölüme geri dönünce kaldığı yerden otomatik devam et
   if (section === 'tv') resumePlayerIfNeeded('tv', player);
   if (section === 'iptv') resumePlayerIfNeeded('iptv', iptvPlayer);
   if (section === 'youtube_v5') resumePlayerIfNeeded('youtube_v5', ytPlayerV5);
   if (section === 'youtube_v8') resumePlayerIfNeeded('youtube_v8', ytPlayerV8);
 
-  // YouTube sekmesine ilk girişte trending yükle
   if (isYoutubeSection(section) && !_ytTrendingLoaded) {
     _ytTrendingLoaded = true;
     ytLoadTrending();
   }
 
-  if (section === 'iptv') {
-    loadIptvChannels();
-  }
+  if (section === 'iptv') loadIptvChannels();
 
   if (section === 'navigation') {
-    navEnsureEmbedConfig().then(() => {
-      navUpdatePlaceholderMessage();
-    });
+    navEnsureEmbedConfig().then(() => { navUpdatePlaceholderMessage(); });
   }
 
   updateDockBackButton();
   if (typeof applyKeyboardLockToInputs === 'function') applyKeyboardLockToInputs();
 }
+
 
 function initVersionBadge() {
   const badge = document.getElementById('app-version-badge');
