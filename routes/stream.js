@@ -32,7 +32,7 @@ function _ffmpegOutputs() {
     '-s', '1280x720',
     '-b:v', '6000k',
     '-maxrate', '8000k',
-    '-bufsize', '12000k',
+    '-bufsize', '24000k',
     '-g', '15',
     '-threads', '0',
     '-acodec', 'mp2',
@@ -42,7 +42,7 @@ function _ffmpegOutputs() {
     '-b:a', '192k',
     '-mpegts_flags', '+initial_discontinuity+system_b+latm',
     '-fflags', '+genpts+discardcorrupt+igndts',
-    '-muxdelay', '0',
+    '-muxdelay', '0.1',
     'pipe:1'
   ];
 }
