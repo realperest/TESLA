@@ -133,9 +133,9 @@ function resumeFromVisibilityIfNeeded(key, playerObj) {
   _resumeOnVisibilityReturn[key] = false;
 }
 
-async function ytSeek(e) {
-  if (e) e.stopPropagation();
-  
+async function ytStartPlay(data) {
+  resolvedVideo = data;
+  updateYtCanvasVisibility();
   const activeYt = getYtPlayerBySection(_activeSection);
   if (!activeYt || !activeYt.currentChannel) return;
 
@@ -267,7 +267,24 @@ function hideTvOverlay() {
 // Başlatma
 // ─────────────────────────────────────────────
 
-async function init() {
+async function updateYtCanvasVisibility() {
+  const v5 = document.getElementById('yt-canvas-v5');
+  const v8 = document.getElementById('yt-canvas-v8');
+  if (!v5 || !v8) return;
+
+  if (_activeSection === 'youtube_v5') {
+    v5.style.display = 'block';
+    v8.style.display = 'none';
+  } else if (_activeSection === 'youtube_v8') {
+    v5.style.display = 'none';
+    v8.style.display = 'block';
+  } else {
+    v5.style.display = 'none';
+    v8.style.display = 'none';
+  }
+}
+
+function init() {
   console.log(`[App] v${getAppVersion()} initializing...`);
   const unlock = () => {
     if (window.player) window.player.unlockAudio();
