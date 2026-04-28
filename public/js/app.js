@@ -997,10 +997,8 @@ function ytShowView(view) {
 
 function ytGoSectionHome() {
   ytError('');
-  try { ytPlayer.stop({ suppressErrorsMs: 1200 }); } catch {}
-  try { ytPlayerV2.stop({ suppressErrorsMs: 1200 }); } catch {}
-  try { ytPlayerV3.stop({ suppressErrorsMs: 1200 }); } catch {}
-  try { ytPlayerV4.stop({ suppressErrorsMs: 1200 }); } catch {}
+  try { if (ytPlayerV5) ytPlayerV5.stop(false, true); } catch {}
+  try { if (ytPlayerV8) ytPlayerV8.stop(); } catch {}
   try { cancelAnimationFrame(_ytProgressRaf); } catch {}
   resolvedVideo = null;
   ytLoading(false);
@@ -1079,7 +1077,6 @@ async function _ytResolveAndPlay(v) {
   if (_ytResolving) return;
   _ytResolving = true;
 
-  // Player view'e geç, spinner göster
   ytShowView('player');
   document.getElementById('yt-now-playing-title').textContent = v.title || (typeof AppI18n !== 'undefined' ? AppI18n.t('ytLoadingTitle') : 'Yükleniyor...');
   document.getElementById('yt-btn-play').innerHTML = YC_ICONS.pause;
@@ -1093,14 +1090,15 @@ async function _ytResolveAndPlay(v) {
     const url = `https://www.youtube.com/watch?v=${v.videoId}`;
     const r = await fetch(`/proxy/resolve?url=${encodeURIComponent(url)}`);
     const data = await r.json();
-    if (!r.ok) { ytError(data.message || data.error); return; }
+    if (!r.ok) { ytError(data.message || data.error || 'Resolve Error'); return; }
     if (!data.videoId && _ytLastVideoId) data.videoId = _ytLastVideoId;
     await ytStartPlay(data);
-  } catch {
+  } catch (e) {
+    console.error('[YT] Resolve Error:', e);
     ytError(typeof AppI18n !== 'undefined' ? AppI18n.t('ytStreamFail') : 'Stream alınamadı.');
   } finally {
-    document.getElementById('yt-spinner').classList.remove('active');
     _ytResolving = false;
+    document.getElementById('yt-spinner').classList.remove('active');
   }
 }
 
