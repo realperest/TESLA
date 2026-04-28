@@ -67,9 +67,18 @@ class TeslaPlayerV6 extends TeslaPlayer {
   }
 
   _startPlayback(channel, t = 0) {
-    const rawUrl = channel.ytUrl || channel.url;
-    // Yeni eklenen HTTP proxy rotasını kullanıyoruz
-    const streamUrl = `/stream/http?url=${encodeURIComponent(rawUrl)}&t=${t}`;
+    let streamUrl = channel.url;
+    
+    // Eğer HLS değilse (saf MP4 ise), sunucu üzerinden proxy yapalım (IP yetkilendirmesi için)
+    if (!channel.isHls && streamUrl && streamUrl.startsWith('http')) {
+      streamUrl = `/proxy/mp4?url=${encodeURIComponent(streamUrl)}`;
+    }
+    
+    // Süre bilgisini (t) url'ye ekle (eğer HLS değilse işe yarayabilir ama HLS'de #t= işe yarar)
+    if (t > 0) {
+      streamUrl += (streamUrl.includes('?') ? '&' : '?') + `t=${t}`;
+      this._hiddenVideo.currentTime = t;
+    }
     
     this._hiddenVideo.src = streamUrl;
     this._hiddenVideo.load();

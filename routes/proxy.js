@@ -92,6 +92,55 @@ router.get('/hls', (req, res) => {
   });
 });
 
+// MP4 stream proxy - Range header desteği ile (CPU %0, seek destekler)
+router.get('/mp4', (req, res) => {
+  const { url } = req.query;
+  if (!url) return res.status(400).json({ error: 'url gerekli' });
+
+  let parsedUrl;
+  try { parsedUrl = new URL(url); } catch {
+    return res.status(400).json({ error: 'geçersiz url' });
+  }
+
+  const lib = parsedUrl.protocol === 'https:' ? https : http;
+  const options = {
+    hostname: parsedUrl.hostname,
+    port: parsedUrl.port || (parsedUrl.protocol === 'https:' ? 443 : 80),
+    path: parsedUrl.pathname + parsedUrl.search,
+    headers: {
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+      'Referer': 'https://www.youtube.com/',
+      'Origin': 'https://www.youtube.com',
+    },
+  };
+
+  if (req.headers.range) {
+    options.headers['Range'] = req.headers.range;
+  }
+
+  const proxyReq = lib.get(options, (proxyRes) => {
+    res.status(proxyRes.statusCode);
+    
+    // Headerları aynen aktar (Range ve seek için çok önemli)
+    ['content-type', 'content-length', 'content-range', 'accept-ranges', 'cache-control'].forEach(h => {
+      if (proxyRes.headers[h]) res.setHeader(h, proxyRes.headers[h]);
+    });
+    
+    res.setHeader('Access-Control-Allow-Origin', '*');
+
+    proxyRes.pipe(res);
+  });
+
+  proxyReq.on('error', (err) => {
+    console.error('[MP4 Proxy] hata:', err.message);
+    if (!res.headersSent) res.status(502).end();
+  });
+
+  req.on('close', () => {
+    proxyReq.destroy();
+  });
+});
+
 router.use(authenticate, ipLock);
 
 // Önbellek: aynı URL için 30 dk içinde tekrar çözme
