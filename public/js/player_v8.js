@@ -155,7 +155,13 @@ class TeslaPlayerV8 {
     get paused() { return this.audio ? this.audio.paused : true; }
     get currentTime() { return this.audio ? this.audio.currentTime : this._lastKnownTime; }
     get hasActiveSource() { return !!this.ws; }
-    unlockAudio() { if (this.audio) this.audio.play().then(() => this.audio.pause()).catch(() => {}); }
+    unlockAudio() { 
+        if (this.audio) {
+            this.audio.play().then(() => {
+                if (this.audio.paused) this.audio.pause();
+            }).catch(e => console.warn('[V8] Audio Unlock failed:', e)); 
+        } 
+    }
 }
 
 window.TeslaPlayerV8 = TeslaPlayerV8;
