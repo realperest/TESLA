@@ -372,9 +372,6 @@ function init() {
   });
 
   player = window.player;
-  ytPlayer = window.ytPlayer;
-  ytPlayerV2 = window.ytPlayerV2;
-  ytPlayerV3 = window.ytPlayerV3;
   ytPlayerV5 = window.ytPlayerV5;
   ytPlayerV8 = window.ytPlayerV8;
   iptvPlayer = window.iptvPlayer;
@@ -382,10 +379,8 @@ function init() {
   // Ekrana tıklayınca duraklat/devam et özelliği + Görsel Bildirim
   [
     { id: 'section-tv', canvasId: 'video-canvas', toggle: () => typeof togglePlay === 'function' && togglePlay() },
-    { id: 'section-youtube', canvasId: 'yt-canvas', toggle: () => typeof toggleYtPlay === 'function' && toggleYtPlay() },
-    { id: 'section-youtube', canvasId: 'yt-canvas-v2', toggle: () => typeof toggleYtPlay === 'function' && toggleYtPlay() },
-    { id: 'section-youtube', canvasId: 'yt-canvas-v8', toggle: () => typeof toggleYtPlay === 'function' && toggleYtPlay() },
-    { id: 'section-youtube', canvasId: 'yt-canvas-v5', toggle: () => typeof toggleYtPlay === 'function' && toggleYtPlay() },
+    { id: 'section-youtube_v8', canvasId: 'yt-canvas-v8', toggle: () => typeof toggleYtPlay === 'function' && toggleYtPlay() },
+    { id: 'section-youtube_v5', canvasId: 'yt-canvas-v5', toggle: () => typeof toggleYtPlay === 'function' && toggleYtPlay() },
     { id: 'section-iptv', canvasId: 'iptv-video-canvas', toggle: () => typeof toggleIptvPlay === 'function' && toggleIptvPlay() }
   ].forEach(item => {
     const canvas = document.getElementById(item.canvasId);
