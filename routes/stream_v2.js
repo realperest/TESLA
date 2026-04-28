@@ -51,6 +51,7 @@ async function handleStreamConnectionV2(ws, req) {
 
         const ffArgs = [
             '-thread_queue_size', '4096',
+            '-re',
             '-i', 'pipe:0',
             '-c:v', 'copy',
             '-bsf:v', 'h264_mp4toannexb',

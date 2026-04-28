@@ -93,7 +93,7 @@ function initDecoder() {
 function configureDecoder() {
     try {
         decoder.configure({
-            codec: 'avc1.42E01E', 
+            codec: 'avc1.640028', // High Profile, Level 4.0 (YouTube Standartı)
             optimizeForLatency: true,
             hardwareAcceleration: 'prefer-hardware'
         });

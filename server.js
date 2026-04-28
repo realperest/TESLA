@@ -25,7 +25,20 @@ const { handleStreamConnection, handleAudioRequest, handleHttpStreamRequest } = 
 const { handleStreamConnectionV2, handleAudioRequestV2 } = require('./routes/stream_v2');
 
 const app = express();
-app.set('trust proxy', 1); // Reverse proxy arkasında gerçek IP için
+app.set('trust proxy', 1);
+
+// ── ACİL DURUM FRENİ (KILL SWITCH) ──
+if (process.env.MAINTENANCE_MODE === 'true') {
+  console.warn('!!! BAKIM MODU AKTİF: Tüm trafik reddediliyor !!!');
+  app.use((req, res) => {
+    res.status(503).send(`
+      <div style="background:#000; color:#fff; height:100vh; display:flex; flex-direction:column; align-items:center; justify-content:center; font-family:sans-serif; text-align:center;">
+        <h1 style="color:#ff5722;">TobeTube Bakım Modu</h1>
+        <p>Sistem aşırı yük nedeniyle geçici olarak servis dışıdır.</p>
+      </div>
+    `);
+  });
+}
 
 /**
  * BASE_URL kanonik domain ise, *.up.railway.app vb. adreslerde adres çubuğunda kalmamak için
