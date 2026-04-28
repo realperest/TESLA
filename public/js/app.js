@@ -24,10 +24,6 @@ const API = {
 };
 
 let player;
-let ytPlayer;
-let ytPlayerV2;
-let ytPlayerV3;
-let ytPlayerV4;
 let ytPlayerV5;
 let ytPlayerV8;
 let channels = [];
@@ -58,17 +54,13 @@ const YT_PROFILE_KEYWORDS_KEY = 'yt-profile-keywords';
 const YT_SEARCH_HISTORY_KEY = 'yt-search-history';
 
 function isYoutubeSection(section) {
-  return section === 'youtube' || section === 'youtube_v1' || section === 'youtube_v2' || section === 'youtube_v3' || section === 'youtube_v4' || section === 'youtube_v5' || section === 'youtube_v8';
+  return section === 'youtube_v5' || section === 'youtube_v8';
 }
 
 function getYtPlayerBySection(section = _activeSection) {
   if (section === 'youtube_v8') return ytPlayerV8;
   if (section === 'youtube_v5') return ytPlayerV5;
-  if (section === 'youtube_v4') return ytPlayerV4;
-  if (section === 'youtube_v3') return ytPlayerV3;
-  if (section === 'youtube_v2') return ytPlayerV2;
-  if (section === 'youtube_v1') return ytPlayer; 
-  return ytPlayerV8; // Varsayılanı V8 yaptık
+  return ytPlayerV8;
 }
 
 function getYtVariantLabel(section = _activeSection) {
@@ -357,7 +349,6 @@ async function init() {
   window.ytPlayer = new TeslaPlayer('yt-canvas', { spinnerId: 'yt-spinner', containerId: 'yt-player-area' });
   window.ytPlayerV2 = new TeslaPlayerV2('yt-canvas-v2', { spinnerId: 'yt-spinner' });
   window.ytPlayerV3 = new TeslaPlayerV3('yt-canvas-v3', { spinnerId: 'yt-spinner', containerId: 'yt-player-area' });
-  window.ytPlayerV4 = new TeslaPlayerV4('yt-canvas-v4', { spinnerId: 'yt-spinner', containerId: 'yt-player-area' });
   window.ytPlayerV5 = new TeslaPlayerV5('yt-canvas-v5', { spinnerId: 'yt-spinner', containerId: 'yt-player-area' });
   window.ytPlayerV8 = new TeslaPlayerV8('yt-canvas-v8', { spinnerId: 'yt-spinner' });
   window.iptvPlayer = new TeslaPlayer('iptv-video-canvas', {
@@ -370,7 +361,6 @@ async function init() {
   ytPlayer = window.ytPlayer;
   ytPlayerV2 = window.ytPlayerV2;
   ytPlayerV3 = window.ytPlayerV3;
-  ytPlayerV4 = window.ytPlayerV4;
   ytPlayerV5 = window.ytPlayerV5;
   ytPlayerV8 = window.ytPlayerV8;
   iptvPlayer = window.iptvPlayer;
@@ -380,10 +370,8 @@ async function init() {
     { id: 'section-tv', canvasId: 'video-canvas', toggle: () => typeof togglePlay === 'function' && togglePlay() },
     { id: 'section-youtube', canvasId: 'yt-canvas', toggle: () => typeof toggleYtPlay === 'function' && toggleYtPlay() },
     { id: 'section-youtube', canvasId: 'yt-canvas-v2', toggle: () => typeof toggleYtPlay === 'function' && toggleYtPlay() },
-    { id: 'section-youtube', canvasId: 'yt-canvas-v3', toggle: () => typeof toggleYtPlay === 'function' && toggleYtPlay() },
-    { id: 'section-youtube', canvasId: 'yt-canvas-v4', toggle: () => typeof toggleYtPlay === 'function' && toggleYtPlay() },
-    { id: 'section-youtube', canvasId: 'yt-canvas-v5', toggle: () => typeof toggleYtPlay === 'function' && toggleYtPlay() },
     { id: 'section-youtube', canvasId: 'yt-canvas-v8', toggle: () => typeof toggleYtPlay === 'function' && toggleYtPlay() },
+    { id: 'section-youtube', canvasId: 'yt-canvas-v5', toggle: () => typeof toggleYtPlay === 'function' && toggleYtPlay() },
     { id: 'section-iptv', canvasId: 'iptv-video-canvas', toggle: () => typeof toggleIptvPlay === 'function' && toggleIptvPlay() }
   ].forEach(item => {
     const canvas = document.getElementById(item.canvasId);
