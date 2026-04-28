@@ -51,23 +51,10 @@ async function handleStreamConnectionV2(ws, req) {
 
         const ffArgs = [
             '-thread_queue_size', '4096',
-            '-re',
             '-i', 'pipe:0',
-            '-c:v', 'libx264',
-            '-preset', 'veryfast',
-            '-tune', 'zerolatency',
-            '-profile:v', 'baseline',
-            '-level', '3.1',
-            '-vf', 'scale=1280:720:force_original_aspect_ratio=decrease:flags=lanczos,pad=1280:720:(ow-iw)/2:(oh-ih)/2,fps=30',
-            '-b:v', '4000k',
-            '-maxrate', '5000k',
-            '-bufsize', '10000k',
-            '-pix_fmt', 'yuv420p',
-            '-g', '30',
-            '-bf', '0',
-            '-an',
+            '-c:v', 'copy',
+            '-bsf:v', 'h264_mp4toannexb',
             '-f', 'h264',
-            '-x264-params', 'annexb=1:repeat-headers=1:aud=1', // AU boundary'leri icin AUD ekle
             'pipe:1'
         ];
 

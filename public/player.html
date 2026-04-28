@@ -8,7 +8,7 @@
   <meta http-equiv="Expires" content="0">
   <meta name="theme-color" content="#0a0a0a">
   <meta name="application-name" content="TobeTube">
-  <meta name="version" content="260428.0181">
+  <meta name="version" content="260428.0183">
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
   <title>TobeTube</title>
   <script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.7/dist/hls.min.js"></script>
@@ -100,8 +100,7 @@
             <canvas id="yt-canvas-v3" style="display:none"></canvas>
             <canvas id="yt-canvas-v4" style="display:none"></canvas>
             <canvas id="yt-canvas-v5" style="display:none"></canvas>
-            <canvas id="yt-canvas-v6" style="display:none"></canvas>
-            <canvas id="yt-canvas-v7" style="display:none"></canvas>
+            <canvas id="yt-canvas-v8" style="display:none"></canvas>
             <div id="yt-central-pause">
               <svg viewBox="0 0 24 24"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
             </div>
@@ -334,25 +333,15 @@
         <div class="dock-dot"></div>
       </div>
 
-      <div class="dock-item" data-id="youtube_v6" onclick="dockNav('youtube_v6')">
-        <div class="dock-icon" style="color: #00bcd4;">
+      <div class="dock-item" data-id="youtube_v8" onclick="dockNav('youtube_v8')">
+        <div class="dock-icon" style="color: #ff5722;">
           <svg viewBox="0 0 24 24">
             <rect x="2" y="5" width="20" height="14" rx="4"/>
-            <polygon class="yt-play" points="10,9 16,12 10,15"/>
+            <polygon points="10,9 16,12 10,15" fill="currentColor"/>
+            <path d="M16 16l4 4m0-4l-4 4" stroke="currentColor" stroke-width="2"/>
           </svg>
         </div>
-        <div class="dock-label">YT V6</div>
-        <div class="dock-dot"></div>
-      </div>
-
-      <div class="dock-item" data-id="youtube_v7" onclick="dockNav('youtube_v7')">
-        <div class="dock-icon" style="color: #9c27b0;">
-          <svg viewBox="0 0 24 24">
-            <rect x="2" y="5" width="20" height="14" rx="4"/>
-            <polygon class="yt-play" points="10,9 16,12 10,15"/>
-          </svg>
-        </div>
-        <div class="dock-label">YT V7</div>
+        <div class="dock-label">YouTube</div>
         <div class="dock-dot"></div>
       </div>
 
@@ -457,11 +446,11 @@
     </div>
     <div class="dock-bar-user">
       <div id="app-version">
-        <div class="app-version-item newest"><b style="color:#00ff00 !important">260428.0180</b></div>
-        <div class="app-version-item">260427.0179</div>
-        <div class="app-version-item">260427.0178</div>
+        <div class="app-version-item newest"><b style="color:#00ff00 !important">260428.0183</b></div>
+        <div class="app-version-item">260428.0182</div>
+        <div class="app-version-item">260428.0181</div>
     </div>
-      <span id="app-version-badge" data-version="260428.0180" style="display:none">260428.0180</span>
+      <span id="app-version-badge" data-version="260428.0183" style="display:none">260428.0183</span>
       <div class="user-menu" id="user-menu">
         <div class="user-pill" id="user-pill" onclick="toggleUserMenu(event)">
           <img src="" alt="" id="user-avatar" referrerpolicy="no-referrer" style="display:none">
@@ -490,8 +479,7 @@
   <script src="/js/player_v3.js?v=260425.0112"></script>
   <script src="/js/player_v4.js?v=260425.0112"></script>
   <script src="/js/player_v5.js?v=260425.0112"></script>
-  <script src="/js/player_v6.js?v=260428.0181"></script>
-  <script src="/js/player_v7.js?v=260428.0181"></script>
+  <script src="/js/player_v8.js?v=260428.0182"></script>
   <script src="/js/app.js?v=260428.0181"></script>
   <script src="/js/dock.js?v=260425.0112"></script>
 </body>
