@@ -124,42 +124,22 @@ class TeslaPlayerV5 extends TeslaPlayer {
         const socket = this.mpegPlayer.source.socket;
 
         if (this.isPlaying) {
-            // BACKEND'İ DONDUR
-            if (socket.readyState === 1) {
-                socket.send(JSON.stringify({ type: 'pause' }));
-            }
-            
-            // FRONTEND OYNATICIYI DURDUR
+            // DURDUR
+            if (socket.readyState === 1) socket.send(JSON.stringify({ type: 'pause' }));
             if (this.mpegPlayer) this.mpegPlayer.pause();
             this.isPlaying = false;
             
-            // Çerçevenin son halini ekranda tutmak için freeze frame oluştur.
+            // Son kareyi dondur
             setTimeout(() => this._createFreezeFrame(), 100);
             
             const controls = document.getElementById('yt-external-controls');
-            const header = document.getElementById('yt-external-header');
             if (controls) controls.style.opacity = '1';
-            if (header) header.style.opacity = '1';
         } else {
-            // BACKEND'İ ÇÖZ
-            if (socket.readyState === 1) {
-                socket.send(JSON.stringify({ type: 'resume' }));
-            }
-            
-            // TAMPONU TEMİZLE (Hızlı sarmayı engeller)
-            if (this.mpegPlayer) {
-                if (this.mpegPlayer.videoOut) this.mpegPlayer.videoOut.reset();
-                if (this.mpegPlayer.audioOut) this.mpegPlayer.audioOut.reset();
-                this.mpegPlayer.play();
-            }
-            this.isPlaying = true;
-            
+            // DEVAM ET: Bağlantıyı o anki süreden tazeleyerek başlat (Donmayı ve hızlı sarmayı %100 engeller)
+            const currentTime = this.currentTime;
             this._removeFreezeFrame();
-
-            const controls = document.getElementById('yt-external-controls');
-            const header = document.getElementById('yt-external-header');
-            if (controls) controls.style.opacity = '';
-            if (header) header.style.opacity = '';
+            this._startJsmpeg(this.currentChannel, currentTime);
+            this.isPlaying = true;
         }
     }
 

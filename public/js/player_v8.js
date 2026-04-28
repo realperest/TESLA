@@ -77,25 +77,16 @@ class TeslaPlayerV8 {
     }
 
     _initAudio(channel, t) {
-        if (this.audio) { this.audio.pause(); this.audio.src = ''; }
+        if (this.audioContext) { try { this.audioContext.close(); } catch {} }
         
-        // Ses akışını da V2 üzerinden çekiyoruz (Master Clock için)
-        this.audio = new Audio(`/stream/audio_v2?url=${encodeURIComponent(channel.ytUrl || channel.url)}&t=${t}`);
-        this.audio.crossOrigin = 'anonymous';
-        this.audio.autoplay = false;
-        this.audio.preload = 'auto';
+        // JSMpeg'in ses motorunu bağımsız olarak kullanıyoruz
+        this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        this.audioOut = new window.JSMpeg.AudioOutput({ context: this.audioContext });
+        this.audioOut.volume = 1;
         
-        this.audio.onplay = () => { this.isPlaying = true; };
-        this.audio.onpause = () => { this.isPlaying = false; };
-        this.audio.ontimeupdate = () => {
-            if (this.audio && Number.isFinite(this.audio.currentTime)) {
-                this._lastKnownTime = this.audio.currentTime;
-            }
-        };
-
         // Master Clock Sync Loop
         this._syncTimer = setInterval(() => {
-            if (this.worker) {
+            if (this.worker && this.audioContext) {
                 const clockTime = this._getMasterClock();
                 this.worker.postMessage({ type: 'clock', payload: { time: clockTime } });
             }
@@ -104,7 +95,8 @@ class TeslaPlayerV8 {
 
     _initWebSocket(channel, t) {
         const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
-        const url = `${proto}//${location.host}/stream/ws_v2?url=${encodeURIComponent(channel.ytUrl || channel.url)}&t=${t}`;
+        // V5/V8 Hibrit Akış: Hem ses hem video içeren WS
+        const url = `${proto}//${location.host}/stream/ws?url=${encodeURIComponent(channel.ytUrl || channel.url)}&t=${t}&v8=1`;
 
         this.ws = new WebSocket(url);
         this.ws.binaryType = 'arraybuffer';
@@ -112,55 +104,66 @@ class TeslaPlayerV8 {
 
         this.ws.onmessage = (e) => {
             if (!(e.data instanceof ArrayBuffer)) return;
-            if (this.worker) this.worker.postMessage({ type: 'video', payload: e.data });
+            const buf = e.data;
+            // İlk byte kontrolü: 0x00=Video, 0x01=Audio (Backend buna göre gönderecek)
+            const view = new Uint8Array(buf);
+            if (view[0] === 0x00) {
+                if (this.worker) this.worker.postMessage({ type: 'video', payload: buf.slice(1) });
+            } else if (view[0] === 0x01) {
+                if (this.audioOut) this.audioOut.write(buf.slice(1));
+            }
         };
 
         this.ws.onclose = () => this.stop();
     }
 
     _getMasterClock() {
-        if (this.audio && !this.audio.paused && Number.isFinite(this.audio.currentTime)) {
-            return this.audio.currentTime;
+        if (this.audioContext && this.audioContext.state === 'running') {
+            return this.audioContext.currentTime + (this.ptsOffset || 0);
         }
         const elapsed = this._clockBaseMs ? ((Date.now() - this._clockBaseMs) / 1000) : 0;
         return (this.ptsOffset || 0) + elapsed;
     }
 
     _startAudioWhenVideoReady() {
-        if (!this.audio || !this.audio.paused) return;
-        this.audio.play().catch(() => {});
+        if (this.audioContext && this.audioContext.state === 'suspended') {
+            this.audioContext.resume();
+        }
     }
 
     stop() {
         if (this._syncTimer) clearInterval(this._syncTimer);
         if (this.ws) { this.ws.close(); this.ws = null; }
-        if (this.audio) { this.audio.pause(); this.audio.src = ''; }
+        if (this.audioContext) { try { this.audioContext.close(); } catch {} this.audioContext = null; }
+        this.audioOut = null;
         this.isPlaying = false;
         if (this.spinner) this.spinner.classList.remove('active');
     }
 
     togglePlay() {
-        if (!this.audio) return;
-        if (this.audio.paused) this.audio.play().catch(() => {});
-        else this.audio.pause();
+        if (!this.audioContext) return;
+        if (this.audioContext.state === 'running') {
+            this.audioContext.suspend();
+            this.isPlaying = false;
+        } else {
+            this.audioContext.resume();
+            this.isPlaying = true;
+        }
     }
 
     seek(seconds) {
         this.load(this.currentChannel, { startTime: seconds });
     }
 
-    setVolume(v) { if (this.audio) this.audio.volume = v / 100; }
+    setVolume(v) { if (this.audioOut) this.audioOut.volume = v / 100; }
     
-    get video() { return this.audio; } // UI kontrolleri için referans
-    get paused() { return this.audio ? this.audio.paused : true; }
-    get currentTime() { return this.audio ? this.audio.currentTime : this._lastKnownTime; }
+    get paused() { return this.audioContext ? this.audioContext.state === 'suspended' : true; }
+    get currentTime() { return this._getMasterClock(); }
     get hasActiveSource() { return !!this.ws; }
     unlockAudio() { 
-        if (this.audio) {
-            this.audio.play().then(() => {
-                if (this.audio.paused) this.audio.pause();
-            }).catch(e => console.warn('[V8] Audio Unlock failed:', e)); 
-        } 
+        if (this.audioContext && this.audioContext.state === 'suspended') {
+            this.audioContext.resume().catch(() => {}); 
+        }
     }
 }
 
