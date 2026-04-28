@@ -39,11 +39,12 @@ class TeslaPlayerV8 {
             this._initWorker();
             if (this.worker) this.worker.postMessage({ type: 'reset' });
             this._initAudio(channel, this.ptsOffset);
-            this._initWebSocket(channel, this.ptsOffset);
+            await this._initWebSocket(channel, this.ptsOffset);
             return true;
         } catch (err) {
             console.error('[V8] Load Error:', err);
-            return false;
+            this.stop(); // Spinner'ı kapatır
+            return err.message || false;
         }
     }
 
@@ -94,27 +95,45 @@ class TeslaPlayerV8 {
     }
 
     _initWebSocket(channel, t) {
-        const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
-        // V5/V8 Hibrit Akış: Hem ses hem video içeren WS
-        const url = `${proto}//${location.host}/stream/ws?url=${encodeURIComponent(channel.ytUrl || channel.url)}&t=${t}&v8=1`;
+        return new Promise((resolve, reject) => {
+            const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const url = `${proto}//${location.host}/stream/ws?url=${encodeURIComponent(channel.ytUrl || channel.url)}&t=${t}&v8=1`;
 
-        this.ws = new WebSocket(url);
-        this.ws.binaryType = 'arraybuffer';
-        this._clockBaseMs = Date.now();
+            this.ws = new WebSocket(url);
+            this.ws.binaryType = 'arraybuffer';
+            this._clockBaseMs = Date.now();
 
-        this.ws.onmessage = (e) => {
-            if (!(e.data instanceof ArrayBuffer)) return;
-            const buf = e.data;
-            // İlk byte kontrolü: 0x00=Video, 0x01=Audio (Backend buna göre gönderecek)
-            const view = new Uint8Array(buf);
-            if (view[0] === 0x00) {
-                if (this.worker) this.worker.postMessage({ type: 'video', payload: buf.slice(1) });
-            } else if (view[0] === 0x01) {
-                if (this.audioOut) this.audioOut.write(buf.slice(1));
-            }
-        };
+            const timeout = setTimeout(() => {
+                if (this.ws.readyState !== 1) {
+                    this.stop();
+                    reject(new Error('Bağlantı zaman aşımına uğradı (V8)'));
+                }
+            }, 10000);
 
-        this.ws.onclose = () => this.stop();
+            this.ws.onopen = () => {
+                clearTimeout(timeout);
+                resolve();
+            };
+
+            this.ws.onerror = (e) => {
+                clearTimeout(timeout);
+                this.stop();
+                reject(new Error('WebSocket Bağlantı Hatası (V8)'));
+            };
+
+            this.ws.onmessage = (e) => {
+                if (!(e.data instanceof ArrayBuffer)) return;
+                const buf = e.data;
+                const view = new Uint8Array(buf);
+                if (view[0] === 0x00) {
+                    if (this.worker) this.worker.postMessage({ type: 'video', payload: buf.slice(1) });
+                } else if (view[0] === 0x01) {
+                    if (this.audioOut) this.audioOut.write(buf.slice(1));
+                }
+            };
+
+            this.ws.onclose = () => this.stop();
+        });
     }
 
     _getMasterClock() {
@@ -133,7 +152,11 @@ class TeslaPlayerV8 {
 
     stop() {
         if (this._syncTimer) clearInterval(this._syncTimer);
-        if (this.ws) { this.ws.close(); this.ws = null; }
+        if (this.ws) { 
+            this.ws.onclose = null; // Döngüsel çağrıyı engelle
+            this.ws.close(); 
+            this.ws = null; 
+        }
         if (this.audioContext) { try { this.audioContext.close(); } catch {} this.audioContext = null; }
         this.audioOut = null;
         this.isPlaying = false;

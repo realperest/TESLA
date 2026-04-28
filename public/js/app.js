@@ -1180,15 +1180,16 @@ async function ytStartPlay(data) {
     : data.streamUrl;
 
   const activeP = getYtPlayerBySection(_activeSection);
-  const ok = await activeP.load({
+    const ok = await activeP.load({
     url: streamUrl,
     name: data.title || (typeof AppI18n !== 'undefined' ? AppI18n.t('ytVideoTitle') : 'Video'),
     isHls: data.isHls,
     duration: data.duration || 0,
     ytUrl: data.videoId ? `https://www.youtube.com/watch?v=${data.videoId}` : null,
   });
-  if (!ok) {
-    ytError(typeof AppI18n !== 'undefined' ? AppI18n.t('ytStreamFail') : 'Stream alınamadı.');
+  
+  if (ok !== true) {
+    ytError(typeof ok === 'string' ? ok : (typeof AppI18n !== 'undefined' ? AppI18n.t('ytStreamFail') : 'Stream alınamadı.'));
     return;
   }
   focusPlaybackSurface();

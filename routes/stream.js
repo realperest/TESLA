@@ -51,6 +51,7 @@ async function handleStreamConnection(ws, req) {
   const query = new URL('http://x' + (req.url || '')).searchParams;
   const url = query.get('url');
   const startTime = query.get('t') || '0'; 
+  const isV8 = query.get('v8') === '1';
   
   if (!url) return ws.close(1008);
   
@@ -59,7 +60,7 @@ async function handleStreamConnection(ws, req) {
 
   try {
     let ff, yt;
-    console.log(`[Stream] Fast-Start: ${targetUrl} (Seek: ${startTime}s)`);
+    console.log(`[Stream] Fast-Start (${isV8 ? 'V8-Hybrid' : 'V5-MTS'}): ${targetUrl} (Seek: ${startTime}s)`);
 
     // Core Engine: Standardize transport for Tesla
     const ytArgs = [
@@ -68,23 +69,26 @@ async function handleStreamConnection(ws, req) {
       '--extractor-args', isYouTube ? 'youtube:player_client=tv,android' : `generic:referer=https://www.trtizle.com/`,
       isYouTube ? '--download-sections' : null, 
       isYouTube ? `*${startTime}-inf` : null,
-      '--format', 'best[height<=720]', // Tek parça format her zaman daha hızlı açılır
+      '--format', isV8 ? 'best[height<=720]' : 'best[height<=720]', 
       '--socket-timeout', '30',
-      '--file-access-retries', '5',
-      '--fragment-retries', '10',
-      '--hls-prefer-native',
       '-o', '-', targetUrl
     ].concat(_ytCookieArgs()).filter(Boolean);
     
-    const ffArgs = [
-      '-thread_queue_size', '4096', 
-      '-re',
-      '-i', 'pipe:0',
-      ..._ffmpegOutputs()
-    ].filter(Boolean);
+    let ffArgs;
+    if (isV8) {
+      // V8 Hibrit Modu: Video (H264) -> Pipe:1, Ses (MP3) -> Pipe:3
+      ffArgs = [
+        '-thread_queue_size', '4096', '-re', '-i', 'pipe:0',
+        '-map', '0:v:0', '-c:v', 'libx264', '-preset', 'ultrafast', '-tune', 'zerolatency', '-f', 'h264', 'pipe:1',
+        '-map', '0:a:0', '-c:a', 'libmp3lame', '-ar', '44100', '-f', 'mp3', 'pipe:3'
+      ];
+    } else {
+      // V5 Standart Mod: MPEGTS
+      ffArgs = ['-thread_queue_size', '4096', '-re', '-i', 'pipe:0', ..._ffmpegOutputs()];
+    }
 
     yt = spawn(YT_DLP, ytArgs, { stdio: ['ignore', 'pipe', 'pipe'] });
-    ff = spawn(FFMPEG_PATH, ffArgs, { stdio: ['pipe', 'pipe', 'pipe'] });
+    ff = spawn(FFMPEG_PATH, ffArgs, { stdio: ['pipe', 'pipe', 'pipe', 'pipe'] });
     
     ACTIVE.set(ws, { ff, yt });
 
@@ -109,16 +113,35 @@ async function handleStreamConnection(ws, req) {
       if (ws.readyState === 1) ws.send(Buffer.from([0x00]), (err) => { if (err) _cleanupSession(ws); });
     }, 10000);
 
+    // V5 Veri Gönderimi (MPEGTS)
+    if (!isV8) {
+      ff.stdout.on('data', (d) => { 
+        if (ws.readyState === 1) ws.send(d, (err) => { if (err) _cleanupSession(ws); });
+      });
+    } else {
+      // V8 Veri Gönderimi (Multiplexed)
+      // Video -> 0x00
+      ff.stdout.on('data', (d) => {
+        if (ws.readyState === 1) {
+          const out = Buffer.concat([Buffer.from([0x00]), d]);
+          ws.send(out, (err) => { if (err) _cleanupSession(ws); });
+        }
+      });
+      // Audio (Pipe 3) -> 0x01
+      ff.stdio[3].on('data', (d) => {
+        if (ws.readyState === 1) {
+          const out = Buffer.concat([Buffer.from([0x01]), d]);
+          ws.send(out, (err) => { if (err) _cleanupSession(ws); });
+        }
+      });
+    }
+
     ws.on('message', (msg) => {
       try {
         const p = JSON.parse(msg);
-        if (p.type === 'pause' && ff.stdout) { ff.stdout.pause(); }
-        else if (p.type === 'resume' && ff.stdout) { ff.stdout.resume(); }
+        if (p.type === 'pause' && ff.stdout) { ff.stdout.pause(); if (ff.stdio[3]) ff.stdio[3].pause(); }
+        else if (p.type === 'resume' && ff.stdout) { ff.stdout.resume(); if (ff.stdio[3]) ff.stdio[3].resume(); }
       } catch (e) {}
-    });
-
-    ff.stdout.on('data', (d) => { 
-      if (ws.readyState === 1) ws.send(d, (err) => { if (err) _cleanupSession(ws); });
     });
     
     ff.on('close', () => { clearInterval(heartbeat); if (ws.readyState === 1) ws.close(); _cleanupSession(ws); });
