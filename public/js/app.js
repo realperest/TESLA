@@ -2,6 +2,73 @@
  * Açıl Susam — Ana uygulama
  */
 
+window.dockNav = function(section) {
+  // Görsel Bildirim (Debug)
+  const debug = document.createElement('div');
+  debug.style = 'position:fixed;top:10px;left:10px;background:rgba(0,255,0,0.8);color:black;padding:5px 10px;border-radius:5px;z-index:1000000;font-size:12px;font-weight:bold;pointer-events:none;';
+  debug.textContent = 'Navigasyon: ' + section;
+  document.body.appendChild(debug);
+  setTimeout(() => debug.remove(), 2000);
+
+  if (_activeSection === section && isYoutubeSection(section)) {
+    ytGoSectionHome();
+    return;
+  }
+  if (_activeSection === section && section === 'tv') {
+    tvGoSectionHome();
+    return;
+  }
+  if (_activeSection === section && section === 'iptv') {
+    iptvGoSectionHome();
+    return;
+  }
+
+  stopInactiveSectionPlayback(section);
+
+  document.querySelectorAll('.dock-item').forEach(el => {
+    el.classList.toggle('active', el.dataset.id === section);
+  });
+
+  document.querySelectorAll('.section').forEach(el => el.classList.remove('active'));
+  
+  const targetId = isYoutubeSection(section) ? 'section-youtube' : 'section-' + section;
+  const target = document.getElementById(targetId);
+  
+  const c5 = document.getElementById('yt-canvas-v5');
+  const c8 = document.getElementById('yt-canvas-v8');
+  if (c5 && c8) {
+    c5.style.display = (section === 'youtube_v5') ? 'block' : 'none';
+    c8.style.display = (section === 'youtube_v8') ? 'block' : 'none';
+  }
+
+  if (target) {
+    target.classList.add('active');
+    target.style.opacity = '0';
+    requestAnimationFrame(() => { target.style.opacity = '1'; });
+  }
+  _activeSection = section;
+  updateYtVariantBadge();
+
+  if (section === 'tv') resumePlayerIfNeeded('tv', player);
+  if (section === 'iptv') resumePlayerIfNeeded('iptv', iptvPlayer);
+  if (section === 'youtube_v5') resumePlayerIfNeeded('youtube_v5', ytPlayerV5);
+  if (section === 'youtube_v8') resumePlayerIfNeeded('youtube_v8', ytPlayerV8);
+
+  if (isYoutubeSection(section) && !_ytTrendingLoaded) {
+    _ytTrendingLoaded = true;
+    ytLoadTrending();
+  }
+
+  if (section === 'iptv') loadIptvChannels();
+
+  if (section === 'navigation') {
+    navEnsureEmbedConfig().then(() => { navUpdatePlaceholderMessage(); });
+  }
+
+  updateDockBackButton();
+  if (typeof applyKeyboardLockToInputs === 'function') applyKeyboardLockToInputs();
+};
+
 const API = {
   async get(path) {
     const r = await fetch(`/api${path}`);
@@ -284,7 +351,7 @@ async function updateYtCanvasVisibility() {
   }
 }
 
-function init() {
+async function init() {
   console.log(`[App] v${getAppVersion()} initializing...`);
   const unlock = () => {
     if (window.player) window.player.unlockAudio();
@@ -1948,65 +2015,6 @@ function dockNav(section) {
     c8.style.display = (section === 'youtube_v8') ? 'block' : 'none';
   }
 
-function dockNav(section) {
-  if (_activeSection === section && isYoutubeSection(section)) {
-    ytGoSectionHome();
-    return;
-  }
-  if (_activeSection === section && section === 'tv') {
-    tvGoSectionHome();
-    return;
-  }
-  if (_activeSection === section && section === 'iptv') {
-    iptvGoSectionHome();
-    return;
-  }
-
-  stopInactiveSectionPlayback(section);
-
-  document.querySelectorAll('.dock-item').forEach(el => {
-    el.classList.toggle('active', el.dataset.id === section);
-  });
-
-  document.querySelectorAll('.section').forEach(el => el.classList.remove('active'));
-  
-  const targetId = isYoutubeSection(section) ? 'section-youtube' : 'section-' + section;
-  const target = document.getElementById(targetId);
-  
-  const c5 = document.getElementById('yt-canvas-v5');
-  const c8 = document.getElementById('yt-canvas-v8');
-  if (c5 && c8) {
-    c5.style.display = (section === 'youtube_v5') ? 'block' : 'none';
-    c8.style.display = (section === 'youtube_v8') ? 'block' : 'none';
-  }
-
-  if (target) {
-    target.classList.add('active');
-    target.style.opacity = '0';
-    requestAnimationFrame(() => { target.style.opacity = '1'; });
-  }
-  _activeSection = section;
-  updateYtVariantBadge();
-
-  if (section === 'tv') resumePlayerIfNeeded('tv', player);
-  if (section === 'iptv') resumePlayerIfNeeded('iptv', iptvPlayer);
-  if (section === 'youtube_v5') resumePlayerIfNeeded('youtube_v5', ytPlayerV5);
-  if (section === 'youtube_v8') resumePlayerIfNeeded('youtube_v8', ytPlayerV8);
-
-  if (isYoutubeSection(section) && !_ytTrendingLoaded) {
-    _ytTrendingLoaded = true;
-    ytLoadTrending();
-  }
-
-  if (section === 'iptv') loadIptvChannels();
-
-  if (section === 'navigation') {
-    navEnsureEmbedConfig().then(() => { navUpdatePlaceholderMessage(); });
-  }
-
-  updateDockBackButton();
-  if (typeof applyKeyboardLockToInputs === 'function') applyKeyboardLockToInputs();
-}
 
 
 function initVersionBadge() {
@@ -2109,44 +2117,18 @@ function applyKeyboardLockToInputs() {
   });
 }
 
-function wrapInputWithKbTrigger(input) {
-  // Bazı inputlar zaten sarılmış olabilir veya sarılmamalıdır
-  if (input.dataset.kbWrapped || input.closest('.kb-input-wrapper')) return;
-
-  const wrapper = document.createElement('div');
-  wrapper.className = 'kb-input-wrapper';
-  
-  // Input'un flex değerini koru
-  const style = window.getComputedStyle(input);
-  if (style.flex !== '0 1 auto') wrapper.style.flex = style.flex;
-  if (style.width.includes('%')) wrapper.style.width = style.width;
-
-  input.parentNode.insertBefore(wrapper, input);
-  wrapper.appendChild(input);
-  
-  const trigger = document.createElement('div');
-  trigger.className = 'kb-trigger-btn';
-  trigger.innerHTML = '⌨️';
-  trigger.onclick = (e) => {
-    e.stopPropagation();
-    input.readOnly = false;
-    input.focus();
-    trigger.classList.add('active');
-  };
-  
-  input.addEventListener('blur', () => {
-    if (_kbLockEnabled) input.readOnly = true;
-    trigger.classList.remove('active');
-  });
-  
-  input.dataset.kbWrapped = 'true';
-  wrapper.appendChild(trigger);
-}
+function wrapInputWithKbTrigger(input) {  if (input.dataset.kbWrapped || input.closest('.kb-input-wrapper')) return; const wrapper = document.createElement('div'); wrapper.className = 'kb-input-wrapper'; const style = window.getComputedStyle(input); if (style.flex !== '0 1 auto') wrapper.style.flex = style.flex; if (style.width.includes('%')) wrapper.style.width = style.width; input.parentNode.insertBefore(wrapper, input); wrapper.appendChild(input); const trigger = document.createElement('div'); trigger.className = 'kb-trigger-btn'; trigger.innerHTML = '⌨️'; trigger.onclick = (e) => { e.stopPropagation(); input.readOnly = false; input.focus(); trigger.classList.add('active'); }; input.addEventListener('blur', () => { if (_kbLockEnabled) input.readOnly = true; trigger.classList.remove('active'); }); input.dataset.kbWrapped = 'true'; wrapper.appendChild(trigger); }
 
 function initKeyboardManager() {
   updateKeyboardLockUI();
   applyKeyboardLockToInputs();
-  
-  // Dinamik olarak eklenen inputları yakalamak için periyodik kontrol (Tesla tarayıcı uyumluluğu için)
   setInterval(applyKeyboardLockToInputs, 2000);
 }
+
+document.addEventListener('DOMContentLoaded', init);
+
+document.addEventListener('DOMContentLoaded', init);
+
+}
+
+document.addEventListener('DOMContentLoaded', init);
