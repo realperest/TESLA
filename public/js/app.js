@@ -288,9 +288,7 @@ function init() {
   console.log(`[App] v${getAppVersion()} initializing...`);
   const unlock = () => {
     if (window.player) window.player.unlockAudio();
-    if (window.ytPlayer) window.ytPlayer.unlockAudio();
-    if (window.ytPlayerV3) window.ytPlayerV3.unlockAudio();
-    if (window.ytPlayerV4) window.ytPlayerV4.unlockAudio();
+    if (window.ytPlayerV5) window.ytPlayerV5.unlockAudio();
     if (window.ytPlayerV8) window.ytPlayerV8.unlockAudio();
     if (window.iptvPlayer) window.iptvPlayer.unlockAudio();
   };
