@@ -1631,8 +1631,15 @@ function ytLoading(on, msg) {
 
 function ytError(msg) {
   const el = document.getElementById('yt-error');
-  el.textContent = msg || '';
-  el.classList.toggle('show', !!msg);
+  if (!el) return;
+  if (msg) {
+    el.innerHTML = `<span>${msg}</span><div style="font-size:11px; opacity:0.8; margin-top:4px; cursor:pointer; text-decoration:underline; font-weight:bold" onclick="playResolved()">TEKRAR DENE</div>`;
+    el.classList.add('show');
+    console.error('[YT-ERROR]', msg);
+  } else {
+    el.innerHTML = '';
+    el.classList.remove('show');
+  }
 }
 
 async function playResolved() {
