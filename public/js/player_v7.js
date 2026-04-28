@@ -11,22 +11,25 @@ class TeslaPlayerV7 extends TeslaPlayer {
     super(canvasId, opts);
     this.container = document.getElementById(this.containerId || 'player-area');
     
-    // Canvas'ı gizle
+    // Canvas'ı zorla gizle (app.js switchSection'ı ezmek için !important kullanıyoruz)
     if (this.canvas) {
-      this.canvas.style.display = 'none';
+      this.canvas.style.setProperty('display', 'none', 'important');
     }
 
     // Görünür HTML5 Video Elementi
     this._realVideo = document.createElement('video');
+    this._realVideo.id = 'yt-video-v7';
     this._realVideo.setAttribute('playsinline', '');
     this._realVideo.setAttribute('webkit-playsinline', '');
     this._realVideo.crossOrigin = 'anonymous';
-    // Canvas'ın bulunduğu alanı kaplaması için stillendir
-    this._realVideo.style.cssText = 'width:100%; height:100%; object-fit:contain; background:#000;';
+    // Canvas'ın bulunduğu alanı tam kaplaması için
+    this._realVideo.style.cssText = 'width:100%; height:100%; object-fit:contain; background:#000; display:block;';
     
-    if (this.container) {
-      // Canvas'ın önüne ekleyelim
-      this.container.insertBefore(this._realVideo, this.canvas);
+    // Konteyner olarak yt-player-container'ı seçmeye çalış (asıl videonun görüneceği yer)
+    this.playerContainer = document.getElementById('yt-player-container') || this.container;
+    
+    if (this.playerContainer) {
+      this.playerContainer.appendChild(this._realVideo);
     } else {
       document.body.appendChild(this._realVideo);
     }
@@ -66,6 +69,12 @@ class TeslaPlayerV7 extends TeslaPlayer {
     }
   }
 
+  async seek(seconds) {
+    if (this._realVideo) {
+      this._realVideo.currentTime = seconds;
+    }
+  }
+
   _startPlayback(channel, t = 0) {
     let streamUrl = channel.url;
     
@@ -74,22 +83,31 @@ class TeslaPlayerV7 extends TeslaPlayer {
       streamUrl = `/proxy/mp4?url=${encodeURIComponent(streamUrl)}`;
     }
     
-    if (t > 0) {
-      streamUrl += (streamUrl.includes('?') ? '&' : '?') + `t=${t}`;
-      this._realVideo.currentTime = t;
+    // Eğer zaten aynı video yüklüyse sadece süreyi değiştir (re-load yapma)
+    if (this._realVideo.src.includes(streamUrl.split('?')[0])) {
+      if (t > 0) this._realVideo.currentTime = t;
+      this._realVideo.play().catch(e => {});
+      return;
     }
     
     this._realVideo.src = streamUrl;
     this._realVideo.load();
+    if (t > 0) {
+      this._realVideo.currentTime = t;
+    }
     this._realVideo.play().catch(e => console.error('[V7] Oynatma hatası:', e));
   }
 
   play() {
-    if (this._realVideo) this._realVideo.play();
+    if (this._realVideo) {
+      this._realVideo.play().catch(e => console.error('[V7] Play error:', e));
+    }
   }
 
   pause() {
-    if (this._realVideo) this._realVideo.pause();
+    if (this._realVideo) {
+      this._realVideo.pause();
+    }
   }
 
   stop(keepOverlay = false) {

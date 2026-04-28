@@ -19,8 +19,11 @@ class TeslaPlayerV6 extends TeslaPlayer {
     // Görünmez yapmak için:
     this._hiddenVideo.style.cssText = 'position:absolute; width:1px; height:1px; opacity:0; pointer-events:none; z-index:-1;';
     
-    if (this.container) {
-      this.container.appendChild(this._hiddenVideo);
+    // Konteyner olarak yt-player-container'ı seçmeye çalış (daha iyi hizalama için)
+    this.playerContainer = document.getElementById('yt-player-container') || this.container;
+    
+    if (this.playerContainer) {
+      this.playerContainer.appendChild(this._hiddenVideo);
     } else {
       document.body.appendChild(this._hiddenVideo);
     }
@@ -66,6 +69,13 @@ class TeslaPlayerV6 extends TeslaPlayer {
     }
   }
 
+  async seek(seconds) {
+    if (this._hiddenVideo) {
+      // Native seeking: Tarayıcı Range desteği ile sadece o saniyeyi çeker.
+      this._hiddenVideo.currentTime = seconds;
+    }
+  }
+
   _startPlayback(channel, t = 0) {
     let streamUrl = channel.url;
     
@@ -74,14 +84,18 @@ class TeslaPlayerV6 extends TeslaPlayer {
       streamUrl = `/proxy/mp4?url=${encodeURIComponent(streamUrl)}`;
     }
     
-    // Süre bilgisini (t) url'ye ekle (eğer HLS değilse işe yarayabilir ama HLS'de #t= işe yarar)
-    if (t > 0) {
-      streamUrl += (streamUrl.includes('?') ? '&' : '?') + `t=${t}`;
-      this._hiddenVideo.currentTime = t;
+    // Eğer zaten aynı video yüklüyse sadece süreyi değiştir (re-load yapma)
+    if (this._hiddenVideo.src.includes(streamUrl.split('?')[0])) {
+      if (t > 0) this._hiddenVideo.currentTime = t;
+      this._hiddenVideo.play().catch(e => {});
+      return;
     }
     
     this._hiddenVideo.src = streamUrl;
     this._hiddenVideo.load();
+    if (t > 0) {
+      this._hiddenVideo.currentTime = t;
+    }
     this._hiddenVideo.play().catch(e => console.error('[V6] Oynatma hatası:', e));
   }
 
@@ -102,11 +116,15 @@ class TeslaPlayerV6 extends TeslaPlayer {
   }
 
   play() {
-    if (this._hiddenVideo) this._hiddenVideo.play();
+    if (this._hiddenVideo) {
+      this._hiddenVideo.play().catch(e => console.error('[V6] Play error:', e));
+    }
   }
 
   pause() {
-    if (this._hiddenVideo) this._hiddenVideo.pause();
+    if (this._hiddenVideo) {
+      this._hiddenVideo.pause();
+    }
   }
 
   stop(keepOverlay = false) {
