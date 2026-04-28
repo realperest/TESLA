@@ -57,10 +57,12 @@ const YT_PROFILE_KEYWORDS_KEY = 'yt-profile-keywords';
 const YT_SEARCH_HISTORY_KEY = 'yt-search-history';
 
 function isYoutubeSection(section) {
-  return section === 'youtube' || section === 'youtube_v1' || section === 'youtube_v2' || section === 'youtube_v3' || section === 'youtube_v4' || section === 'youtube_v5';
+  return section === 'youtube' || section === 'youtube_v1' || section === 'youtube_v2' || section === 'youtube_v3' || section === 'youtube_v4' || section === 'youtube_v5' || section === 'youtube_v6' || section === 'youtube_v7';
 }
 
 function getYtPlayerBySection(section = _activeSection) {
+  if (section === 'youtube_v7') return ytPlayerV7;
+  if (section === 'youtube_v6') return ytPlayerV6;
   if (section === 'youtube_v5') return ytPlayerV5;
   if (section === 'youtube_v4') return ytPlayerV4;
   if (section === 'youtube_v3') return ytPlayerV3;
@@ -70,6 +72,8 @@ function getYtPlayerBySection(section = _activeSection) {
 }
 
 function getYtVariantLabel(section = _activeSection) {
+  if (section === 'youtube_v7') return 'YT V7';
+  if (section === 'youtube_v6') return 'YT V6';
   if (section === 'youtube_v5') return 'YT V5';
   if (section === 'youtube_v4') return 'YT V4';
   if (section === 'youtube_v3') return 'YT V3';
@@ -355,6 +359,8 @@ async function init() {
   window.ytPlayerV3 = new TeslaPlayerV3('yt-canvas-v3', { spinnerId: 'yt-spinner', containerId: 'yt-player-area' });
   window.ytPlayerV4 = new TeslaPlayerV4('yt-canvas-v4', { spinnerId: 'yt-spinner', containerId: 'yt-player-area' });
   window.ytPlayerV5 = new TeslaPlayerV5('yt-canvas-v5', { spinnerId: 'yt-spinner', containerId: 'yt-player-area' });
+  window.ytPlayerV6 = new TeslaPlayerV6('yt-canvas-v6', { spinnerId: 'yt-spinner', containerId: 'yt-player-area' });
+  window.ytPlayerV7 = new TeslaPlayerV7('yt-canvas-v7', { spinnerId: 'yt-spinner', containerId: 'yt-player-area' });
   window.iptvPlayer = new TeslaPlayer('iptv-video-canvas', {
     spinnerId: 'iptv-spinner',
     containerId: 'iptv-player-area',
@@ -367,6 +373,8 @@ async function init() {
   ytPlayerV3 = window.ytPlayerV3;
   ytPlayerV4 = window.ytPlayerV4;
   ytPlayerV5 = window.ytPlayerV5;
+  ytPlayerV6 = window.ytPlayerV6;
+  ytPlayerV7 = window.ytPlayerV7;
   iptvPlayer = window.iptvPlayer;
 
   // Ekrana tıklayınca duraklat/devam et özelliği + Görsel Bildirim
@@ -418,6 +426,8 @@ async function init() {
       pauseForVisibility('youtube_v3', ytPlayerV3);
       pauseForVisibility('youtube_v4', ytPlayerV4);
       pauseForVisibility('youtube_v5', ytPlayerV5);
+      pauseForVisibility('youtube_v6', ytPlayerV6);
+      pauseForVisibility('youtube_v7', ytPlayerV7);
       pauseForVisibility('iptv', iptvPlayer);
     } else if (document.visibilityState === 'visible') {
       resumeFromVisibilityIfNeeded('tv', player);
@@ -426,6 +436,8 @@ async function init() {
       resumeFromVisibilityIfNeeded('youtube_v3', ytPlayerV3);
       resumeFromVisibilityIfNeeded('youtube_v4', ytPlayerV4);
       resumeFromVisibilityIfNeeded('youtube_v5', ytPlayerV5);
+      resumeFromVisibilityIfNeeded('youtube_v6', ytPlayerV6);
+      resumeFromVisibilityIfNeeded('youtube_v7', ytPlayerV7);
       resumeFromVisibilityIfNeeded('iptv', iptvPlayer);
     }
   });
@@ -1973,12 +1985,16 @@ function dockNav(section) {
   const c3 = document.getElementById('yt-canvas-v3');
   const c4 = document.getElementById('yt-canvas-v4');
   const c5 = document.getElementById('yt-canvas-v5');
-  if (c1 && c2 && c3 && c4 && c5) {
+  const c6 = document.getElementById('yt-canvas-v6');
+  const c7 = document.getElementById('yt-canvas-v7');
+  if (c1 && c2 && c3 && c4 && c5 && c6 && c7) {
     c1.style.display = (section === 'youtube_v1') ? '' : 'none';
     c2.style.display = (section === 'youtube_v2') ? '' : 'none';
     c3.style.display = (section === 'youtube_v3') ? '' : 'none';
     c4.style.display = (section === 'youtube' || section === 'youtube_v4') ? '' : 'none';
     c5.style.display = (section === 'youtube_v5') ? '' : 'none';
+    c6.style.display = (section === 'youtube_v6') ? '' : 'none';
+    c7.style.display = (section === 'youtube_v7') ? '' : 'none';
   }
 
   if (target) {
@@ -1997,6 +2013,9 @@ function dockNav(section) {
   if (section === 'youtube_v2') resumePlayerIfNeeded('youtube_v2', ytPlayerV2);
   if (section === 'youtube_v3') resumePlayerIfNeeded('youtube_v3', ytPlayerV3);
   if (section === 'youtube_v4') resumePlayerIfNeeded('youtube_v4', ytPlayerV4);
+  if (section === 'youtube_v5') resumePlayerIfNeeded('youtube_v5', ytPlayerV5);
+  if (section === 'youtube_v6') resumePlayerIfNeeded('youtube_v6', ytPlayerV6);
+  if (section === 'youtube_v7') resumePlayerIfNeeded('youtube_v7', ytPlayerV7);
 
   // YouTube sekmesine ilk girişte trending yükle
   if (isYoutubeSection(section) && !_ytTrendingLoaded) {

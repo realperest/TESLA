@@ -155,6 +155,36 @@ async function handleAudioRequest(req, res) {
   });
 }
 
+async function handleHttpStreamRequest(req, res) {
+  const targetUrl = req.query.url;
+  const startTime = req.query.t || '0';
+  if (!targetUrl) return res.status(400).send('URL required');
+  
+  const isYouTube = _isYouTubeUrl(targetUrl);
+  
+  res.setHeader('Content-Type', 'video/mp4');
+  // Tesla'da seek yapılabilmesi için partial content desteği gerekir ama pipe ile bunu yapmak zor.
+  // Şimdilik sadece düz proxy yapıyoruz.
+  
+  const ytArgs = [
+    '--no-playlist', '--no-warnings', '--force-ipv4',
+    '--user-agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+    '--extractor-args', isYouTube ? 'youtube:player_client=tv,android' : `generic:referer=https://www.trtizle.com/`,
+    isYouTube ? '--download-sections' : null, 
+    isYouTube ? `*${startTime}-inf` : null,
+    '--format', 'best[ext=mp4][height<=720]', // Sadece MP4 ve 720p altı
+    '-o', '-', targetUrl
+  ].concat(_ytCookieArgs()).filter(Boolean);
+
+  const yt = spawn(YT_DLP, ytArgs);
+  
+  yt.stdout.pipe(res);
+  
+  res.on('close', () => {
+    try { yt.kill(); } catch(e){}
+  });
+}
+
 function _cleanupSession(ws) {
   const session = ACTIVE.get(ws);
   if (session) {
@@ -166,4 +196,4 @@ function _cleanupSession(ws) {
   }
 }
 
-module.exports = { router, handleStreamConnection, handleAudioRequest };
+module.exports = { router, handleStreamConnection, handleAudioRequest, handleHttpStreamRequest };
