@@ -163,8 +163,6 @@ async function handleHttpStreamRequest(req, res) {
   const isYouTube = _isYouTubeUrl(targetUrl);
   
   res.setHeader('Content-Type', 'video/mp4');
-  // Tesla'da seek yapılabilmesi için partial content desteği gerekir ama pipe ile bunu yapmak zor.
-  // Şimdilik sadece düz proxy yapıyoruz.
   
   const ytArgs = [
     '--no-playlist', '--no-warnings', '--force-ipv4',
@@ -172,16 +170,38 @@ async function handleHttpStreamRequest(req, res) {
     '--extractor-args', isYouTube ? 'youtube:player_client=tv,android' : `generic:referer=https://www.trtizle.com/`,
     isYouTube ? '--download-sections' : null, 
     isYouTube ? `*${startTime}-inf` : null,
-    '--format', 'best[ext=mp4][height<=720]', // Sadece MP4 ve 720p altı
+    '--format', 'best[ext=mp4][height<=720]', // MP4 format
     '-o', '-', targetUrl
   ].concat(_ytCookieArgs()).filter(Boolean);
 
   const yt = spawn(YT_DLP, ytArgs);
   
-  yt.stdout.pipe(res);
+  yt.on('error', (err) => {
+    console.error('[HTTP Stream] yt-dlp başlatılamadı:', err.message);
+    if (!res.headersSent) res.status(500).end();
+  });
+
+  // FFmpeg ile "copy" yaparak CPU kullanmadan Fragmented MP4 (fMP4) oluşturuyoruz.
+  // fMP4, tarayıcıların "Range" desteği aramaksızın pipe üzerinden videoyu anında oynatmasını sağlar.
+  const ffArgs = [
+    '-i', 'pipe:0',
+    '-c', 'copy',
+    '-f', 'mp4',
+    '-movflags', 'frag_keyframe+empty_moov',
+    'pipe:1'
+  ];
+  const ff = spawn(FFMPEG_PATH, ffArgs);
+
+  ff.on('error', (err) => {
+    console.error('[HTTP Stream] ffmpeg başlatılamadı:', err.message);
+  });
+
+  yt.stdout.pipe(ff.stdin);
+  ff.stdout.pipe(res);
   
   res.on('close', () => {
     try { yt.kill(); } catch(e){}
+    try { ff.kill(); } catch(e){}
   });
 }
 
