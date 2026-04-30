@@ -28,6 +28,9 @@
     _resyncAttempts: 0,
     _resumeToken: 0,
     _resumeWatchdogTimer: null,
+    _onMeta: null,
+    _hardRecovering: false,
+    _hardRecoverTimer: null,
 
     init({ img, volumeEl, progressWrapEl }) {
       this.img = img;
@@ -67,6 +70,9 @@
       this._resyncAttempts = 0;
       this._resumeToken++;
       if (this._resumeWatchdogTimer) { clearTimeout(this._resumeWatchdogTimer); this._resumeWatchdogTimer = null; }
+      if (this._hardRecoverTimer) { clearTimeout(this._hardRecoverTimer); this._hardRecoverTimer = null; }
+      this._hardRecovering = false;
+      this._onMeta = null;
 
       try { this.audio.pause(); } catch {}
       if (this.audio) this.audio.src = '';
@@ -125,6 +131,14 @@
           this.mp4boxfile.start();
         } catch {}
       }, 1400);
+
+      if (this._hardRecoverTimer) clearTimeout(this._hardRecoverTimer);
+      this._hardRecoverTimer = setTimeout(() => {
+        if (!this.isPlaying) return;
+        if (this.firstFrameSeen) return;
+        if (token !== this._resumeToken) return;
+        this._hardRecoverResume(token);
+      }, 3200);
     },
 
     pause() {
@@ -134,6 +148,7 @@
       this._pausedAt = Number(this.audio && Number.isFinite(this.audio.currentTime) ? this.audio.currentTime : 0);
       this._resumeToken++;
       if (this._resumeWatchdogTimer) { clearTimeout(this._resumeWatchdogTimer); this._resumeWatchdogTimer = null; }
+      if (this._hardRecoverTimer) { clearTimeout(this._hardRecoverTimer); this._hardRecoverTimer = null; }
       try { this.audio.pause(); } catch {}
       try { this.mp4boxfile && this.mp4boxfile.stop && this.mp4boxfile.stop(); } catch {}
       try { this.decoder && this.decoder.flush && this.decoder.flush().catch(() => {}); } catch {}
@@ -196,6 +211,7 @@
       this.reset();
       this._mp4Url = String(mp4Url || '');
       if (!this._mp4Url) throw new Error('mp4_url_missing');
+      this._onMeta = info && typeof info.onMeta === 'function' ? info.onMeta : null;
 
       this.audio.src = this._mp4Url;
       try { this.audio.load(); } catch {}
@@ -269,13 +285,46 @@
         while (true) {
           const { value, done } = await reader.read();
           if (done) { try { this.mp4boxfile.flush(); } catch {} break; }
-          const buf = value.buffer;
-          buf.fileStart = offset;
-          offset += buf.byteLength;
-          try { this.mp4boxfile.appendBuffer(buf); } catch {}
+          const slice = value.buffer.slice(value.byteOffset, value.byteOffset + value.byteLength);
+          slice.fileStart = offset;
+          offset += slice.byteLength;
+          try { this.mp4boxfile.appendBuffer(slice); } catch {}
         }
       };
       pump().catch(() => {});
+    },
+
+    _hardRecoverResume(token) {
+      if (this._hardRecovering) return;
+      const url = String(this._mp4Url || '').trim();
+      if (!url) return;
+      this._hardRecovering = true;
+      const t = Number(this._pausedAt || (this.audio ? this.audio.currentTime : 0) || 0);
+      const wasPlaying = this.isPlaying;
+      try { this.audio.pause(); } catch {}
+      try { this.mp4boxfile && this.mp4boxfile.stop && this.mp4boxfile.stop(); } catch {}
+      try { this.decoder && this.decoder.close && this.decoder.close(); } catch {}
+
+      this.isPlaying = false;
+      this.isConfigured = false;
+      this.firstFrameSeen = false;
+      this.pendingSamples = [];
+      this.renderGen++;
+
+      this.loadMp4(url, { onMeta: this._onMeta || (() => {}) })
+        .then(() => {
+          if (!wasPlaying) return;
+          if (token !== this._resumeToken) return;
+          this._pausedAt = t;
+          this.isPlaying = true;
+          this.renderGen++;
+          this.firstFrameSeen = false;
+          this._resumeAtAsync(t, token);
+        })
+        .catch(() => {})
+        .finally(() => {
+          this._hardRecovering = false;
+        });
     },
 
     _sendSample(sample) {
