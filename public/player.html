@@ -8,27 +8,17 @@
   <meta http-equiv="Expires" content="0">
   <meta name="theme-color" content="#0a0a0a">
   <meta name="application-name" content="TobeTube">
-  <meta name="version" content="260428.0202">
+  <meta name="version" content="260430.0211">
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
-  <style>
-    #yt-canvas-v5, #yt-canvas-v8 {
-      position: absolute;
-      inset: 0;
-      width: 100%;
-      height: 100%;
-      object-fit: contain;
-      background: #000;
-      z-index: 0;
-    }
-  </style>
   <title>TobeTube</title>
   <script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.7/dist/hls.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/mp4box@0.5.2/dist/mp4box.all.min.js"></script>
   <link rel="stylesheet" href="/css/base.css">
   <link rel="stylesheet" href="/css/dock.css">
   <link rel="stylesheet" href="/css/home.css">
   <link rel="stylesheet" href="/css/tv.css">
-  <link rel="stylesheet" href="/css/youtube.css?v=3">
   <link rel="stylesheet" href="/css/navigation.css">
+  <link rel="stylesheet" href="/css/youtube-tech.css?v=260430.0211">
 </head>
 <body>
 
@@ -46,124 +36,72 @@
       </div>
     </section>
 
-    <!-- YOUTUBE -->
+    <!-- YOUTUBE (Teknik 1 ve 5) -->
     <section class="section" id="section-youtube">
-
-      <!-- ── Ortak üst bar (her iki view'de de görünür) ────── -->
-      <div id="yt-topbar">
-        <div id="yt-search-row">
-          <input type="text" id="yt-main-input" class="yt-search-input"
-            placeholder="Aramak istediğiniz kelimeyi yazın..."
-            readonly
-            onkeydown="if(event.key==='Enter') ytSubmitMainInput()">
-          
-          <button class="yt-kb-btn" onclick="unlockYtKeyboard()" title="Klavyeyi Aç">⌨️</button>
-          
-          <button class="yt-mic-btn" id="yt-action-mic" onclick="ytStartVoiceSearch()" title="Sesli Ara">🎙️</button>
-          
-          <button class="yt-btn" id="yt-action-search" onclick="ytSubmitMainInput()">
-            <span class="btn-ico">🔎</span><span data-i18n="ytBtnSearch">Ara</span>
-          </button>
-          <div id="yt-feed-mode">
-            <button class="yt-mode-btn active" onclick="setYtFeedMode('trending')">
-              <span class="btn-ico">🔥</span><span>TRENDLER</span>
-            </button>
-            <button class="yt-mode-btn" onclick="setYtFeedMode('news')">
-              <span class="btn-ico">📰</span><span>HABERLER</span>
-            </button>
-            <button class="yt-mode-btn" onclick="setYtFeedMode('tech')">
-              <span class="btn-ico">💻</span><span>TEKNOLOJİ</span>
-            </button>
-            <button class="yt-mode-btn" onclick="setYtFeedMode('history')">
-              <span class="btn-ico">🕘</span><span>GEÇMİŞ</span>
-            </button>
+      <div class="yt-tech-shell">
+        <div class="yt-tech-topbar">
+          <div class="yt-tech-input-wrap">
+            <input type="text" id="yt-tech-input" class="yt-tech-input" placeholder="YouTube URL veya Video ID">
+            <button type="button" class="yt-tech-btn" onclick="ytTechSubmit()">Ara</button>
           </div>
+          <div id="yt-tech-status" class="yt-tech-status"></div>
         </div>
-        <div class="yt-loading" id="yt-loading" data-i18n="ytLoading">Yükleniyor...</div>
-        <div class="yt-error" id="yt-error"></div>
-      </div>
 
-      <!-- ── VIEW 1: Ana sayfa — arama/trending grid ────────── -->
-      <div id="yt-view-main">
-        <div id="yt-main-grid"></div>
-      </div>
-
-      <!-- ── VIEW 2: Oynatıcı ekranı ────────────────────────── -->
-      <div id="yt-view-player" style="display:none">
-
-        <!-- Sol: Canvas oynatıcı -->
-        <div id="yt-player-area">
-          <!-- Üst Boşluk: Başlık ve Geri -->
-          <div id="yt-external-header">
-            <div id="yt-now-playing-title">—</div>
-            <div id="yt-signal-indicator" title="İnternet Kalitesi">
-              <div class="sig-bar" id="sig-1"></div>
-              <div class="sig-bar" id="sig-2"></div>
-              <div class="sig-bar" id="sig-3"></div>
-              <div class="sig-bar" id="sig-4"></div>
-              <span id="sig-text"></span>
-            </div>
+        <div class="yt-tech-stage" id="yt-tech-stage">
+          <!-- Grid view (ilk ekran) -->
+          <div class="yt-tech-grid-view" id="yt-tech-grid-view">
+            <div class="yt-tech-grid" id="yt-tech-grid"></div>
           </div>
 
-          <div id="yt-player-container" onclick="toggleYtPlay(event)">
-            <canvas id="yt-canvas-v5"></canvas>
-            <canvas id="yt-canvas-v8"></canvas>
-            <div id="yt-central-pause">
-              <svg viewBox="0 0 24 24"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
-            </div>
-            <div class="spinner" id="yt-spinner"><div class="spinner-ring"></div></div>
-          </div>
-          <!-- Video altı boşluk (Letterbox) kontrolleri -->
-          <div id="yt-external-controls" onclick="event.stopPropagation()">
-            <!-- Üst Satır: Süre + Akış Bandı -->
-            <div class="yt-ctrl-row top" onclick="event.stopPropagation()">
-              <div id="yt-time">0:00 / 0:00</div>
-              <div id="yt-progress-wrap" onmousedown="ytSeek(event); event.stopPropagation();">
-                <div id="yt-progress-bg"></div>
-                <div id="yt-progress-buf"></div>
-                <div id="yt-progress-fill"></div>
-                <div id="yt-progress-thumb"></div>
-              </div>
-            </div>
+          <!-- Player view (kart tıklanınca) -->
+          <div class="yt-tech-player-view" id="yt-tech-player-view" style="display:none">
+            <div class="yt-tech-player-layout">
+              <div class="yt-tech-player-main">
+                <div class="yt-tech-surface yt-tech-surface-main" id="yt-tech-surface-1">
+                  <canvas id="yt-tech1-canvas"></canvas>
+                </div>
+                <div class="yt-tech-surface yt-tech-surface-main" id="yt-tech-surface-5" style="display:none">
+                  <img id="yt-tech5-img" alt="Video">
+                </div>
 
-            <!-- Alt Satır: Düğmeler -->
-            <div class="yt-ctrl-row bottom" onclick="event.stopPropagation()">
-              <div class="yt-ctrl-group left">
-                <button class="yc-btn primary" id="yt-btn-play" onclick="toggleYtPlay(event)" title="Oynat/Duraklat">
-                  <svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z" fill="#fff"/></svg>
-                </button>
+                <div class="yt-tech-controls" id="yt-tech-controls">
+                  <div class="yt-tech-time-row">
+                    <span id="yt-tech-time" class="yt-tech-time">0:00</span>
+                    <div class="yt-tech-progress" id="yt-tech-progress">
+                      <div class="yt-tech-progress-bg"></div>
+                      <div class="yt-tech-progress-fill" id="yt-tech-progress-fill"></div>
+                      <div class="yt-tech-progress-thumb" id="yt-tech-progress-thumb"></div>
+                    </div>
+                    <span id="yt-tech-duration" class="yt-tech-time">0:00</span>
+                  </div>
 
-                <div id="yt-volume-container" onclick="event.stopPropagation()">
-                  <button class="yc-btn" id="yt-btn-mute" onclick="toggleYtMute(event)" title="Sesi Kapat">
-                    <svg viewBox="0 0 24 24"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02z" fill="#fff"/></svg>
-                  </button>
-                  <div id="yt-volume-wrap">
-                    <input type="range" id="yt-volume" min="0" max="100" value="100" 
-                      oninput="ytSetVolume(this.value)" 
-                      onmousedown="event.stopPropagation()" 
-                      ontouchstart="event.stopPropagation()"
-                      onclick="event.stopPropagation()">
+                  <div class="yt-tech-btn-row">
+                    <button type="button" class="yt-tech-icon-btn" onclick="ytTechPlay()" title="Oynat" aria-label="Oynat">
+                      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7z" fill="currentColor"/></svg>
+                    </button>
+                    <button type="button" class="yt-tech-icon-btn" onclick="ytTechPause()" title="Duraklat" aria-label="Duraklat">
+                      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z" fill="currentColor"/></svg>
+                    </button>
+                    <button type="button" class="yt-tech-icon-btn" onclick="ytTechReset()" title="Sıfırla" aria-label="Sıfırla">
+                      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5V2L8 6l4 4V7c2.76 0 5 2.24 5 5a5 5 0 0 1-8.66 3.54l-1.42 1.42A7 7 0 0 0 19 12c0-3.87-3.13-7-7-7z" fill="currentColor"/></svg>
+                    </button>
+
+                    <div class="yt-tech-vol">
+                      <span class="yt-tech-vol-label">Ses</span>
+                      <input type="range" id="yt-tech-vol" min="0" max="1" step="0.05" value="1">
+                    </div>
                   </div>
                 </div>
               </div>
 
-              <div class="yt-ctrl-group right">
-                <button class="yc-btn" id="yt-btn-fs" onclick="toggleYtFullscreen(event)" title="Tam Ekran">
-                  <svg viewBox="0 0 24 24"><path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z" fill="#fff"/></svg>
-                </button>
-                <button class="yc-btn" onclick="ytBackToMain(event)" title="Geri Dön">
-                  <svg viewBox="0 0 24 24"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z" fill="#fff"/></svg>
-                </button>
-              </div>
+              <aside class="yt-tech-related">
+                <div class="yt-tech-related-header">İlgili Videolar</div>
+                <div class="yt-tech-related-list" id="yt-tech-related-list"></div>
+              </aside>
             </div>
           </div>
         </div>
-
-        <!-- Sağ: İlgili videolar sidebar -->
-        <div id="yt-sidebar-grid"></div>
-
       </div>
-
     </section>
 
     <!-- TV (Canlı) -->
@@ -329,25 +267,25 @@
         <div class="dock-dot"></div>
       </div>
 
-      <div class="dock-item" data-id="youtube_v5" onclick="dockNav('youtube_v5')">
-        <div class="dock-icon" style="color: #ff0000;">
-          <svg viewBox="0 0 24 24">
+      <div class="dock-item" data-id="youtube_1" onclick="dockNav('youtube_1')">
+        <div class="dock-icon" style="color: #e11d48;">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
             <rect x="2" y="5" width="20" height="14" rx="4" fill="currentColor"/>
-            <polygon points="10,9 16,12 10,15" fill="white"/>
+            <polygon points="10,9 16,12 10,15" fill="#0a0a0a"/>
           </svg>
         </div>
-        <div class="dock-label" data-i18n="dockYoutube">YouTube</div>
+        <div class="dock-label">1</div>
         <div class="dock-dot"></div>
       </div>
 
-      <div class="dock-item" data-id="youtube_v8" onclick="dockNav('youtube_v8')">
-        <div class="dock-icon" style="color: #888888;">
-          <svg viewBox="0 0 24 24">
+      <div class="dock-item" data-id="youtube_5" onclick="dockNav('youtube_5')">
+        <div class="dock-icon" style="color: #9333ea;">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
             <rect x="2" y="5" width="20" height="14" rx="4" fill="currentColor"/>
-            <polygon points="10,9 16,12 10,15" fill="white"/>
+            <polygon points="10,9 16,12 10,15" fill="#0a0a0a"/>
           </svg>
         </div>
-        <div class="dock-label">YouTube (V8)</div>
+        <div class="dock-label">5</div>
         <div class="dock-dot"></div>
       </div>
 
@@ -405,11 +343,11 @@
     </div>
     <div class="dock-bar-user">
       <div id="app-version">
-        <div class="app-version-item newest"><b style="color:#00ff00 !important">260428.0202</b></div>
-        <div class="app-version-item">260428.0201</div>
-        <div class="app-version-item">260428.0200</div>
+        <div class="app-version-item newest"><b style="color:#00ff00 !important">260430.0211</b></div>
+        <div class="app-version-item">260430.0210</div>
+        <div class="app-version-item">260430.0209</div>
     </div>
-      <span id="app-version-badge" data-version="260428.0202" style="display:none">260428.0202</span>
+      <span id="app-version-badge" data-version="260430.0211" style="display:none">260430.0211</span>
       <div class="user-menu" id="user-menu">
         <div class="user-pill" id="user-pill" onclick="toggleUserMenu(event)">
           <img src="" alt="" id="user-avatar" referrerpolicy="no-referrer" style="display:none">
@@ -434,9 +372,10 @@
   <script src="/js/utils.js?v=260425.0112"></script>
   <script src="/js/jsmpeg.min.js?v=260425.0112"></script>
   <script src="/js/player.js?v=260425.0112"></script>
-  <script src="/js/player_v5.js?v=260428.0202"></script>
-  <script src="/js/player_v8.js?v=260428.0202"></script>
-  <script src="/js/app.js?v=260428.0202"></script>
-  <script src="/js/dock.js?v=260428.0202"></script>
+  <script src="/js/yt-tech1.js?v=260430.0211"></script>
+  <script src="/js/yt-tech5.js?v=260430.0211"></script>
+  <script src="/js/youtube-tech.js?v=260430.0211"></script>
+  <script src="/js/app.js?v=260430.0211"></script>
+  <script src="/js/dock.js?v=260430.0211"></script>
 </body>
 </html>

@@ -102,42 +102,76 @@ router.get('/mp4', (req, res) => {
     return res.status(400).json({ error: 'geçersiz url' });
   }
 
-  const lib = parsedUrl.protocol === 'https:' ? https : http;
-  const options = {
-    hostname: parsedUrl.hostname,
-    port: parsedUrl.port || (parsedUrl.protocol === 'https:' ? 443 : 80),
-    path: parsedUrl.pathname + parsedUrl.search,
-    headers: {
-      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
-      'Referer': 'https://www.youtube.com/',
-      'Origin': 'https://www.youtube.com',
-    },
+  const rangeHeader = req.headers.range ? String(req.headers.range) : '';
+  const baseHeaders = {
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+    'Referer': 'https://www.youtube.com/',
+    'Origin': 'https://www.youtube.com',
+    'Accept': '*/*',
+    'Accept-Language': 'tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7',
+    'Accept-Encoding': 'identity',
+  };
+  if (rangeHeader) baseHeaders['Range'] = rangeHeader;
+
+  const MAX_REDIRECTS = 5;
+
+  const doRequest = (targetUrl, redirectsLeft) => {
+    let u;
+    try { u = new URL(String(targetUrl)); } catch {
+      if (!res.headersSent) res.status(400).json({ error: 'geçersiz url' });
+      return null;
+    }
+
+    const lib = u.protocol === 'https:' ? https : http;
+    const options = {
+      hostname: u.hostname,
+      port: u.port || (u.protocol === 'https:' ? 443 : 80),
+      path: u.pathname + u.search,
+      headers: {
+        ...baseHeaders,
+        'Host': u.hostname,
+      },
+    };
+
+    const outReq = lib.get(options, (proxyRes) => {
+      const code = Number(proxyRes.statusCode) || 0;
+      const loc = proxyRes.headers && proxyRes.headers.location ? String(proxyRes.headers.location) : '';
+      const isRedirect = [301, 302, 303, 307, 308].includes(code) && !!loc;
+
+      if (isRedirect) {
+        proxyRes.resume();
+        if (redirectsLeft <= 0) {
+          if (!res.headersSent) res.status(502).json({ error: 'redirect_limit', message: 'Çok fazla yönlendirme' });
+          return;
+        }
+        let nextUrl = loc;
+        try { nextUrl = new URL(loc, u).toString(); } catch {}
+        return doRequest(nextUrl, redirectsLeft - 1);
+      }
+
+      res.status(code || 502);
+
+      // Headerları aynen aktar (Range ve seek için çok önemli)
+      ['content-type', 'content-length', 'content-range', 'accept-ranges', 'cache-control'].forEach(h => {
+        if (proxyRes.headers && proxyRes.headers[h]) res.setHeader(h, proxyRes.headers[h]);
+      });
+      res.setHeader('Access-Control-Allow-Origin', '*');
+
+      proxyRes.pipe(res);
+    });
+
+    outReq.on('error', (err) => {
+      console.error('[MP4 Proxy] hata:', err.message);
+      if (!res.headersSent) res.status(502).json({ error: 'mp4_proxy_failed', message: 'MP4 proxy hatası' });
+    });
+
+    return outReq;
   };
 
-  if (req.headers.range) {
-    options.headers['Range'] = req.headers.range;
-  }
-
-  const proxyReq = lib.get(options, (proxyRes) => {
-    res.status(proxyRes.statusCode);
-    
-    // Headerları aynen aktar (Range ve seek için çok önemli)
-    ['content-type', 'content-length', 'content-range', 'accept-ranges', 'cache-control'].forEach(h => {
-      if (proxyRes.headers[h]) res.setHeader(h, proxyRes.headers[h]);
-    });
-    
-    res.setHeader('Access-Control-Allow-Origin', '*');
-
-    proxyRes.pipe(res);
-  });
-
-  proxyReq.on('error', (err) => {
-    console.error('[MP4 Proxy] hata:', err.message);
-    if (!res.headersSent) res.status(502).end();
-  });
+  const proxyReq = doRequest(parsedUrl.toString(), MAX_REDIRECTS);
 
   req.on('close', () => {
-    proxyReq.destroy();
+    try { proxyReq && proxyReq.destroy && proxyReq.destroy(); } catch {}
   });
 });
 
